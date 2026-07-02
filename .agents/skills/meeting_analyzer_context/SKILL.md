@@ -205,5 +205,7 @@ Cuando el agente realice cambios de código, debe seguir este flujo:
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.3.0` | 2026-07-02 | Probador de audio en tiempo real: medidores de nivel RMS en Configuración y Grabación, grabación de prueba temporal y reproductor integrado. | `develop` |
+| `v1.2.0` | 2026-07-02 | Chat global de historial (RAG): Búsqueda semántica/palabras clave, snippets automáticos, HistoryChatScreen con badges interactivos y navegación directa. | `main` |
 | `v1.1.0` | 2026-06-26 | Análisis Híbrido: Integración de OpenAI API, Diarización Textual, nueva pantalla SettingsScreen y gestión de `config.json`. | `main` |
 | `v1.0.0` | 2026-06-25 | Release inicial: grabación loopback, Whisper local, análisis Phi-3/Ollama, UI Electron Premium Dark Mode | `main` |

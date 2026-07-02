@@ -24,6 +24,10 @@ class ChatRequest(BaseModel):
     messages: list
     question: str
 
+class HistoryChatRequest(BaseModel):
+    messages: list
+    question: str
+
 @router.post("/chat")
 def chat_transcript(
     request: ChatRequest,
@@ -56,6 +60,166 @@ def chat_transcript(
     try:
         response = analyzer.chat_with_transcript(transcript, request.messages, request.question)
         return {"status": "done", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/chat/history")
+def chat_history(
+    request: HistoryChatRequest,
+    analyzer: IAnalyzer = Depends(get_analyzer),
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """Envía un mensaje de chat consultando todo el historial de reuniones usando RAG."""
+    from api.routers.history import _get_recordings_dir, _get_json_path
+    recordings_dir = _get_recordings_dir()
+    
+    if not os.path.exists(recordings_dir):
+        return {
+            "status": "done", 
+            "response": "No tienes grabaciones en el historial todavía. Graba o importa una reunión para empezar a chatear.", 
+            "referenced_meetings": []
+        }
+    
+    # Cargar metadatos de todas las reuniones
+    meetings = []
+    for f in os.listdir(recordings_dir):
+        if f.endswith(".wav") or f.endswith(".mp3"):
+            audio_path = os.path.join(recordings_dir, f)
+            json_path = _get_json_path(audio_path)
+            meta = repo.get_metadata(json_path)
+            if meta and meta.get("transcript"):
+                meetings.append(meta)
+                
+    if not meetings:
+        return {
+            "status": "done", 
+            "response": "No hay reuniones transcritas ni analizadas en tu historial para realizar la consulta.", 
+            "referenced_meetings": []
+        }
+        
+    # RAG: Algoritmo de ranking de relevancia por palabra clave
+    query = request.question.lower().strip()
+    import string
+    translator = str.maketrans('', '', string.punctuation)
+    query_clean = query.translate(translator)
+    query_terms = [word for word in query_clean.split() if len(word) > 2]
+    
+    # Stop words comunes en español
+    stop_words = {"para", "como", "con", "una", "uno", "unos", "unas", "este", "esta", "estos", "estas", "todo", "toda", "todos", "todas", "pero", "sino", "sobre", "entre", "desde", "hacia", "hasta"}
+    query_terms = [term for term in query_terms if term not in stop_words]
+    
+    if not query_terms and query:
+        query_terms = [query]
+        
+    scored_meetings = []
+    for meeting in meetings:
+        score = 0.0
+        filename = meeting.get("filename", "").lower()
+        transcript = meeting.get("transcript", "").lower()
+        analysis = meeting.get("analysis", {})
+        category = analysis.get("category", "").lower()
+        tone = analysis.get("tone", "").lower()
+        summary = " ".join(analysis.get("summary", [])).lower()
+        decisions = " ".join(analysis.get("key_decisions", [])).lower()
+        
+        matched_snippets = []
+        
+        for term in query_terms:
+            if term in filename:
+                score += 5.0
+            if term in category or term in tone:
+                score += 2.0
+            if term in summary:
+                score += 3.0
+            if term in decisions:
+                score += 3.0
+            matches_in_trans = transcript.count(term)
+            if matches_in_trans > 0:
+                score += min(matches_in_trans * 0.5, 5.0)
+                
+                # Extraer fragmentos
+                start_idx = 0
+                for _ in range(3):
+                    pos = transcript.find(term, start_idx)
+                    if pos == -1:
+                        break
+                    left = max(0, pos - 70)
+                    right = min(len(transcript), pos + len(term) + 70)
+                    snippet = meeting["transcript"][left:right].strip()
+                    if left > 0:
+                        snippet = "..." + snippet
+                    if right < len(transcript):
+                        snippet = snippet + "..."
+                    matched_snippets.append(snippet)
+                    start_idx = pos + len(term) + 1
+                    
+        scored_meetings.append({
+            "meeting": meeting,
+            "score": score,
+            "snippets": matched_snippets[:3]
+        })
+        
+    scored_meetings.sort(key=lambda x: x["score"], reverse=True)
+    
+    top_entries = []
+    if scored_meetings and scored_meetings[0]["score"] > 0:
+        top_entries = [item for item in scored_meetings if item["score"] > 0][:3]
+    else:
+        # Fallback: las 2 más recientes
+        sorted_by_date = sorted(scored_meetings, key=lambda x: x["meeting"].get("created", 0), reverse=True)
+        top_entries = sorted_by_date[:2]
+        
+    context_parts = []
+    referenced_meetings = []
+    
+    for entry in top_entries:
+        meet = entry["meeting"]
+        filename = meet.get("filename", "")
+        created = meet.get("created")
+        import datetime
+        date_str = datetime.datetime.fromtimestamp(created).strftime('%d/%m/%Y %H:%M') if created else "Fecha desconocida"
+        
+        category = meet.get("analysis", {}).get("category", "Sin categoría")
+        summary_points = "\n".join([f"- {p}" for p in meet.get("analysis", {}).get("summary", [])])
+        decisions_points = "\n".join([f"- {d}" for d in meet.get("analysis", {}).get("key_decisions", [])])
+        
+        snippets_text = ""
+        if entry["snippets"]:
+            snippets_text = "\nFragmentos coincidentes de la transcripción:\n" + "\n".join([f"  * {s}" for s in entry["snippets"]])
+            
+        context_parts.append(
+            f"REUNIÓN: {filename}\n"
+            f"FECHA: {date_str}\n"
+            f"CATEGORÍA: {category}\n"
+            f"RESUMEN:\n{summary_points}\n"
+            f"DECISIONES CLAVE:\n{decisions_points}"
+            f"{snippets_text}\n"
+            f"---"
+        )
+        
+        referenced_meetings.append({
+            "filename": filename,
+            "created": created,
+            "path": meet.get("audio_path"),
+            "category": category,
+            "tone": meet.get("analysis", {}).get("tone", "Desconocido")
+        })
+        
+    context_str = "\n\n".join(context_parts)
+    
+    if analyzer.ai_provider == "local":
+        word_count = len(context_str.split())
+        if word_count > 6000:
+            context_words = context_str.split()[:5000]
+            context_str = " ".join(context_words) + "\n...[Contexto truncado por límite de tamaño]..."
+            
+    try:
+        response = analyzer.chat_with_history(context_str, request.messages, request.question)
+        return {
+            "status": "done",
+            "response": response,
+            "referenced_meetings": referenced_meetings
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

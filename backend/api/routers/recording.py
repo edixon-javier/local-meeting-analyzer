@@ -80,3 +80,44 @@ def stop_recording(
         return {"status": "stopped", "audio_path": audio_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/test/start")
+def start_test(
+    config: Config = Depends(get_config),
+    audio: IAudioCapture = Depends(get_audio_service)
+):
+    """Inicia la grabación de prueba del micrófono y/o sistema."""
+    if audio.is_recording:
+        raise HTTPException(status_code=400, detail="Ya hay una grabación oficial en curso.")
+    if audio.is_testing:
+        raise HTTPException(status_code=400, detail="Ya hay una prueba de audio en curso.")
+        
+    try:
+        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "recordings")
+        record_mode = config.get("record_mode", "both")
+        mic_device_id = config.get("mic_device_id", "default")
+        
+        audio_path = audio.start_test(output_dir=recordings_dir, mode=record_mode, mic_device_id=mic_device_id)
+        return {"status": "testing", "audio_path": audio_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/test/stop")
+def stop_test(audio: IAudioCapture = Depends(get_audio_service)):
+    """Detiene la grabación de prueba."""
+    if not audio.is_testing:
+        raise HTTPException(status_code=400, detail="No hay ninguna prueba activa.")
+        
+    try:
+        audio_path = audio.stop_test()
+        return {"status": "stopped", "audio_path": audio_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/test/levels")
+def get_test_levels(audio: IAudioCapture = Depends(get_audio_service)):
+    """Retorna los niveles de volumen en tiempo real (RMS) de micrófono y sistema."""
+    try:
+        return audio.get_levels()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

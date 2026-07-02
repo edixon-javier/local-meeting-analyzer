@@ -10,6 +10,7 @@ import RecordScreen from './components/RecordScreen'
 import AnalysisScreen from './components/AnalysisScreen'
 import SettingsScreen from './components/SettingsScreen'
 import HistoryScreen from './components/HistoryScreen'
+import HistoryChatScreen from './components/HistoryChatScreen'
 import Toast from './components/Toast'
 import { startRecording, stopRecording } from './api'
 import { SystemProvider, useSystem } from './context/SystemContext'
@@ -92,6 +93,12 @@ function AppContent({ view, setView, audioPath, setAudioPath, handleRecordingDon
           />
         )}
 
+        {view === 'history-chat' && (
+          <HistoryChatScreen
+            onNavigate={handleNavigate}
+          />
+        )}
+
         {view === 'settings' && (
           <SettingsScreen />
         )}
@@ -101,7 +108,7 @@ function AppContent({ view, setView, audioPath, setAudioPath, handleRecordingDon
 }
 
 export default function App() {
-  const [view, setView] = useState('record')          // 'record' | 'analysis' | 'history' | 'settings'
+  const [view, setView] = useState('record')          // 'record' | 'analysis' | 'history' | 'history-chat' | 'settings'
   const [audioPath, setAudioPath] = useState(null)   // Ruta del WAV grabado
   const [toast, setToast] = useState(null)
 

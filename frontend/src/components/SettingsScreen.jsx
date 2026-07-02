@@ -2,7 +2,7 @@
 // Pantalla de Configuración: selección de hardware, modelos e IA local.
 
 import { useState, useEffect } from 'react'
-import { getConfig, updateConfig, getAudioDevices, getOllamaModels } from '../api'
+import { getConfig, updateConfig, getAudioDevices, getOllamaModels, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
 import { useSystem } from '../context/SystemContext'
 
 export default function SettingsScreen() {
@@ -23,11 +23,49 @@ export default function SettingsScreen() {
   const [analysisFocus, setAnalysisFocus] = useState('')
   const [diarize, setDiarize] = useState(false)
 
+  // Estados de prueba de audio
+  const [testing, setTesting] = useState(false)
+  const [sysLevel, setSysLevel] = useState(0)
+  const [micLevel, setMicLevel] = useState(0)
+  const [testAudioPath, setTestAudioPath] = useState(null)
+
   useEffect(() => {
     if (!isBackendOffline) {
       loadSettingsAndHardware()
     }
   }, [isBackendOffline])
+
+  // Polling de niveles durante la prueba
+  useEffect(() => {
+    let intervalId
+    if (testing) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await getAudioTestLevels()
+          const scaleLevel = (val) => Math.min(100, Math.round(Math.sqrt(val) * 160))
+          setMicLevel(scaleLevel(res.data.mic_level))
+          setSysLevel(scaleLevel(res.data.sys_level))
+        } catch (err) {
+          console.error('Error al obtener niveles de prueba:', err)
+        }
+      }, 100)
+    } else {
+      setMicLevel(0)
+      setSysLevel(0)
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [testing])
+
+  // Detener la prueba si se desmonta la pantalla
+  useEffect(() => {
+    return () => {
+      if (testing) {
+        stopAudioTest().catch(() => {})
+      }
+    }
+  }, [testing])
 
   const loadSettingsAndHardware = async () => {
     setLoading(true)
@@ -87,6 +125,45 @@ export default function SettingsScreen() {
       showToast({ type: 'error', message: 'Error al guardar la configuración' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleStartTest = async () => {
+    if (isBackendOffline) return
+    setTesting(true)
+    setTestAudioPath(null)
+    try {
+      // Guardar selección actual en el backend antes de testear
+      await updateConfig({
+        whisper_model: whisperModel,
+        ai_provider: aiProvider,
+        openai_api_key: openaiApiKey,
+        openai_model: openaiModel,
+        ollama_model: ollamaModel,
+        analysis_focus: analysisFocus,
+        record_mode: recordMode,
+        mic_device_id: micDeviceId,
+        diarize: diarize
+      })
+      await startAudioTest()
+      showToast({ type: 'success', message: '🎙️ Prueba iniciada. Habla o reproduce algún sonido.' })
+    } catch (err) {
+      showToast({ type: 'error', message: 'Error al iniciar la prueba de audio' })
+      setTesting(false)
+    }
+  }
+
+  const handleStopTest = async () => {
+    try {
+      const res = await stopAudioTest()
+      setTesting(false)
+      if (res.data.audio_path) {
+        setTestAudioPath(`${res.data.audio_path}?t=${Date.now()}`)
+        showToast({ type: 'success', message: '✅ Prueba finalizada. Reproduce para escuchar.' })
+      }
+    } catch (err) {
+      showToast({ type: 'error', message: 'Error al detener la prueba de audio' })
+      setTesting(false)
     }
   }
 
@@ -163,6 +240,148 @@ export default function SettingsScreen() {
             </select>
           </div>
         )}
+
+        {/* Panel de Prueba de Audio */}
+        <div className="form-group" style={{ 
+          padding: '20px', 
+          background: 'rgba(30, 41, 59, 0.4)', 
+          border: '1px solid var(--border-subtle)', 
+          borderRadius: 'var(--radius-lg)',
+          marginTop: 12
+        }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            🎙️ Probar Micrófono y Sonido
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Valida los niveles de audio en tiempo real y asegúrate de que la grabación de voz y del sistema funcionen correctamente.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
+            {/* Medidor de Micrófono */}
+            {(recordMode === 'both' || recordMode === 'mic') && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: 'var(--text-secondary)' }}>
+                  <span>Volumen del Micrófono Físico</span>
+                  <span style={{ fontWeight: 600, color: micLevel > 70 ? 'var(--yellow-warn)' : (micLevel > 0 ? 'var(--accent-primary)' : 'var(--text-muted)') }}>
+                    {micLevel}%
+                  </span>
+                </div>
+                <div style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ 
+                    height: '100%', 
+                    width: `${micLevel}%`, 
+                    background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-violet) 100%)', 
+                    borderRadius: 'var(--radius-full)',
+                    transition: 'width 80ms ease'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Medidor de Sistema */}
+            {(recordMode === 'both' || recordMode === 'system') && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: 'var(--text-secondary)' }}>
+                  <span>Volumen del Audio del Sistema (Loopback)</span>
+                  <span style={{ fontWeight: 600, color: sysLevel > 70 ? 'var(--yellow-warn)' : (sysLevel > 0 ? 'var(--accent-primary)' : 'var(--text-muted)') }}>
+                    {sysLevel}%
+                  </span>
+                </div>
+                <div style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ 
+                    height: '100%', 
+                    width: `${sysLevel}%`, 
+                    background: 'linear-gradient(90deg, #10B981 0%, var(--accent-primary) 100%)', 
+                    borderRadius: 'var(--radius-full)',
+                    transition: 'width 80ms ease'
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {!testing ? (
+              <button
+                type="button"
+                onClick={handleStartTest}
+                disabled={isBackendOffline}
+                className="btn"
+                style={{ 
+                  background: 'var(--bg-elevated)', 
+                  border: '1px solid var(--border-subtle)', 
+                  color: 'var(--text-primary)',
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <span>🎤</span> Iniciar Prueba
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStopTest}
+                className="btn btn-primary pulse-animation"
+                style={{ 
+                  background: 'var(--red-record)',
+                  border: '1px solid transparent',
+                  boxShadow: '0 0 12px var(--red-glow)',
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <span style={{ 
+                  width: 8, 
+                  height: 8, 
+                  background: '#fff', 
+                  borderRadius: '50%',
+                  display: 'inline-block'
+                }} /> Detener Prueba
+              </button>
+            )}
+
+            {/* Reproductor si hay audio grabado */}
+            {testAudioPath && !testing && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                padding: '4px 12px', 
+                background: 'var(--bg-elevated)', 
+                border: '1px solid var(--border-subtle)', 
+                borderRadius: 'var(--radius-md)',
+                flex: 1,
+                minWidth: 260
+              }}>
+                <span style={{ fontSize: 12, color: 'var(--text-accent)', whiteSpace: 'nowrap', fontWeight: 600 }}>🔊 Escuchar:</span>
+                <audio 
+                  src={getAudioUrl(testAudioPath)} 
+                  controls 
+                  style={{ 
+                    height: 28, 
+                    outline: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    flex: 1,
+                    maxWidth: '100%'
+                  }} 
+                />
+              </div>
+            )}
+          </div>
+          {testing && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 12 }}>
+              ⚠️ Habla o haz algún ruido y luego detén para escuchar la mezcla.
+            </span>
+          )}
+        </div>
 
         {/* Modelo Whisper */}
         <div className="form-group" style={{ opacity: aiProvider === 'openai' ? 0.5 : 1, pointerEvents: aiProvider === 'openai' ? 'none' : 'auto' }}>

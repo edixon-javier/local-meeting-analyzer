@@ -2,7 +2,7 @@
 // Pantalla principal de grabación: botón record, timer, pause/resume, waveform animado.
 
 import { useState, useEffect, useRef } from 'react'
-import { startRecording, stopRecording, pauseRecording, resumeRecording, getStatus, uploadAudioFile } from '../api'
+import { startRecording, stopRecording, pauseRecording, resumeRecording, getStatus, uploadAudioFile, getAudioTestLevels } from '../api'
 import { useSystem } from '../context/SystemContext'
 
 export default function RecordScreen({ onRecordingDone }) {
@@ -12,6 +12,32 @@ export default function RecordScreen({ onRecordingDone }) {
   const [seconds, setSeconds] = useState(0)
   const timerRef = useRef(null)
   const audioPathRef = useRef(null)
+
+  const [sysLevel, setSysLevel] = useState(0)
+  const [micLevel, setMicLevel] = useState(0)
+
+  // Polling de niveles de audio mientras se graba activamente
+  useEffect(() => {
+    let intervalId
+    if (isRecording && !isPaused && !isBackendOffline) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await getAudioTestLevels()
+          const scaleLevel = (val) => Math.min(100, Math.round(Math.sqrt(val) * 160))
+          setMicLevel(scaleLevel(res.data.mic_level))
+          setSysLevel(scaleLevel(res.data.sys_level))
+        } catch (err) {
+          console.error('Error al obtener niveles en tiempo real:', err)
+        }
+      }, 150)
+    } else {
+      setMicLevel(0)
+      setSysLevel(0)
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [isRecording, isPaused, isBackendOffline])
 
   // Estados para carga de archivos
   const [isDragging, setIsDragging] = useState(false)
@@ -229,6 +255,37 @@ export default function RecordScreen({ onRecordingDone }) {
           <div className="timer big-digital" style={{ opacity: isPaused ? 0.5 : 1 }}>
             {formatTime(seconds)}
           </div>
+
+          {/* Indicadores de volumen discretos */}
+          {!isPaused && (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: 20, 
+              marginTop: 12, 
+              padding: '6px 16px',
+              background: 'rgba(0,0,0,0.15)',
+              borderRadius: 'var(--radius-full)',
+              width: 'fit-content',
+              margin: '12px auto 0'
+            }}>
+              {/* Medidor de Micrófono */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span>🎤 Mic:</span>
+                <div style={{ width: 45, height: 4, background: 'var(--bg-elevated)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${micLevel}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 80ms ease' }} />
+                </div>
+              </div>
+
+              {/* Medidor de Sistema */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span>🖥️ Sis:</span>
+                <div style={{ width: 45, height: 4, background: 'var(--bg-elevated)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${sysLevel}%`, height: '100%', background: 'linear-gradient(90deg, #10B981, var(--accent-primary))', transition: 'width 80ms ease' }} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

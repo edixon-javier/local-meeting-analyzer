@@ -175,6 +175,39 @@ TRANSCRIPCIÓN:
             
             return self._call_ollama(prompt, temperature=0.4)
 
+    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        system_prompt = f"""Eres un asistente de IA experto que responde preguntas sobre el historial de reuniones del usuario basándose en el siguiente contexto de reuniones.
+Para cada dato o respuesta, debes citar explícitamente el nombre de la reunión y la fecha correspondiente.
+Si el contexto no contiene la información para responder, dilo claramente.
+
+CONTEXTO DE REUNIONES:
+\"\"\"
+{context}
+\"\"\"
+"""
+        if self._ai_provider == "openai":
+            if not self.openai_client:
+                raise RuntimeError("Cliente de OpenAI no configurado.")
+            openai_messages = [{"role": "system", "content": system_prompt}] + messages + [{"role": "user", "content": new_question}]
+            
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model=self.openai_model,
+                    messages=openai_messages,
+                    temperature=0.4
+                )
+                return response.choices[0].message.content.strip()
+            except Exception as e:
+                raise RuntimeError(f"Error OpenAI (Chat Historial): {e}")
+        else:
+            prompt = system_prompt + "\n\n"
+            for msg in messages:
+                role = "Usuario" if msg["role"] == "user" else "Asistente"
+                prompt += f"{role}: {msg['content']}\n\n"
+            prompt += f"Usuario: {new_question}\nAsistente:"
+            
+            return self._call_ollama(prompt, temperature=0.4)
+
     def _call_ollama(self, prompt: str, temperature: float = 0.3) -> str:
         payload = {
             "model": self._model,

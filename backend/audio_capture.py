@@ -63,6 +63,10 @@ class AudioCapture:
         self._thread_mic = None
         
         self._output_path = None
+        
+        # Frecuencias de muestreo reales utilizadas por dispositivo
+        self._sys_sr = SAMPLE_RATE
+        self._mic_sr = SAMPLE_RATE
 
     def get_loopback_device(self):
         try:
@@ -95,6 +99,8 @@ class AudioCapture:
         self._paused = False
         self._frames_sys = []
         self._frames_mic = []
+        self._sys_sr = SAMPLE_RATE
+        self._mic_sr = SAMPLE_RATE
 
         # Lanzar hilos según el modo
         if self._mode in ["system", "both"]:
@@ -132,10 +138,50 @@ class AudioCapture:
             return
 
         channels = device.channels
+        
+        # Intentar inicializar el grabador con frecuencias estándar
+        samplerates_to_try = [SAMPLE_RATE, 44100, 16000, 32000, 48000, 8000]
+        seen = set()
+        samplerates_to_try = [x for x in samplerates_to_try if not (x in seen or seen.add(x))]
+        
+        recorder = None
+        used_sr = SAMPLE_RATE
+        
+        for sr in samplerates_to_try:
+            try:
+                rec_candidate = device.recorder(samplerate=sr, channels=channels)
+                with rec_candidate:
+                    pass
+                recorder = rec_candidate
+                used_sr = sr
+                break
+            except Exception as e:
+                recorder = None
+                continue
+
+        if recorder is None:
+            print(f"[AudioCapture] Error: No se pudo iniciar el grabador para ({source_type}) en ninguna frecuencia soportada.")
+            if source_type == "sys":
+                print("[AudioCapture] TIP: Si estás en Windows y el loopback falla, asegúrate de tener algún sonido reproduciéndose antes de iniciar la grabación.")
+            
+            if self._mode == "both":
+                print(f"[AudioCapture] Advertencia: falló la grabación de {source_type}, pero se intentará grabar la otra fuente.")
+            else:
+                self._recording = False
+            return
+
+        if source_type == "sys":
+            self._sys_sr = used_sr
+            print(f"[AudioCapture] Capturando loopback a {used_sr} Hz")
+        else:
+            self._mic_sr = used_sr
+            print(f"[AudioCapture] Capturando micrófono a {used_sr} Hz")
+
         try:
-            with device.recorder(samplerate=SAMPLE_RATE, channels=channels) as mic:
+            with recorder as mic:
+                chunk_size = used_sr // 5  # ~200ms dinámico según frecuencia
                 while self._recording:
-                    chunk = mic.record(numframes=CHUNK_SIZE)
+                    chunk = mic.record(numframes=chunk_size)
                     if not self._paused:
                         target_frames.append(chunk)
         except Exception as e:
@@ -156,8 +202,8 @@ class AudioCapture:
         self._paused = False
         print("[AudioCapture] Grabación reanudada.")
 
-    def _process_audio_array(self, frames_list):
-        """Convierte una lista de chunks a un array mono unidimensional"""
+    def _process_audio_array(self, frames_list, orig_sr):
+        """Convierte una lista de chunks a un array mono unidimensional y lo resamplea al SAMPLE_RATE global"""
         if not frames_list:
             return np.array([], dtype=DTYPE)
         
@@ -167,6 +213,18 @@ class AudioCapture:
             audio_data = np.mean(audio_data, axis=1)
         else:
             audio_data = audio_data.flatten()
+            
+        # Si el sample rate original difiere del SAMPLE_RATE global, resampleamos
+        if orig_sr != SAMPLE_RATE and len(audio_data) > 0:
+            print(f"[AudioCapture] Resampleando audio de {orig_sr} Hz a {SAMPLE_RATE} Hz...")
+            duration = len(audio_data) / orig_sr
+            num_samples = int(duration * SAMPLE_RATE)
+            audio_data = np.interp(
+                np.linspace(0, len(audio_data), num_samples, endpoint=False),
+                np.arange(len(audio_data)),
+                audio_data
+            )
+            
         return audio_data
 
     def stop(self) -> str:
@@ -182,8 +240,8 @@ class AudioCapture:
         if self._thread_mic:
             self._thread_mic.join(timeout=3)
 
-        sys_array = self._process_audio_array(self._frames_sys)
-        mic_array = self._process_audio_array(self._frames_mic)
+        sys_array = self._process_audio_array(self._frames_sys, self._sys_sr)
+        mic_array = self._process_audio_array(self._frames_mic, self._mic_sr)
         
         # Mezclar (Mixer)
         audio_final = np.array([], dtype=DTYPE)

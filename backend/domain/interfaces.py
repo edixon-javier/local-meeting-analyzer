@@ -33,6 +33,23 @@ class IAudioCapture(ABC):
     def stop(self) -> str:
         pass
 
+    @property
+    @abstractmethod
+    def is_testing(self) -> bool:
+        pass
+
+    @abstractmethod
+    def start_test(self, output_dir: str, mode: str, mic_device_id: str) -> str:
+        pass
+
+    @abstractmethod
+    def stop_test(self) -> str:
+        pass
+
+    @abstractmethod
+    def get_levels(self) -> dict:
+        pass
+
 class ITranscriber(ABC):
     @property
     @abstractmethod
@@ -85,6 +102,10 @@ class IAnalyzer(ABC):
 
     @abstractmethod
     def chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        pass
+
+    @abstractmethod
+    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
         pass
 
 class IMetadataRepository(ABC):

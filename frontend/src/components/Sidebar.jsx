@@ -127,6 +127,16 @@ export default function Sidebar({ currentView, onNavigate }) {
             Historial
           </button>
           <button
+            className={`sidebar-nav-item ${currentView === 'history-chat' ? 'active' : ''}`}
+            onClick={() => !isBackendOffline && onNavigate('history-chat')}
+            disabled={isBackendOffline}
+            title={isBackendOffline ? 'Sin conexión al backend' : 'Preguntar al historial de reuniones'}
+            style={{ opacity: isBackendOffline ? 0.5 : 1, cursor: isBackendOffline ? 'not-allowed' : 'pointer' }}
+          >
+            <span className="nav-icon">💬</span>
+            Preguntar al Historial
+          </button>
+          <button
             className={`sidebar-nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => onNavigate('settings')}
           >

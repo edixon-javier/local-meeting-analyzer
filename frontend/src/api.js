@@ -84,6 +84,7 @@ export const renameRecording = (filename, newName) => api.post(`/recordings/${fi
 export const getConfig = () => api.get('/config')
 export const updateConfig = (config) => api.post('/config', config)
 export const chatWithMeeting = (audioPath, messages, question) => api.post('/chat', { audio_path: audioPath, messages, question })
+export const chatWithHistory = (messages, question) => api.post('/chat/history', { messages, question })
 export const uploadAudioFile = (file, onUploadProgress) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -94,6 +95,9 @@ export const uploadAudioFile = (file, onUploadProgress) => {
     onUploadProgress,
   })
 }
+export const startAudioTest = () => api.post('/recording/test/start')
+export const stopAudioTest = () => api.post('/recording/test/stop')
+export const getAudioTestLevels = () => api.get('/recording/test/levels')
 
 export default api
 
