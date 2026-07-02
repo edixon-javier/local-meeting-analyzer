@@ -84,6 +84,16 @@ export const renameRecording = (filename, newName) => api.post(`/recordings/${fi
 export const getConfig = () => api.get('/config')
 export const updateConfig = (config) => api.post('/config', config)
 export const chatWithMeeting = (audioPath, messages, question) => api.post('/chat', { audio_path: audioPath, messages, question })
+export const uploadAudioFile = (file, onUploadProgress) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/recordings/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress,
+  })
+}
 
 export default api
 

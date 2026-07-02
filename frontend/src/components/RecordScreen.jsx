@@ -2,7 +2,7 @@
 // Pantalla principal de grabación: botón record, timer, pause/resume, waveform animado.
 
 import { useState, useEffect, useRef } from 'react'
-import { startRecording, stopRecording, pauseRecording, resumeRecording, getStatus } from '../api'
+import { startRecording, stopRecording, pauseRecording, resumeRecording, getStatus, uploadAudioFile } from '../api'
 import { useSystem } from '../context/SystemContext'
 
 export default function RecordScreen({ onRecordingDone }) {
@@ -12,6 +12,73 @@ export default function RecordScreen({ onRecordingDone }) {
   const [seconds, setSeconds] = useState(0)
   const timerRef = useRef(null)
   const audioPathRef = useRef(null)
+
+  // Estados para carga de archivos
+  const [isDragging, setIsDragging] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef(null)
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    if (isBackendOffline || isUploading) return
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (isBackendOffline || isUploading) return
+    const file = e.dataTransfer.files[0]
+    if (file) {
+      handleUpload(file)
+    }
+  }
+
+  const handleFileChange = (e) => {
+    if (isBackendOffline || isUploading) return
+    const file = e.target.files[0]
+    if (file) {
+      handleUpload(file)
+    }
+  }
+
+  const handleUpload = async (file) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const allowed = ['wav', 'mp3', 'm4a', 'mp4', 'ogg', 'aac', 'flac']
+    if (!allowed.includes(ext)) {
+      showToast({ 
+        type: 'error', 
+        message: 'Formato de audio no soportado. Formatos válidos: WAV, MP3, M4A, MP4, OGG, AAC, FLAC.' 
+      })
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(0)
+    showToast({ type: 'info', message: 'Subiendo archivo de audio...' })
+
+    try {
+      const res = await uploadAudioFile(file, (progressEvent) => {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        setUploadProgress(percent)
+      })
+
+      showToast({ type: 'success', message: '✅ Archivo subido con éxito. Iniciando análisis...' })
+      setIsUploading(false)
+      onRecordingDone(res.data.path)
+    } catch (err) {
+      console.error('Error al subir archivo:', err)
+      const msg = err.response?.data?.detail || 'Error al subir el archivo de audio'
+      showToast({ type: 'error', message: msg })
+      setIsUploading(false)
+    }
+  }
+
 
   // Sincronizar con el estado global (Atajos de teclado)
   useEffect(() => {
@@ -215,9 +282,57 @@ export default function RecordScreen({ onRecordingDone }) {
       </div>
 
       {!isRecording && (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 24, textAlign: 'center' }}>
-          Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
-        </p>
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 24, textAlign: 'center' }}>
+            Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
+          </p>
+
+          <div className="upload-container" style={{ width: '100%', maxWidth: 420, marginTop: 12 }}>
+            <div className="upload-divider">
+              <span>o también</span>
+            </div>
+
+            <div
+              className={`upload-zone glass ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !isUploading && !isBackendOffline && fileInputRef.current?.click()}
+              style={{
+                cursor: (isBackendOffline || isUploading) ? 'not-allowed' : 'pointer',
+                opacity: isBackendOffline ? 0.5 : 1
+              }}
+              title={isBackendOffline ? 'Sin conexión al backend' : 'Cargar archivo de audio'}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".wav,.mp3,.m4a,.mp4,.ogg,.aac,.flac,audio/*"
+                style={{ display: 'none' }}
+                disabled={isBackendOffline || isUploading}
+              />
+              
+              {isUploading ? (
+                <div className="upload-progress-wrapper">
+                  <div className="upload-spinner" />
+                  <span className="upload-text">Subiendo archivo...</span>
+                  <div className="upload-progress-bar-bg">
+                    <div className="upload-progress-bar-fg" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <span className="upload-percentage">{uploadProgress}%</span>
+                </div>
+              ) : (
+                <div className="upload-prompt">
+                  <span className="upload-icon">📂</span>
+                  <span className="upload-title">Importar archivo de audio</span>
+                  <span className="upload-subtitle">Arrastra y suelta tu archivo aquí, o haz clic para explorar</span>
+                  <span className="upload-formats">WAV, MP3, M4A, AAC, OGG (máx. 100MB)</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Tips cuando no graba */}

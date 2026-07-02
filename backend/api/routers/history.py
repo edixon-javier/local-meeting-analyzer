@@ -1,10 +1,12 @@
 import os
 import json
-from fastapi import APIRouter, HTTPException, Depends
+import shutil
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from domain.interfaces import IMetadataRepository
 from services.metadata_repository import MetadataRepository
+
 
 router = APIRouter()
 
@@ -148,3 +150,44 @@ def get_audio_file(path: str):
     
     mime_type = "audio/mpeg" if path.endswith(".mp3") else "audio/wav"
     return FileResponse(path, media_type=mime_type)
+
+@router.post("/upload")
+def upload_audio_file(file: UploadFile = File(...)):
+    """Permite al usuario subir su propio archivo de audio para análisis."""
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".aac", ".flac"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Formato de audio no soportado. Formatos válidos: WAV, MP3, M4A, MP4, OGG, AAC, FLAC."
+        )
+
+    recordings_dir = _get_recordings_dir()
+    os.makedirs(recordings_dir, exist_ok=True)
+
+    filename = os.path.basename(file.filename)
+    dest_path = os.path.join(recordings_dir, filename)
+
+    base, extension = os.path.splitext(filename)
+    counter = 1
+    while os.path.exists(dest_path):
+        filename = f"{base}_{counter}{extension}"
+        dest_path = os.path.join(recordings_dir, filename)
+        counter += 1
+
+    try:
+        with open(dest_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {
+            "status": "uploaded",
+            "filename": filename,
+            "path": dest_path
+        }
+    except Exception as e:
+        if os.path.exists(dest_path):
+            try:
+                os.remove(dest_path)
+            except:
+                pass
+        raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+
