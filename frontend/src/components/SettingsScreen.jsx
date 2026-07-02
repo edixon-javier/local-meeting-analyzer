@@ -28,6 +28,7 @@ export default function SettingsScreen() {
   const [sysLevel, setSysLevel] = useState(0)
   const [micLevel, setMicLevel] = useState(0)
   const [testAudioPath, setTestAudioPath] = useState(null)
+  const [testAudioTimestamp, setTestAudioTimestamp] = useState(0)
 
   useEffect(() => {
     if (!isBackendOffline) {
@@ -158,7 +159,8 @@ export default function SettingsScreen() {
       const res = await stopAudioTest()
       setTesting(false)
       if (res.data.audio_path) {
-        setTestAudioPath(`${res.data.audio_path}?t=${Date.now()}`)
+        setTestAudioPath(res.data.audio_path)
+        setTestAudioTimestamp(Date.now())
         showToast({ type: 'success', message: '✅ Prueba finalizada. Reproduce para escuchar.' })
       }
     } catch (err) {
@@ -363,8 +365,8 @@ export default function SettingsScreen() {
               }}>
                 <span style={{ fontSize: 12, color: 'var(--text-accent)', whiteSpace: 'nowrap', fontWeight: 600 }}>🔊 Escuchar:</span>
                 <audio 
-                  src={getAudioUrl(testAudioPath)} 
-                  controls 
+                  src={`${getAudioUrl(testAudioPath)}&t=${testAudioTimestamp}`} 
+                  controls  
                   style={{ 
                     height: 28, 
                     outline: 'none',
