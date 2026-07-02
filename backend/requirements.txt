@@ -1,0 +1,10 @@
+faster-whisper
+fastapi
+uvicorn[standard]
+soundcard
+numpy
+requests
+python-multipart
+httpx
+openai
+soundfile

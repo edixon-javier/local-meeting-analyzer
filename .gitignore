@@ -1,0 +1,31 @@
+# Local Meeting Analyzer — .gitignore
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/recordings/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Node / Electron
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Whisper cache (modelos descargados)
+*.pt
