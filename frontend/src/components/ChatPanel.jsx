@@ -7,10 +7,12 @@ export default function ChatPanel({ audioPath }) {
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const messagesEndRef = useRef(null)
+  const chatContainerRef = useRef(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
   }, [messages])
 
   const handleSend = async (e) => {
@@ -42,9 +44,12 @@ export default function ChatPanel({ audioPath }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {/* Messages list */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div 
+        ref={chatContainerRef} 
+        style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0 }}
+      >
         {messages.map((msg, i) => (
           <div key={i} style={{ 
             alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -69,7 +74,6 @@ export default function ChatPanel({ audioPath }) {
             <span className="dot-typing" style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '12px' }}>Escribiendo...</span>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input area */}

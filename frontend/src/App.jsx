@@ -128,6 +128,13 @@ export default function App() {
     if (data?.path) setAudioPath(data.path)
   }, [])
 
+  // Garantizar que ninguna navegación desplace el viewport de la ventana
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    if (document.body) document.body.scrollTop = 0
+    if (document.documentElement) document.documentElement.scrollTop = 0
+  }, [view])
+
   return (
     <SystemProvider onToast={showToast}>
       <RecordingsProvider>

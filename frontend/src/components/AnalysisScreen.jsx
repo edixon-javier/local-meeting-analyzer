@@ -122,7 +122,11 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     if (activeSegmentIndex !== -1) {
       const activeEl = document.getElementById(`segment-${activeSegmentIndex}`)
       if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const container = activeEl.closest('.panel-body') || activeEl.parentElement
+        if (container) {
+          const topPos = activeEl.offsetTop - container.offsetTop - (container.clientHeight / 2) + (activeEl.clientHeight / 2)
+          container.scrollTo({ top: Math.max(0, topPos), behavior: 'smooth' })
+        }
       }
     }
   }, [activeSegmentIndex])

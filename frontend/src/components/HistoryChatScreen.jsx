@@ -15,10 +15,12 @@ export default function HistoryChatScreen({ onNavigate }) {
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const messagesEndRef = useRef(null)
+  const chatContainerRef = useRef(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
   }, [messages])
 
   // Filtrar solo reuniones que ya están analizadas/transcritas para saber si hay información
@@ -133,7 +135,10 @@ export default function HistoryChatScreen({ onNavigate }) {
       </div>
 
       {/* Listado de mensajes */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div 
+        ref={chatContainerRef}
+        style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}
+      >
         {messages.map((msg, i) => (
           <div 
             key={i} 
@@ -218,7 +223,6 @@ export default function HistoryChatScreen({ onNavigate }) {
             <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '13px' }}>Consultando tu historial de reuniones...</span>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Formulario de entrada */}

@@ -64,9 +64,16 @@
 }
 
 html, body, #root {
-  height: 100%;
-  width: 100%;
+  height: 100vh;
+  width: 100vw;
+  max-height: 100vh;
+  max-width: 100vw;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 body {
@@ -137,10 +144,14 @@ body::after {
   align-items: center;
   justify-content: space-between;
   height: 38px;
+  min-height: 38px;
+  max-height: 38px;
   padding: 0 0 0 16px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
+  z-index: 9999;
 }
 
 .title-bar-controls {
@@ -183,7 +194,10 @@ body::after {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  position: relative;
+  width: 100vw;
+  position: fixed;
+  top: 0;
+  left: 0;
   overflow: hidden;
 }
 
@@ -205,6 +219,7 @@ body::after {
 .app-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   z-index: 1;
 }
@@ -424,6 +439,8 @@ body::after {
   flex-direction: column;
   overflow: hidden;
   background: transparent;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* ─── Record Screen ─── */
