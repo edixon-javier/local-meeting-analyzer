@@ -13,7 +13,7 @@ export default function OfflineOverlay() {
     try {
       await getStatus()
       showToast({ type: 'success', message: 'Conexión restablecida con éxito' })
-    } catch (err) {
+    } catch {
       showToast({ type: 'error', message: 'El backend sigue sin responder. Inténtalo de nuevo.' })
     } finally {
       setRetrying(false)

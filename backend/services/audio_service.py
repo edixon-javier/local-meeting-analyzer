@@ -21,22 +21,51 @@ def _apply_soundcard_hotfix():
                 with open(source_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
+                modified = False
+                
                 target_assert_1 = "assert ppMixFormat[0][0].Format.wFormatTag == 0xFFFE"
                 target_assert_2 = "assert ppMixFormat[0][0].Format.wFormatTag in (1, 3, 0xFFFE)"
-                
-                if target_assert_1 in content and target_assert_2 not in content:
-                    print("[AudioService] Aplicando hotfix dinámico a soundcard.mediafoundation...")
+                if target_assert_1 in content:
+                    print("[AudioService] Aplicando hotfix dinámico (wFormatTag) a soundcard.mediafoundation...")
                     content = content.replace(target_assert_1, f"{target_assert_2}  # HOTFIX")
+                    modified = True
+
+                cb_assert_1 = "assert ppMixFormat[0][0].Format.cbSize == 22"
+                cb_assert_2 = "assert ppMixFormat[0][0].Format.cbSize in (0, 2, 22, 32)"
+                if cb_assert_1 in content:
+                    print("[AudioService] Aplicando hotfix dinámico (cbSize) a soundcard.mediafoundation...")
+                    content = content.replace(cb_assert_1, f"{cb_assert_2}  # HOTFIX")
+                    modified = True
+
+                subfmt_block_1 = "        assert ppMixFormat[0][0].SubFormat.Data1 == 0x100000\n        assert ppMixFormat[0][0].SubFormat.Data2 == 0x0080\n        assert ppMixFormat[0][0].SubFormat.Data3 == 0xaa00\n        assert [int(x) for x in ppMixFormat[0][0].SubFormat.Data4[0:4]] == [0, 56, 155, 113]"
+                subfmt_block_2 = "        if ppMixFormat[0][0].Format.wFormatTag == 0xFFFE:\n            assert ppMixFormat[0][0].SubFormat.Data1 == 0x100000\n            assert ppMixFormat[0][0].SubFormat.Data2 == 0x0080\n            assert ppMixFormat[0][0].SubFormat.Data3 == 0xaa00\n            assert [int(x) for x in ppMixFormat[0][0].SubFormat.Data4[0:4]] == [0, 56, 155, 113]  # HOTFIX"
+                if subfmt_block_1 in content:
+                    print("[AudioService] Aplicando hotfix dinámico (SubFormat) a soundcard.mediafoundation...")
+                    content = content.replace(subfmt_block_1, subfmt_block_2)
+                    modified = True
+                
+                if modified:
                     with open(source_file, 'w', encoding='utf-8') as f:
                         f.write(content)
                     importlib.reload(mf)
                     importlib.reload(sc)
-                    print("[AudioService] Hotfix aplicado y módulo recargado correctamente.")
+                    print("[AudioService] Hotfix(es) de soundcard aplicado(s) y módulo(s) recargado(s) correctamente.")
         except Exception as e:
             print(f"[AudioService] Advertencia: No se pudo verificar o aplicar el hotfix a soundcard: {e}")
 
 _apply_soundcard_hotfix()
 # ---------------------------------------------------
+
+def _get_ffmpeg_path() -> str:
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        root_dir = os.path.dirname(exe_dir) if os.path.basename(exe_dir).lower() == "backend" else exe_dir
+    else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_ffmpeg = os.path.join(root_dir, "bin", "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+    if os.path.exists(local_ffmpeg):
+        return local_ffmpeg
+    return "ffmpeg"
 
 SAMPLE_RATE = 48000
 DTYPE = "float32"
@@ -49,11 +78,13 @@ class AudioService(IAudioCapture):
         self._is_testing = False
         self._mode = "both"
         self._mic_id = "default"
-        self._frames_sys = []
-        self._frames_mic = []
         self._thread_sys = None
         self._thread_mic = None
         self._output_path = None
+        self._temp_sys_path = None
+        self._temp_mic_path = None
+        self._file_sys = None
+        self._file_mic = None
         self._last_sys_level = 0.0
         self._last_mic_level = 0.0
 
@@ -85,15 +116,33 @@ class AudioService(IAudioCapture):
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._output_path = os.path.join(output_dir, f"meeting_{timestamp}.wav")
+        self._temp_sys_path = self._output_path + ".sys.raw"
+        self._temp_mic_path = self._output_path + ".mic.raw"
 
         self._mode = mode
         self._mic_id = mic_device_id
         self._recording = True
         self._paused = False
-        self._frames_sys = []
-        self._frames_mic = []
         self._last_sys_level = 0.0
         self._last_mic_level = 0.0
+        self._file_sys = None
+        self._file_mic = None
+
+        try:
+            if self._mode in ["system", "both"]:
+                self._file_sys = open(self._temp_sys_path, "wb")
+            if self._mode in ["mic", "both"]:
+                self._file_mic = open(self._temp_mic_path, "wb")
+        except Exception as e:
+            if self._file_sys:
+                try: self._file_sys.close()
+                except Exception: pass
+            if self._file_mic:
+                try: self._file_mic.close()
+                except Exception: pass
+            self._recording = False
+            self._is_testing = False
+            raise RuntimeError(f"No se pudieron inicializar los archivos temporales de grabación: {e}")
 
         if self._mode in ["system", "both"]:
             self._thread_sys = threading.Thread(target=self._record_loop, args=("sys",), daemon=True)
@@ -112,16 +161,34 @@ class AudioService(IAudioCapture):
 
         os.makedirs(output_dir, exist_ok=True)
         self._output_path = os.path.join(output_dir, "test_capture.wav")
+        self._temp_sys_path = self._output_path + ".sys.raw"
+        self._temp_mic_path = self._output_path + ".mic.raw"
 
         self._mode = mode
         self._mic_id = mic_device_id
         self._is_testing = True
         self._recording = True
         self._paused = False
-        self._frames_sys = []
-        self._frames_mic = []
         self._last_sys_level = 0.0
         self._last_mic_level = 0.0
+        self._file_sys = None
+        self._file_mic = None
+
+        try:
+            if self._mode in ["system", "both"]:
+                self._file_sys = open(self._temp_sys_path, "wb")
+            if self._mode in ["mic", "both"]:
+                self._file_mic = open(self._temp_mic_path, "wb")
+        except Exception as e:
+            if self._file_sys:
+                try: self._file_sys.close()
+                except Exception: pass
+            if self._file_mic:
+                try: self._file_mic.close()
+                except Exception: pass
+            self._recording = False
+            self._is_testing = False
+            raise RuntimeError(f"No se pudieron inicializar los archivos temporales de prueba: {e}")
 
         if self._mode in ["system", "both"]:
             self._thread_sys = threading.Thread(target=self._record_loop, args=("sys",), daemon=True)
@@ -135,13 +202,14 @@ class AudioService(IAudioCapture):
         return self._output_path
 
     def _record_loop(self, source_type: str):
+        file_handle = None
         try:
             if source_type == "sys":
                 device = self._get_loopback_device()
-                target_frames = self._frames_sys
+                file_handle = self._file_sys
             else:
                 device = self._get_mic_device()
-                target_frames = self._frames_mic
+                file_handle = self._file_mic
                 
         except Exception as e:
             print(f"[AudioService] Error al abrir dispositivo ({source_type}): {e}")
@@ -162,8 +230,15 @@ class AudioService(IAudioCapture):
                     chunk = mic.record(numframes=CHUNK_SIZE)
                     
                     if chunk is not None and len(chunk) > 0:
-                        rms = float(np.sqrt(np.mean(np.square(chunk))))
+                        # Convert to mono immediately
+                        if chunk.ndim > 1 and chunk.shape[1] > 1:
+                            mono_chunk = np.mean(chunk, axis=1)
+                        else:
+                            mono_chunk = chunk.flatten()
+                        
+                        rms = float(np.sqrt(np.mean(np.square(mono_chunk))))
                     else:
+                        mono_chunk = None
                         rms = 0.0
                         
                     if source_type == "sys":
@@ -171,10 +246,16 @@ class AudioService(IAudioCapture):
                     else:
                         self._last_mic_level = rms
                         
-                    if not self._paused:
-                        target_frames.append(chunk)
+                    if not self._paused and mono_chunk is not None and len(mono_chunk) > 0:
+                        if file_handle and not file_handle.closed:
+                            try:
+                                file_handle.write(mono_chunk.astype(DTYPE).tobytes())
+                                file_handle.flush()
+                            except (ValueError, OSError):
+                                break
         except Exception as e:
             print(f"[AudioService] Error en grabación {source_type}: {e}")
+            traceback.print_exc()
             if self._mode != "both":
                 self._recording = False
                 self._is_testing = False
@@ -191,16 +272,177 @@ class AudioService(IAudioCapture):
         self._paused = False
         print("[AudioService] Grabación reanudada.")
 
-    def _process_audio_array(self, frames_list):
-        if not frames_list:
-            return np.array([], dtype=DTYPE)
+    def _save_and_clean_audio(self) -> str:
+        # Join threads
+        if self._thread_sys:
+            self._thread_sys.join(timeout=3)
+            self._thread_sys = None
+        if self._thread_mic:
+            self._thread_mic.join(timeout=3)
+            self._thread_mic = None
+
+        # Close temporary file handles if they are still open
+        if hasattr(self, "_file_sys") and self._file_sys:
+            try:
+                self._file_sys.close()
+            except Exception:
+                pass
+            self._file_sys = None
+
+        if hasattr(self, "_file_mic") and self._file_mic:
+            try:
+                self._file_mic.close()
+            except Exception:
+                pass
+            self._file_mic = None
+
+        # Check raw files sizes
+        sys_exists = self._temp_sys_path and os.path.exists(self._temp_sys_path)
+        mic_exists = self._temp_mic_path and os.path.exists(self._temp_mic_path)
         
-        audio_data = np.concatenate(frames_list, axis=0)
-        if audio_data.ndim > 1 and audio_data.shape[1] > 1:
-            audio_data = np.mean(audio_data, axis=1)
+        sys_size = os.path.getsize(self._temp_sys_path) if sys_exists else 0
+        mic_size = os.path.getsize(self._temp_mic_path) if mic_exists else 0
+        
+        sys_samples = sys_size // 4  # float32 is 4 bytes
+        mic_samples = mic_size // 4
+        
+        max_samples = 0
+        if self._mode == "both":
+            max_samples = max(sys_samples, mic_samples)
+        elif self._mode == "system":
+            max_samples = sys_samples
+        elif self._mode == "mic":
+            max_samples = mic_samples
+
+        if max_samples > 0:
+            # Block parameters
+            # 5 seconds block
+            block_samples = SAMPLE_RATE * 5
+            
+            # Pass 1: Find maximum absolute value for normalization
+            max_val = 0.0
+            
+            # Open temporary files in read binary mode
+            f_sys = open(self._temp_sys_path, "rb") if sys_exists and self._mode in ["system", "both"] else None
+            f_mic = open(self._temp_mic_path, "rb") if mic_exists and self._mode in ["mic", "both"] else None
+            
+            try:
+                for start_sample in range(0, max_samples, block_samples):
+                    curr_block_samples = min(block_samples, max_samples - start_sample)
+                    
+                    sys_block = np.zeros(curr_block_samples, dtype=DTYPE)
+                    mic_block = np.zeros(curr_block_samples, dtype=DTYPE)
+                    
+                    if f_sys:
+                        data = f_sys.read(curr_block_samples * 4)
+                        if data:
+                            read_arr = np.frombuffer(data, dtype=DTYPE)
+                            sys_block[:len(read_arr)] = read_arr
+                            
+                    if f_mic:
+                        data = f_mic.read(curr_block_samples * 4)
+                        if data:
+                            read_arr = np.frombuffer(data, dtype=DTYPE)
+                            mic_block[:len(read_arr)] = read_arr
+                            
+                    if self._mode == "both":
+                        mixed_block = sys_block + mic_block
+                    elif self._mode == "system":
+                        mixed_block = sys_block
+                    else:
+                        mixed_block = mic_block
+                        
+                    if len(mixed_block) > 0:
+                        block_max = np.max(np.abs(mixed_block))
+                        if block_max > max_val:
+                            max_val = block_max
+            finally:
+                if f_sys: f_sys.close()
+                if f_mic: f_mic.close()
+
+            # Pass 2: Write normalized audio to WAV
+            f_sys = open(self._temp_sys_path, "rb") if sys_exists and self._mode in ["system", "both"] else None
+            f_mic = open(self._temp_mic_path, "rb") if mic_exists and self._mode in ["mic", "both"] else None
+            
+            try:
+                with wave.open(self._output_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2) # 16-bit
+                    wf.setframerate(SAMPLE_RATE)
+                    
+                    for start_sample in range(0, max_samples, block_samples):
+                        curr_block_samples = min(block_samples, max_samples - start_sample)
+                        
+                        sys_block = np.zeros(curr_block_samples, dtype=DTYPE)
+                        mic_block = np.zeros(curr_block_samples, dtype=DTYPE)
+                        
+                        if f_sys:
+                            data = f_sys.read(curr_block_samples * 4)
+                            if data:
+                                read_arr = np.frombuffer(data, dtype=DTYPE)
+                                sys_block[:len(read_arr)] = read_arr
+                                
+                        if f_mic:
+                            data = f_mic.read(curr_block_samples * 4)
+                            if data:
+                                read_arr = np.frombuffer(data, dtype=DTYPE)
+                                mic_block[:len(read_arr)] = read_arr
+                                
+                        if self._mode == "both":
+                            mixed_block = sys_block + mic_block
+                        elif self._mode == "system":
+                            mixed_block = sys_block
+                        else:
+                            mixed_block = mic_block
+                            
+                        if len(mixed_block) > 0:
+                            if max_val > 0.01:
+                                normalized_block = (mixed_block / max_val) * 0.9
+                            else:
+                                normalized_block = mixed_block
+                                
+                            int16_block = (normalized_block * 32767).astype(np.int16)
+                            wf.writeframes(int16_block.tobytes())
+            finally:
+                if f_sys: f_sys.close()
+                if f_mic: f_mic.close()
+
+            print(f"[AudioService] Mezcla guardada temporalmente -> {self._output_path}")
+
+            # Compress to MP3
+            try:
+                mp3_path = self._output_path.replace(".wav", ".mp3")
+                print(f"[AudioService] Comprimiendo a MP3 con FFmpeg...")
+                cmd = [_get_ffmpeg_path(), "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+                
+                if os.path.exists(self._output_path):
+                    os.remove(self._output_path)
+                self._output_path = mp3_path
+                print(f"[AudioService] Compresión exitosa -> {self._output_path}")
+            except Exception as e:
+                print(f"[AudioService] Advertencia: No se pudo comprimir a MP3 ({e}).")
         else:
-            audio_data = audio_data.flatten()
-        return audio_data
+            print("[AudioService] Advertencia: No se capturó ningún audio.")
+            try:
+                with wave.open(self._output_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(SAMPLE_RATE)
+            except Exception as e:
+                print(f"[AudioService] Error al escribir cabecera de audio vacío: {e}")
+            
+        # Clean up temporary raw files
+        for temp_path in [self._temp_sys_path, self._temp_mic_path]:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception as e:
+                    print(f"[AudioService] Advertencia al eliminar archivo temporal {temp_path}: {e}")
+
+        self._last_sys_level = 0.0
+        self._last_mic_level = 0.0
+        return self._output_path
 
     def stop(self) -> str:
         if not self._recording:
@@ -209,122 +451,16 @@ class AudioService(IAudioCapture):
         self._recording = False
         self._paused = False
         
-        if self._thread_sys:
-            self._thread_sys.join(timeout=3)
-        if self._thread_mic:
-            self._thread_mic.join(timeout=3)
-
-        sys_array = self._process_audio_array(self._frames_sys)
-        mic_array = self._process_audio_array(self._frames_mic)
-        
-        audio_final = np.array([], dtype=DTYPE)
-        
-        if self._mode == "both":
-            max_len = max(len(sys_array), len(mic_array))
-            if len(sys_array) < max_len:
-                sys_array = np.pad(sys_array, (0, max_len - len(sys_array)), 'constant')
-            if len(mic_array) < max_len:
-                mic_array = np.pad(mic_array, (0, max_len - len(mic_array)), 'constant')
-            audio_final = sys_array + mic_array
-        elif self._mode == "system":
-            audio_final = sys_array
-        elif self._mode == "mic":
-            audio_final = mic_array
-            
-        if len(audio_final) > 0:
-            max_val = np.max(np.abs(audio_final))
-            if max_val > 0.01:
-                audio_final = (audio_final / max_val) * 0.9
-                
-            audio_int16 = (audio_final * 32767).astype(np.int16)
-
-            with wave.open(self._output_path, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(SAMPLE_RATE)
-                wf.writeframes(audio_int16.tobytes())
-
-            print(f"[AudioService] Mezcla guardada temporalmente -> {self._output_path}")
-
-            try:
-                mp3_path = self._output_path.replace(".wav", ".mp3")
-                print("[AudioService] Comprimiendo a MP3 con FFmpeg...")
-                cmd = ["ffmpeg", "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                
-                os.remove(self._output_path)
-                self._output_path = mp3_path
-                print(f"[AudioService] Compresión exitosa -> {self._output_path}")
-            except Exception as e:
-                print(f"[AudioService] Advertencia: No se pudo comprimir a MP3 ({e}).")
-        else:
-            print("[AudioService] Advertencia: No se capturó ningún audio.")
-            
-        self._last_sys_level = 0.0
-        self._last_mic_level = 0.0
-        return self._output_path
+        return self._save_and_clean_audio()
 
     def stop_test(self) -> str:
         if not self._is_testing:
             raise RuntimeError("No hay ninguna prueba activa.")
 
         self._recording = False
-        
-        if self._thread_sys:
-            self._thread_sys.join(timeout=3)
-        if self._thread_mic:
-            self._thread_mic.join(timeout=3)
-
-        sys_array = self._process_audio_array(self._frames_sys)
-        mic_array = self._process_audio_array(self._frames_mic)
-        
-        audio_final = np.array([], dtype=DTYPE)
-        
-        if self._mode == "both":
-            max_len = max(len(sys_array), len(mic_array))
-            if len(sys_array) < max_len:
-                sys_array = np.pad(sys_array, (0, max_len - len(sys_array)), 'constant')
-            if len(mic_array) < max_len:
-                mic_array = np.pad(mic_array, (0, max_len - len(mic_array)), 'constant')
-            audio_final = sys_array + mic_array
-        elif self._mode == "system":
-            audio_final = sys_array
-        elif self._mode == "mic":
-            audio_final = mic_array
-            
-        if len(audio_final) > 0:
-            max_val = np.max(np.abs(audio_final))
-            if max_val > 0.01:
-                audio_final = (audio_final / max_val) * 0.9
-                
-            audio_int16 = (audio_final * 32767).astype(np.int16)
-
-            with wave.open(self._output_path, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(SAMPLE_RATE)
-                wf.writeframes(audio_int16.tobytes())
-
-            print(f"[AudioService] Mezcla de prueba guardada temporalmente -> {self._output_path}")
-
-            try:
-                mp3_path = self._output_path.replace(".wav", ".mp3")
-                print("[AudioService] Comprimiendo prueba a MP3 con FFmpeg...")
-                cmd = ["ffmpeg", "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                
-                os.remove(self._output_path)
-                self._output_path = mp3_path
-                print(f"[AudioService] Compresión de prueba exitosa -> {self._output_path}")
-            except Exception as e:
-                print(f"[AudioService] Advertencia: No se pudo comprimir la prueba a MP3 ({e}).")
-        else:
-            print("[AudioService] Advertencia: No se capturó ningún audio de prueba.")
-            
         self._is_testing = False
-        self._last_sys_level = 0.0
-        self._last_mic_level = 0.0
-        return self._output_path
+        
+        return self._save_and_clean_audio()
 
     def get_levels(self) -> dict:
         return {

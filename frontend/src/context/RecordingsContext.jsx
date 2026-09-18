@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { getRecordings, deleteRecording, renameRecording } from '../api'
 import { useSystem } from './SystemContext'
 
@@ -14,7 +14,7 @@ export function RecordingsProvider({ children }) {
   const [renamingFile, setRenamingFile] = useState(null) // { filename }
   const [newNameInput, setNewNameInput] = useState('')
 
-  const loadRecordings = async () => {
+  const loadRecordings = useCallback(async () => {
     if (isBackendOffline) return
     setLoading(true)
     try {
@@ -25,7 +25,7 @@ export function RecordingsProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isBackendOffline])
 
   const confirmDelete = async () => {
     if (!deletingFile) return
@@ -34,7 +34,7 @@ export function RecordingsProvider({ children }) {
       showToast({ type: 'success', message: 'Grabación eliminada correctamente' })
       setDeletingFile(null)
       loadRecordings()
-    } catch (err) {
+    } catch {
       showToast({ type: 'error', message: 'Error al eliminar la grabación' })
     }
   }
@@ -71,7 +71,7 @@ export function RecordingsProvider({ children }) {
     } else {
       setRecordings([])
     }
-  }, [isBackendOffline])
+  }, [isBackendOffline, loadRecordings])
 
   const value = {
     recordings,

@@ -5,7 +5,7 @@ from typing import Optional
 from domain.interfaces import ITranscriber, IAnalyzer, IMetadataRepository
 from services.session_manager import SessionManager
 from api.routers.system import get_transcriber, get_analyzer, get_session_manager
-from api.routers.history import get_metadata_repo
+from api.routers.history import get_metadata_repo, _get_json_path, _get_recordings_dir, SUPPORTED_AUDIO_EXTS
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ def chat_transcript(
 ):
     """Envía un mensaje de chat sobre la transcripción actual."""
     transcript = ""
-    json_path = request.audio_path.replace(".wav", ".json").replace(".mp3", ".json")
+    json_path = _get_json_path(request.audio_path)
     
     meta = repo.get_metadata(json_path)
     if meta:
@@ -83,7 +83,7 @@ def chat_history(
     # Cargar metadatos de todas las reuniones
     meetings = []
     for f in os.listdir(recordings_dir):
-        if f.endswith(".wav") or f.endswith(".mp3"):
+        if f.lower().endswith(SUPPORTED_AUDIO_EXTS):
             audio_path = os.path.join(recordings_dir, f)
             json_path = _get_json_path(audio_path)
             meta = repo.get_metadata(json_path)
@@ -262,6 +262,13 @@ def transcribe_audio(
         }
     except Exception as e:
         session.set_processing(False)
+        if "cancelad" in str(e).lower():
+            return {
+                "status": "cancelled",
+                "text": "",
+                "language": None,
+                "segments": []
+            }
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze")

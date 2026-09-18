@@ -132,3 +132,29 @@ def update_config(
     transcriber.set_config(config)
     
     return {"status": "success", "config": config.settings}
+
+@router.get("/events")
+async def sse_events():
+    """Endpoint de Server-Sent Events (SSE) para notificar cambios de estado en tiempo real del sistema (ej. Ollama)."""
+    from fastapi.responses import StreamingResponse
+    from services.ollama_heartbeat import active_listeners, ollama_online
+    import asyncio
+
+    async def event_generator():
+        queue = asyncio.Queue()
+        active_listeners.append(queue)
+        
+        # Enviar estado inicial inmediato al conectar
+        initial_status = "online" if ollama_online else "offline"
+        yield f"data: {{\"event\": \"ollama_status\", \"status\": \"{initial_status}\"}}\n\n"
+        
+        try:
+            while True:
+                data = await queue.get()
+                yield data
+        finally:
+            # Limpiar al desconectar el cliente bajo cualquier circunstancia
+            if queue in active_listeners:
+                active_listeners.remove(queue)
+                
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

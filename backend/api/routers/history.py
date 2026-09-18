@@ -13,18 +13,25 @@ router = APIRouter()
 class RenameRequest(BaseModel):
     new_name: str
 
+SUPPORTED_AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".aac", ".flac")
+
 def get_metadata_repo() -> IMetadataRepository:
     return MetadataRepository()
 
 def _get_json_path(audio_path: str) -> str:
-    if audio_path.endswith(".wav"):
-        return audio_path.replace(".wav", ".json")
-    elif audio_path.endswith(".mp3"):
-        return audio_path.replace(".mp3", ".json")
-    return audio_path + ".json"
+    base_path, _ = os.path.splitext(audio_path)
+    return base_path + ".json"
 
 def _get_recordings_dir() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "recordings")
+
+def _is_safe_recording_path(path: str) -> bool:
+    try:
+        real_path = os.path.realpath(path)
+        real_recordings = os.path.realpath(_get_recordings_dir())
+        return real_path == real_recordings or real_path.startswith(real_recordings + os.sep)
+    except Exception:
+        return False
 
 @router.get("/")
 def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
@@ -35,7 +42,7 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
 
     files = []
     for f in sorted(os.listdir(recordings_dir), reverse=True):
-        if f.endswith(".wav") or f.endswith(".mp3"):
+        if f.lower().endswith(SUPPORTED_AUDIO_EXTS):
             path = os.path.join(recordings_dir, f)
             json_path = _get_json_path(path)
             
@@ -64,6 +71,8 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
 @router.get("/metadata")
 def get_recording_metadata(path: str, repo: IMetadataRepository = Depends(get_metadata_repo)):
     """Obtiene los metadatos guardados (transcripción, análisis, etc.) para una grabación."""
+    if not _is_safe_recording_path(path):
+        raise HTTPException(status_code=403, detail="Acceso denegado a metadatos fuera del directorio de grabaciones.")
     json_path = _get_json_path(path)
     meta = repo.get_metadata(json_path)
     if meta is None:
@@ -73,8 +82,9 @@ def get_recording_metadata(path: str, repo: IMetadataRepository = Depends(get_me
 @router.delete("/{filename}")
 def delete_recording(filename: str):
     """Elimina físicamente una grabación y sus metadatos asociados."""
+    safe_filename = os.path.basename(filename)
     recordings_dir = _get_recordings_dir()
-    audio_path = os.path.join(recordings_dir, filename)
+    audio_path = os.path.join(recordings_dir, safe_filename)
     json_path = _get_json_path(audio_path)
     
     deleted_audio = False
@@ -102,17 +112,22 @@ def delete_recording(filename: str):
 @router.post("/{filename}/rename")
 def rename_recording(filename: str, request: RenameRequest, repo: IMetadataRepository = Depends(get_metadata_repo)):
     """Renombra una grabación y su JSON de metadatos asociado."""
+    safe_filename = os.path.basename(filename)
+    clean_target_name = os.path.basename(request.new_name.strip())
+    if not clean_target_name:
+        raise HTTPException(status_code=400, detail="El nuevo nombre no puede estar vacío.")
+
     recordings_dir = _get_recordings_dir()
-    old_audio_path = os.path.join(recordings_dir, filename)
+    old_audio_path = os.path.join(recordings_dir, safe_filename)
     old_json_path = _get_json_path(old_audio_path)
     
     if not os.path.exists(old_audio_path):
         raise HTTPException(status_code=404, detail="Grabación no encontrada.")
         
-    ext = ".mp3" if filename.endswith(".mp3") else ".wav"
+    ext = os.path.splitext(safe_filename)[1].lower()
     
-    new_filename_audio = request.new_name.strip()
-    if not new_filename_audio.endswith(ext):
+    new_filename_audio = clean_target_name
+    if not new_filename_audio.lower().endswith(ext):
         new_filename_audio += ext
         
     new_audio_path = os.path.join(recordings_dir, new_filename_audio)
@@ -145,10 +160,20 @@ def rename_recording(filename: str, request: RenameRequest, repo: IMetadataRepos
 @router.get("/audio")
 def get_audio_file(path: str):
     """Sirve el archivo de audio local para ser reproducido en el frontend."""
-    if not os.path.exists(path):
+    if not _is_safe_recording_path(path):
+        raise HTTPException(status_code=403, detail="Acceso denegado al archivo fuera del directorio de grabaciones.")
+
+    if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Archivo de audio no encontrado.")
     
-    mime_type = "audio/mpeg" if path.endswith(".mp3") else "audio/wav"
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in SUPPORTED_AUDIO_EXTS:
+        raise HTTPException(status_code=400, detail="Formato de archivo no permitido.")
+        
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(path)
+    if not mime_type:
+        mime_type = "audio/mpeg" if ext == ".mp3" else "audio/wav"
     return FileResponse(path, media_type=mime_type)
 
 @router.post("/upload")

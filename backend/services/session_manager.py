@@ -1,9 +1,11 @@
+import threading
 from typing import Dict, Any, Optional
 
 class SessionManager:
-    """Maneja el estado de la sesión activa en memoria de forma encapsulada."""
+    """Maneja el estado de la sesión activa en memoria de forma encapsulada y segura para concurrencia."""
     
     def __init__(self):
+        self._lock = threading.Lock()
         self._state: Dict[str, Any] = {
             "recording": False,
             "paused": False,
@@ -14,38 +16,49 @@ class SessionManager:
         }
 
     def get_state(self) -> Dict[str, Any]:
-        return self._state.copy()
+        with self._lock:
+            return self._state.copy()
 
     def set_recording(self, status: bool):
-        self._state["recording"] = status
+        with self._lock:
+            self._state["recording"] = status
 
     def set_paused(self, status: bool):
-        self._state["paused"] = status
+        with self._lock:
+            self._state["paused"] = status
 
     def set_audio_path(self, path: Optional[str]):
-        self._state["audio_path"] = path
+        with self._lock:
+            self._state["audio_path"] = path
 
     def set_transcript(self, transcript: Optional[str]):
-        self._state["transcript"] = transcript
+        with self._lock:
+            self._state["transcript"] = transcript
 
     def set_analysis(self, analysis: Optional[Dict[str, Any]]):
-        self._state["analysis"] = analysis
+        with self._lock:
+            self._state["analysis"] = analysis
 
     def set_processing(self, status: bool):
-        self._state["processing"] = status
+        with self._lock:
+            self._state["processing"] = status
 
     def get_audio_path(self) -> Optional[str]:
-        return self._state.get("audio_path")
+        with self._lock:
+            return self._state.get("audio_path")
 
     def is_processing(self) -> bool:
-        return self._state.get("processing", False)
+        with self._lock:
+            return bool(self._state.get("processing", False))
 
     def get_transcript(self) -> Optional[str]:
-        return self._state.get("transcript")
+        with self._lock:
+            return self._state.get("transcript")
 
     def reset_for_new_recording(self):
-        self._state["transcript"] = None
-        self._state["analysis"] = None
+        with self._lock:
+            self._state["transcript"] = None
+            self._state["analysis"] = None
 
 # Single instance for the application lifecycle
 session_manager = SessionManager()

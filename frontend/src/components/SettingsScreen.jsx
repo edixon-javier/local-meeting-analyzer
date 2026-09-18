@@ -1,7 +1,7 @@
 // src/components/SettingsScreen.jsx
 // Pantalla de Configuración: selección de hardware, modelos e IA local.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getConfig, updateConfig, getAudioDevices, getOllamaModels, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
 import { useSystem } from '../context/SystemContext'
 
@@ -30,11 +30,48 @@ export default function SettingsScreen() {
   const [testAudioPath, setTestAudioPath] = useState(null)
   const [testAudioTimestamp, setTestAudioTimestamp] = useState(0)
 
+  const loadSettingsAndHardware = useCallback(async () => {
+    setLoading(true)
+    try {
+      // 1. Cargar Configuración del backend
+      const configRes = await getConfig()
+      const cfg = configRes.data
+      setWhisperModel(cfg.whisper_model || 'small')
+      setAiProvider(cfg.ai_provider || 'local')
+      setOpenaiApiKey(cfg.openai_api_key || '')
+      setOpenaiModel(cfg.openai_model || 'gpt-4o-mini')
+      setOllamaModel(cfg.ollama_model || 'phi3')
+      setAnalysisFocus(cfg.analysis_focus || '')
+      setRecordMode(cfg.record_mode || 'both')
+      setMicDeviceId(cfg.mic_device_id || 'default')
+      setDiarize(cfg.diarize || false)
+
+      // 2. Cargar Dispositivos de Audio
+      const devicesRes = await getAudioDevices()
+      setDevices(devicesRes.data.devices || [])
+
+      // 3. Cargar Modelos de Ollama Localmente (vía backend)
+      try {
+        const ollamaRes = await getOllamaModels()
+        const models = ollamaRes.data.models || []
+        setOllamaModels(models)
+      } catch (err) {
+        console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
+        setOllamaModels(['phi3', 'llama3', 'gemma', 'mistral'])
+      }
+
+    } catch {
+      showToast({ type: 'error', message: 'Error al cargar la configuración.' })
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
   useEffect(() => {
     if (!isBackendOffline) {
       loadSettingsAndHardware()
     }
-  }, [isBackendOffline])
+  }, [isBackendOffline, loadSettingsAndHardware])
 
   // Polling de niveles durante la prueba
   useEffect(() => {
@@ -68,43 +105,6 @@ export default function SettingsScreen() {
     }
   }, [testing])
 
-  const loadSettingsAndHardware = async () => {
-    setLoading(true)
-    try {
-      // 1. Cargar Configuración del backend
-      const configRes = await getConfig()
-      const cfg = configRes.data
-      setWhisperModel(cfg.whisper_model || 'small')
-      setAiProvider(cfg.ai_provider || 'local')
-      setOpenaiApiKey(cfg.openai_api_key || '')
-      setOpenaiModel(cfg.openai_model || 'gpt-4o-mini')
-      setOllamaModel(cfg.ollama_model || 'phi3')
-      setAnalysisFocus(cfg.analysis_focus || '')
-      setRecordMode(cfg.record_mode || 'both')
-      setMicDeviceId(cfg.mic_device_id || 'default')
-      setDiarize(cfg.diarize || false)
-
-      // 2. Cargar Dispositivos de Audio
-      const devicesRes = await getAudioDevices()
-      setDevices(devicesRes.data.devices || [])
-
-      // 3. Cargar Modelos de Ollama Localmente (vía backend)
-      try {
-        const ollamaRes = await getOllamaModels()
-        const models = ollamaRes.data.models || []
-        setOllamaModels(models)
-      } catch (err) {
-        console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
-        setOllamaModels(['phi3', 'llama3', 'gemma', 'mistral'])
-      }
-
-    } catch (err) {
-      showToast({ type: 'error', message: 'Error al cargar la configuración.' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleSave = async (e) => {
     e.preventDefault()
     if (isBackendOffline) return
@@ -122,7 +122,7 @@ export default function SettingsScreen() {
         diarize: diarize
       })
       showToast({ type: 'success', message: '⚙️ Configuración guardada correctamente' })
-    } catch (err) {
+    } catch {
       showToast({ type: 'error', message: 'Error al guardar la configuración' })
     } finally {
       setSaving(false)
@@ -148,7 +148,7 @@ export default function SettingsScreen() {
       })
       await startAudioTest()
       showToast({ type: 'success', message: '🎙️ Prueba iniciada. Habla o reproduce algún sonido.' })
-    } catch (err) {
+    } catch {
       showToast({ type: 'error', message: 'Error al iniciar la prueba de audio' })
       setTesting(false)
     }
@@ -163,7 +163,7 @@ export default function SettingsScreen() {
         setTestAudioTimestamp(Date.now())
         showToast({ type: 'success', message: '✅ Prueba finalizada. Reproduce para escuchar.' })
       }
-    } catch (err) {
+    } catch {
       showToast({ type: 'error', message: 'Error al detener la prueba de audio' })
       setTesting(false)
     }
@@ -246,7 +246,7 @@ export default function SettingsScreen() {
         {/* Panel de Prueba de Audio */}
         <div className="form-group" style={{ 
           padding: '20px', 
-          background: 'rgba(30, 41, 59, 0.4)', 
+          background: 'var(--bg-surface)', 
           border: '1px solid var(--border-subtle)', 
           borderRadius: 'var(--radius-lg)',
           marginTop: 12

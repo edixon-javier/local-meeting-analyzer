@@ -1,66 +1,18 @@
 import requests
 import json
 import re
+import sys
 from typing import Optional, Dict, Any, List
 from domain.interfaces import IAnalyzer
 from core.config import Config
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 
-class AnalysisService(IAnalyzer):
-    def __init__(self, config: Config):
-        self._model = config.get("ollama_model", "phi3")
-        self.api_url = f"{OLLAMA_BASE_URL}/api/generate"
-        self.analysis_focus = config.get("analysis_focus", "")
-        self._ai_provider = config.get("ai_provider", "local")
-        self.openai_api_key = config.get("openai_api_key", "")
-        self.openai_model = config.get("openai_model", "gpt-4o-mini")
-        self.openai_client = None
-        self._setup_openai()
+# ──────────────────────────────────────────────────────────────────────
+# PROMPTS Y CONSTANTES COMUNES
+# ──────────────────────────────────────────────────────────────────────
 
-    @property
-    def model(self) -> str:
-        return self._model
-
-    @property
-    def ai_provider(self) -> str:
-        return self._ai_provider
-
-    def set_config(self, config: Config):
-        self._model = config.get("ollama_model", self._model)
-        self.analysis_focus = config.get("analysis_focus", self.analysis_focus)
-        self._ai_provider = config.get("ai_provider", self._ai_provider)
-        self.openai_api_key = config.get("openai_api_key", self.openai_api_key)
-        self.openai_model = config.get("openai_model", self.openai_model)
-        self._setup_openai()
-
-    def _setup_openai(self):
-        if self._ai_provider == "openai" and self.openai_api_key:
-            try:
-                import openai
-                self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
-            except ImportError:
-                print("[AnalysisService] Error: módulo openai no está instalado.")
-
-    def is_running(self) -> bool:
-        if self._ai_provider == "openai":
-            return True # Asumimos OpenAI online
-        try:
-            response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-            return response.status_code == 200
-        except:
-            return False
-
-    def diarize_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not segments:
-            return []
-
-        print(f"[AnalysisService] Diarizando con {self._model} (diarización de texto)...")
-        
-        formatted_segments = [f"[{idx}] {seg.get('start', 0.0):.1f}s - {seg.get('end', 0.0):.1f}s: {seg.get('text', '').strip()}" for idx, seg in enumerate(segments)]
-        segments_text = "\n".join(formatted_segments)
-        
-        prompt = f"""Eres un asistente de transcripción experto en diarización para reuniones en español.
+DIARIZE_PROMPT_TEMPLATE = """Eres un asistente de transcripción experto en diarización para reuniones en español.
 Analiza la siguiente lista de segmentos de diálogo y determina qué hablante está hablando en cada uno.
 Usa etiquetas genéricas como "Hablante A", "Hablante B". Si se mencionan nombres propios, usa sus nombres reales.
 
@@ -77,40 +29,8 @@ EJEMPLO DE RESPUESTA:
 SEGMENTOS A DIARIZAR:
 {segments_text}
 """
-        try:
-            if self._ai_provider == "openai":
-                raw_response = self._call_openai(prompt)
-            else:
-                raw_response = self._call_ollama(prompt)
-                
-            json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-            speaker_map = json.loads(json_match.group()) if json_match else json.loads(raw_response)
-            
-            diarized_segments = []
-            for idx, seg in enumerate(segments):
-                speaker = speaker_map.get(str(idx)) or speaker_map.get(idx) or "Hablante A"
-                diarized_segments.append({
-                    "start": seg.get("start", 0.0),
-                    "end": seg.get("end", 0.0),
-                    "text": seg.get("text", "").strip(),
-                    "speaker": speaker
-                })
-            return diarized_segments
-        except Exception as e:
-            print(f"[AnalysisService] Error durante diarización: {e}. Usando fallback.")
-            return [{
-                "start": seg.get("start", 0.0),
-                "end": seg.get("end", 0.0),
-                "text": seg.get("text", "").strip(),
-                "speaker": "Hablante A"
-            } for seg in segments]
 
-    def analyze(self, transcript: str) -> Dict[str, Any]:
-        print(f"[AnalysisService] Analizando con {self._model}...")
-
-        focus_instruction = f"\nENFOQUE REQUERIDO: {self.analysis_focus}\n" if self.analysis_focus else ""
-
-        prompt = f"""Eres un asistente especializado en análisis de reuniones. Analiza la siguiente transcripción y responde EXCLUSIVAMENTE en el formato JSON indicado. No incluyas texto adicional fuera del JSON.{focus_instruction}
+ANALYZE_PROMPT_TEMPLATE = """Eres un asistente especializado en análisis de reuniones. Analiza la siguiente transcripción y responde EXCLUSIVAMENTE en el formato JSON indicado. No incluyas texto adicional fuera del JSON.{focus_instruction}
 
 TRANSCRIPCIÓN:
 \"\"\"
@@ -129,54 +49,14 @@ Responde SOLO con este JSON (sin markdown):
   "duration_insight": "Breve observación sobre la densidad"
 }}"""
 
-        if self._ai_provider == "openai":
-            raw_response = self._call_openai(prompt)
-        else:
-            raw_response = self._call_ollama(prompt)
-
-        try:
-            return json.loads(raw_response)
-        except json.JSONDecodeError:
-            json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
-            return self._fallback_analysis()
-
-    def chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str) -> str:
-        system_prompt = f"""Eres un asistente de IA experto que responde preguntas basándose ÚNICAMENTE en la transcripción de una reunión.
+CHAT_TRANSCRIPT_SYSTEM = """Eres un asistente de IA experto que responde preguntas basándose ÚNICAMENTE en la transcripción de una reunión.
 TRANSCRIPCIÓN:
 \"\"\"
 {transcript}
 \"\"\"
 """
-        if self._ai_provider == "openai":
-            if not self.openai_client:
-                raise RuntimeError("Cliente de OpenAI no configurado.")
-            openai_messages = [{"role": "system", "content": system_prompt}] + messages + [{"role": "user", "content": new_question}]
-            
-            try:
-                response = self.openai_client.chat.completions.create(
-                    model=self.openai_model,
-                    messages=openai_messages,
-                    temperature=0.4
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                raise RuntimeError(f"Error OpenAI (Chat): {e}")
-        else:
-            prompt = system_prompt + "\n\n"
-            for msg in messages:
-                role = "Usuario" if msg["role"] == "user" else "Asistente"
-                prompt += f"{role}: {msg['content']}\n\n"
-            prompt += f"Usuario: {new_question}\nAsistente:"
-            
-            return self._call_ollama(prompt, temperature=0.4)
 
-    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
-        system_prompt = f"""Eres un asistente de IA experto que responde preguntas sobre el historial de reuniones del usuario basándose en el siguiente contexto de reuniones.
+CHAT_HISTORY_SYSTEM = """Eres un asistente de IA experto que responde preguntas sobre el historial de reuniones del usuario basándose en el siguiente contexto de reuniones.
 Para cada dato o respuesta, debes citar explícitamente el nombre de la reunión y la fecha correspondiente.
 Si el contexto no contiene la información para responder, dilo claramente.
 
@@ -185,28 +65,47 @@ CONTEXTO DE REUNIONES:
 {context}
 \"\"\"
 """
-        if self._ai_provider == "openai":
-            if not self.openai_client:
-                raise RuntimeError("Cliente de OpenAI no configurado.")
-            openai_messages = [{"role": "system", "content": system_prompt}] + messages + [{"role": "user", "content": new_question}]
-            
+
+def parse_json_response(raw_response: str, fallback_value: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return json.loads(raw_response)
+    except json.JSONDecodeError:
+        json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if json_match:
             try:
-                response = self.openai_client.chat.completions.create(
-                    model=self.openai_model,
-                    messages=openai_messages,
-                    temperature=0.4
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                raise RuntimeError(f"Error OpenAI (Chat Historial): {e}")
-        else:
-            prompt = system_prompt + "\n\n"
-            for msg in messages:
-                role = "Usuario" if msg["role"] == "user" else "Asistente"
-                prompt += f"{role}: {msg['content']}\n\n"
-            prompt += f"Usuario: {new_question}\nAsistente:"
-            
-            return self._call_ollama(prompt, temperature=0.4)
+                return json.loads(json_match.group())
+            except:
+                pass
+        return fallback_value
+
+# ──────────────────────────────────────────────────────────────────────
+# PROVEEDOR ESTRATEGIA: OLLAMA LOCAL
+# ──────────────────────────────────────────────────────────────────────
+
+class LocalOllamaProvider(IAnalyzer):
+    def __init__(self, config: Config):
+        self._model = config.get("ollama_model", "phi3")
+        self.analysis_focus = config.get("analysis_focus", "")
+        self.api_url = f"{OLLAMA_BASE_URL}/api/generate"
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def ai_provider(self) -> str:
+        return "local"
+
+    def set_config(self, config: Config):
+        self._model = config.get("ollama_model", self._model)
+        self.analysis_focus = config.get("analysis_focus", self.analysis_focus)
+
+    def is_running(self) -> bool:
+        try:
+            response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+            return response.status_code == 200
+        except:
+            return False
 
     def _call_ollama(self, prompt: str, temperature: float = 0.3) -> str:
         payload = {
@@ -224,29 +123,296 @@ CONTEXTO DE REUNIONES:
             response.raise_for_status()
             return response.json().get("response", "").strip()
         except requests.exceptions.ConnectionError:
-            raise RuntimeError("Ollama no está corriendo.")
+            raise RuntimeError("Ollama no está corriendo localmente.")
         except Exception as e:
-            raise RuntimeError(f"Error Ollama: {e}")
+            raise RuntimeError(f"Error en Ollama: {e}")
 
-    def _call_openai(self, prompt: str) -> str:
-        if not self.openai_client:
-            raise RuntimeError("Cliente OpenAI no configurado.")
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            raise RuntimeError(f"Error OpenAI: {e}")
+    def diarize_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not segments:
+            return []
+        
+        formatted_segments = [
+            f"[{idx}] {seg.get('start', 0.0):.1f}s - {seg.get('end', 0.0):.1f}s: {seg.get('text', '').strip()}" 
+            for idx, seg in enumerate(segments)
+        ]
+        segments_text = "\n".join(formatted_segments)
+        prompt = DIARIZE_PROMPT_TEMPLATE.format(segments_text=segments_text)
+        
+        raw_response = self._call_ollama(prompt)
+        speaker_map = parse_json_response(raw_response, {})
+        
+        diarized_segments = []
+        for idx, seg in enumerate(segments):
+            speaker = speaker_map.get(str(idx)) or speaker_map.get(idx) or "Hablante A"
+            diarized_segments.append({
+                "start": seg.get("start", 0.0),
+                "end": seg.get("end", 0.0),
+                "text": seg.get("text", "").strip(),
+                "speaker": speaker
+            })
+        return diarized_segments
 
-    def _fallback_analysis(self) -> Dict[str, Any]:
-        return {
+    def analyze(self, transcript: str) -> Dict[str, Any]:
+        focus_instruction = f"\nENFOQUE REQUERIDO: {self.analysis_focus}\n" if self.analysis_focus else ""
+        prompt = ANALYZE_PROMPT_TEMPLATE.format(focus_instruction=focus_instruction, transcript=transcript)
+        
+        raw_response = self._call_ollama(prompt)
+        fallback = {
             "summary": ["No se pudo generar el resumen automáticamente."],
             "action_items": [],
             "tone": "Desconocido",
             "category": "Sin categorizar",
             "key_decisions": [],
-            "duration_insight": "Análisis no disponible."
+            "duration_insight": "Análisis no disponible en modo Local."
         }
+        return parse_json_response(raw_response, fallback)
+
+    def chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        prompt = CHAT_TRANSCRIPT_SYSTEM.format(transcript=transcript) + "\n\n"
+        for msg in messages:
+            role = "Usuario" if msg["role"] == "user" else "Asistente"
+            prompt += f"{role}: {msg['content']}\n\n"
+        prompt += f"Usuario: {new_question}\nAsistente:"
+        return self._call_ollama(prompt, temperature=0.4)
+
+    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        prompt = CHAT_HISTORY_SYSTEM.format(context=context) + "\n\n"
+        for msg in messages:
+            role = "Usuario" if msg["role"] == "user" else "Asistente"
+            prompt += f"{role}: {msg['content']}\n\n"
+        prompt += f"Usuario: {new_question}\nAsistente:"
+        return self._call_ollama(prompt, temperature=0.4)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PROVEEDOR ESTRATEGIA: CLOUD OPENAI
+# ──────────────────────────────────────────────────────────────────────
+
+class CloudOpenAIProvider(IAnalyzer):
+    def __init__(self, config: Config):
+        self._model = config.get("openai_model", "gpt-4o-mini")
+        self.analysis_focus = config.get("analysis_focus", "")
+        self.openai_api_key = config.get("openai_api_key", "")
+        self.openai_client = None
+        self._setup_client()
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def ai_provider(self) -> str:
+        return "openai"
+
+    def set_config(self, config: Config):
+        self._model = config.get("openai_model", self._model)
+        self.analysis_focus = config.get("analysis_focus", self.analysis_focus)
+        self.openai_api_key = config.get("openai_api_key", self.openai_api_key)
+        self._setup_client()
+
+    def _setup_client(self):
+        if self.openai_api_key:
+            try:
+                import openai
+                self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
+            except ImportError:
+                print("[CloudOpenAIProvider] Error: módulo openai no está instalado.")
+
+    def is_running(self) -> bool:
+        # Asumimos que OpenAI está operativo si el cliente tiene API key
+        return self.openai_client is not None
+
+    def _call_openai(self, prompt: str, temperature: float = 0.3) -> str:
+        if not self.openai_client:
+            raise RuntimeError("El cliente de OpenAI no está configurado (API Key faltante).")
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            raise RuntimeError(f"Error de OpenAI: {e}")
+
+    def diarize_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not segments:
+            return []
+        
+        formatted_segments = [
+            f"[{idx}] {seg.get('start', 0.0):.1f}s - {seg.get('end', 0.0):.1f}s: {seg.get('text', '').strip()}" 
+            for idx, seg in enumerate(segments)
+        ]
+        segments_text = "\n".join(formatted_segments)
+        prompt = DIARIZE_PROMPT_TEMPLATE.format(segments_text=segments_text)
+        
+        raw_response = self._call_openai(prompt)
+        speaker_map = parse_json_response(raw_response, {})
+        
+        diarized_segments = []
+        for idx, seg in enumerate(segments):
+            speaker = speaker_map.get(str(idx)) or speaker_map.get(idx) or "Hablante A"
+            diarized_segments.append({
+                "start": seg.get("start", 0.0),
+                "end": seg.get("end", 0.0),
+                "text": seg.get("text", "").strip(),
+                "speaker": speaker
+            })
+        return diarized_segments
+
+    def analyze(self, transcript: str) -> Dict[str, Any]:
+        focus_instruction = f"\nENFOQUE REQUERIDO: {self.analysis_focus}\n" if self.analysis_focus else ""
+        prompt = ANALYZE_PROMPT_TEMPLATE.format(focus_instruction=focus_instruction, transcript=transcript)
+        
+        raw_response = self._call_openai(prompt)
+        fallback = {
+            "summary": ["No se pudo generar el resumen automáticamente."],
+            "action_items": [],
+            "tone": "Desconocido",
+            "category": "Sin categorizar",
+            "key_decisions": [],
+            "duration_insight": "Análisis no disponible en modo Cloud."
+        }
+        return parse_json_response(raw_response, fallback)
+
+    def chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        if not self.openai_client:
+            raise RuntimeError("Cliente de OpenAI no configurado.")
+        system_prompt = CHAT_TRANSCRIPT_SYSTEM.format(transcript=transcript)
+        openai_messages = [{"role": "system", "content": system_prompt}] + messages + [{"role": "user", "content": new_question}]
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self._model,
+                messages=openai_messages,
+                temperature=0.4
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            raise RuntimeError(f"Error OpenAI (Chat): {e}")
+
+    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        if not self.openai_client:
+            raise RuntimeError("Cliente de OpenAI no configurado.")
+        system_prompt = CHAT_HISTORY_SYSTEM.format(context=context)
+        openai_messages = [{"role": "system", "content": system_prompt}] + messages + [{"role": "user", "content": new_question}]
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self._model,
+                messages=openai_messages,
+                temperature=0.4
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            raise RuntimeError(f"Error OpenAI (Chat Historial): {e}")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# CONTEXTO DE LA ESTRATEGIA: ANALYSIS SERVICE
+# ──────────────────────────────────────────────────────────────────────
+
+class AnalysisService(IAnalyzer):
+    def __init__(self, config: Config):
+        self._config = config
+        self._provider_type = config.get("ai_provider", "local")
+        
+        self.local_provider = LocalOllamaProvider(config)
+        self.cloud_provider = CloudOpenAIProvider(config)
+
+    @property
+    def active_provider(self) -> IAnalyzer:
+        # Retorna el proveedor activo. Si se pide local pero no está corriendo,
+        # e ingresó API Key, hace fallback automático a OpenAI.
+        if self._provider_type == "local":
+            if self.local_provider.is_running():
+                return self.local_provider
+            elif self.cloud_provider.is_running():
+                print("[AnalysisService] FALLBACK: Ollama está caído. Redirigiendo a OpenAI temporalmente.")
+                return self.cloud_provider
+        return self.cloud_provider
+
+    @property
+    def model(self) -> str:
+        return self.active_provider.model
+
+    @property
+    def ai_provider(self) -> str:
+        # Devuelve el proveedor configurado (no necesariamente el de fallback en uso,
+        # para respetar la UI, pero el comportamiento interno será dinámico)
+        return self._provider_type
+
+    def set_config(self, config: Config):
+        self._config = config
+        self._provider_type = config.get("ai_provider", self._provider_type)
+        self.local_provider.set_config(config)
+        self.cloud_provider.set_config(config)
+
+    def is_running(self) -> bool:
+        # Retorna True si el proveedor seleccionado está listo o si el fallback es viable
+        if self._provider_type == "local":
+            return self.local_provider.is_running() or self.cloud_provider.is_running()
+        return self.cloud_provider.is_running()
+
+    def diarize_transcript(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        provider = self.active_provider
+        try:
+            return provider.diarize_transcript(segments)
+        except Exception as e:
+            print(f"[AnalysisService] Error en diarización con {provider.ai_provider}: {e}")
+            # Si falló local, intentar fallback forzado a cloud
+            if provider == self.local_provider and self.cloud_provider.is_running():
+                print("[AnalysisService] Reintentando diarización con Cloud OpenAI...")
+                try:
+                    return self.cloud_provider.diarize_transcript(segments)
+                except Exception as ex:
+                    print(f"[AnalysisService] Falló también diarización cloud: {ex}")
+            
+            # Fallback a un único hablante
+            return [{
+                "start": seg.get("start", 0.0),
+                "end": seg.get("end", 0.0),
+                "text": seg.get("text", "").strip(),
+                "speaker": "Hablante A"
+            } for seg in segments]
+
+    def analyze(self, transcript: str) -> Dict[str, Any]:
+        provider = self.active_provider
+        try:
+            return provider.analyze(transcript)
+        except Exception as e:
+            print(f"[AnalysisService] Error en análisis con {provider.ai_provider}: {e}")
+            # Fallback en caliente
+            if provider == self.local_provider and self.cloud_provider.is_running():
+                print("[AnalysisService] Reintentando análisis con Cloud OpenAI...")
+                try:
+                    return self.cloud_provider.analyze(transcript)
+                except Exception as ex:
+                    print(f"[AnalysisService] Falló también análisis cloud: {ex}")
+            
+            return {
+                "summary": [f"Error durante el análisis: {e}"],
+                "action_items": [],
+                "tone": "Desconocido",
+                "category": "Error",
+                "key_decisions": [],
+                "duration_insight": "Intenta cambiar de motor de IA en Configuración."
+            }
+
+    def chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        provider = self.active_provider
+        try:
+            return provider.chat_with_transcript(transcript, messages, new_question)
+        except Exception as e:
+            if provider == self.local_provider and self.cloud_provider.is_running():
+                print("[AnalysisService] Fallback de Chat a OpenAI...")
+                return self.cloud_provider.chat_with_transcript(transcript, messages, new_question)
+            raise e
+
+    def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
+        provider = self.active_provider
+        try:
+            return provider.chat_with_history(context, messages, new_question)
+        except Exception as e:
+            if provider == self.local_provider and self.cloud_provider.is_running():
+                print("[AnalysisService] Fallback de Chat Historial a OpenAI...")
+                return self.cloud_provider.chat_with_history(context, messages, new_question)
+            raise e

@@ -22,7 +22,7 @@ export default function Sidebar({ currentView, onNavigate }) {
     if (!isBackendOffline) {
       loadRecordings()
     }
-  }, [currentView, isBackendOffline]) // Recargar cuando cambie la vista o la conexión
+  }, [currentView, isBackendOffline, loadRecordings]) // Recargar cuando cambie la vista o la conexión
 
   const handleToggleProvider = async () => {
     if (isBackendOffline) return
@@ -30,7 +30,7 @@ export default function Sidebar({ currentView, onNavigate }) {
     try {
       await updateConfig({ ai_provider: newProvider })
       showToast({ type: 'success', message: `⚙️ Procesamiento cambiado a: ${newProvider === 'local' ? 'Local' : 'Nube (OpenAI)'}` })
-    } catch (e) {
+    } catch {
       showToast({ type: 'error', message: 'Error al cambiar de proveedor' })
     }
   }
@@ -62,7 +62,9 @@ export default function Sidebar({ currentView, onNavigate }) {
           <div className="sidebar-logo-icon">🎙️</div>
           <div>
             <div className="sidebar-logo-text">MeetingAI</div>
-            <div className="sidebar-logo-sub">100% Local</div>
+            <div className="sidebar-logo-sub">
+              {systemStatus?.ai_provider === 'openai' ? '☁️ OpenAI Cloud' : '🔒 100% Local'}
+            </div>
           </div>
         </div>
 

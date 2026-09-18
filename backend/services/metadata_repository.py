@@ -7,7 +7,8 @@ class MetadataRepository(IMetadataRepository):
     def save_meeting_metadata(self, audio_path: str, transcript: str, analysis: Dict[str, Any], language: Optional[str] = None, segments: Optional[List] = None):
         if not audio_path:
             return
-        json_path = audio_path.replace(".wav", ".json").replace(".mp3", ".json")
+        base_path, _ = os.path.splitext(audio_path)
+        json_path = base_path + ".json"
         metadata = {
             "filename": os.path.basename(audio_path),
             "audio_path": audio_path,

@@ -11,8 +11,8 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
 - Opcionalmente, el usuario puede habilitar **procesamiento en la nube (OpenAI)** desde los ajustes para obtener análisis más rápidos y complejos, delegando la capa de LLM a proveedores externos.
 
 ## Estado Actual
-- **Fase:** DESARROLLO — Proyecto implementado en versión `v1.1.0`.
-- **Rama activa:** `main` (producción estable)
+- **Fase:** DESARROLLO — Proyecto implementado en versión `v1.2.0` (estable) / `v1.3.1` (en desarrollo/develop).
+- **Rama activa:** `develop` (desarrollo activo) / `main` (producción estable).
 - **REGLA:** No modificar la arquitectura base sin revisar este archivo primero.
 - **REGLA:** Antes de cualquier cambio de código, revisar la sección `## Control de Versiones (Git)` de este archivo.
 
@@ -21,45 +21,84 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
 - ✅ Ollama 0.11.4 con modelo **Phi-3**
 - ✅ FFmpeg en `C:\ffmpeg\bin` (en PATH)
 - ✅ Node.js v22 + npm v9.6.3
-- ✅ Librerías Python adicionales: `openai`, `fastapi`, `whisper`, `soundcard`
+- ✅ Librerías Python adicionales: `openai`, `fastapi`, `whisper`, `soundcard`, `pydantic`
 
 ## Arquitectura Implementada
 
-### Backend (Python FastAPI)
+### Backend (Python FastAPI - Arquitectura Limpia/Modular)
 **Ruta:** `backend/`
-- `main.py` — API FastAPI en `http://localhost:8765`
-- `config_manager.py` — Gestión de configuraciones persistentes (`config.json`)
-- `state.py` — Estado global e inicialización de motores
-- `audio_capture.py` — Captura loopback de Windows con `soundcard`
-- `transcriber.py` — Whisper local (modelos configurables)
-- `analyzer.py` — Soporte dual: Ollama (LLM Local) / OpenAI (LLM Nube), retorna JSON estructurado
-- `requirements.txt` — Dependencias Python
-- `routers/` — Rutas modulares (`analysis.py`, `system.py`, `history.py`, `recording.py`)
+- `main.py` — Punto de entrada de la API FastAPI en `http://localhost:8765`.
+- `requirements.txt` — Dependencias de Python.
+- `config.json` — Almacén persistente de preferencias del usuario.
+- `core/` — Módulos de configuración global del sistema.
+  - `config.py` — Gestión y persistencia de `config.json` (`system_config`).
+- `domain/` — Definición de contratos y modelos de dominio.
+  - `interfaces.py` — Interfaces abstractas del sistema (`IAudioCapture`, `ITranscriber`, `IAnalyzer`, `IMetadataRepository`).
+- `services/` — Lógica de negocio e implementaciones de interfaces.
+  - `audio_service.py` — Captura de audio (loopback y micrófono), medidor RMS en tiempo real, streaming directo a disco para evitar OOM y compatibilidad con Bluetooth/dispositivos híbridos.
+  - `transcription_service.py` — Transcripción local usando modelos Whisper.
+  - `analysis_service.py` — Procesamiento de análisis híbrido con Ollama (Phi-3) y OpenAI (GPT-4o), diarización textual por contexto y chat.
+  - `session_manager.py` — Gestión en memoria del estado de la sesión activa del usuario.
+  - `metadata_repository.py` — Lectura, escritura y almacenamiento de archivos de metadatos `.json` en el historial.
+  - `ollama_heartbeat.py` — Monitoreo periódico del estado de Ollama y push de eventos SSE.
+- `api/routers/` — Controladores HTTP modulares.
+  - `system.py` — Ajustes de configuración, selección de dispositivos, estado general y SSE `/events`.
+  - `recording.py` — Iniciar, parar, pausar, reanudar grabación, control de prueba y niveles RMS en tiempo real.
+  - `analysis.py` — Transcripción, análisis estructurado dual, chat individual y consulta RAG con historial global.
+  - `history.py` — Listado, borrado, renombrado y subida externa de archivos en el historial.
+
+*Nota sobre archivos legados:* Los archivos en la raíz del backend (`audio_capture.py`, `transcriber.py`, `analyzer.py`, `config_manager.py`, `state.py`) corresponden al pipeline inicial monolítico y se mantienen temporalmente por retrocompatibilidad.
 
 **Endpoints disponibles:**
-- `GET /status` — Estado de Ollama, grabación, modelos
-- `GET /session` — Estado completo de la sesión actual
-- `GET /config` / `POST /config` — Obtener y actualizar preferencias del usuario
-- `POST /recording/start` — Iniciar grabación del sistema
-- `POST /recording/stop` — Detener y guardar WAV
-- `POST /transcribe` — Transcribir archivo WAV con Whisper (soporta diarización textual)
-- `POST /analyze` — Analizar transcripción (Ollama / OpenAI)
-- `GET /recordings` — Lista de grabaciones guardadas
+- **Sistema & Configuración (`/api/routers/system.py`):**
+  - `GET /status` — Estado de Ollama, grabación, procesamiento y proveedor activo.
+  - `GET /config` / `POST /config` — Obtener y actualizar preferencias del usuario.
+  - `GET /audio/devices` — Lista de dispositivos de entrada disponibles (micrófonos y loopback).
+  - `GET /status/ollama-models` — Modelos de Ollama instalados localmente.
+  - `GET /events` — Canal de Server-Sent Events (SSE) para transmitir estados del sistema en tiempo real.
+- **Grabación (`/api/routers/recording.py`):**
+  - `POST /recording/start` — Iniciar grabación.
+  - `POST /recording/stop` — Detener grabación y guardar archivo WAV.
+  - `POST /recording/pause` — Pausar grabación activa.
+  - `POST /recording/resume` — Reanudar grabación pausada.
+  - `POST /recording/test/start` / `/test/stop` — Iniciar/detener grabación de prueba temporal.
+  - `GET /recording/test/levels` — Obtener niveles RMS en tiempo real de micrófono y sistema.
+- **Transcripción & Análisis (`/api/routers/analysis.py`):**
+  - `POST /transcribe` — Transcribir archivo de audio (soporta diarización por LLM).
+  - `POST /analyze` — Ejecutar análisis estructurado (resumen, decisiones, tareas, tono, categoría).
+  - `POST /chat` — Enviar pregunta de chat para una reunión específica.
+  - `POST /chat/history` — Consulta global RAG basada en keywords en todo el historial de reuniones.
+  - `POST /processing/cancel` — Cancelar transcripción/análisis en curso.
+- **Historial (`/api/routers/history.py`):**
+  - `GET /recordings` — Lista de reuniones guardadas con sus resúmenes y metadatos.
+  - `GET /recordings/metadata` — Obtener datos (.json) de una grabación específica por ruta.
+  - `POST /recordings/upload` — Subir archivo de audio externo para ser procesado.
+  - `POST /recordings/{filename}/rename` — Renombrar grabación y metadatos asociados.
+  - `DELETE /recordings/{filename}` — Eliminar archivos de audio y metadatos del disco.
 
 ### Frontend (Electron + React + Vite)
 **Ruta:** `frontend/`
-- `electron/main.js` — Proceso Electron (frameless window)
-- `electron/preload.js` — Bridge seguro Node↔React
-- `src/App.jsx` — Estado global y routing (Context API)
-- `src/index.css` — Sistema de diseño Dark Mode Premium completo
-- `src/api.js` — Capa de comunicación con backend (Axios)
-- `src/components/TitleBar.jsx` — Barra de título personalizada
-- `src/components/Sidebar.jsx` — Nav + historial + estado del sistema
-- `src/components/RecordScreen.jsx` — Pantalla de grabación con pulso visual
-- `src/components/AnalysisScreen.jsx` — Dashboard de resultados IA
-- `src/components/SettingsScreen.jsx` — Configuración de hardware y motores de IA (Local vs Nube)
-- `src/components/StatusBar.jsx` — Barra de estado inferior
-- `src/components/Toast.jsx` — Notificaciones flotantes
+- `electron/main.js` — Proceso principal de Electron (frameless window, integración IPC y menús).
+- `electron/preload.js` — Puente de contexto seguro (preload) entre Node y React.
+- `src/App.jsx` — Enrutamiento, control de pantallas e inicialización.
+- `src/index.css` — Estilos globales de UI premium Dark Mode (Slate/Indigo) con micro-animaciones.
+- `src/api.js` — Cliente Axios configurado con Circuit Breaker para desconexiones, reintentos y mapeo de endpoints.
+- `src/context/SystemContext.jsx` — Contexto React que centraliza el estado de la grabación, polling inteligente adaptativo y detector SSE para eventos del backend en tiempo real.
+- `src/hooks/useAnalysisPipeline.js` — Hook personalizado de orquestación de caché local, diarización textual, Whisper y flujo de análisis.
+- `src/components/` — Componentes y pantallas de la aplicación:
+  - `TitleBar.jsx` — Barra superior nativa personalizada.
+  - `Sidebar.jsx` — Navegación lateral con estado del sistema e historial rápido.
+  - `RecordScreen.jsx` — Grabación del sistema/micro, medidores RMS e importador (Drag & Drop) de audios.
+  - `HistoryScreen.jsx` — Panel de administración del historial (renombrar, borrar, descargar).
+  - `HistoryChatScreen.jsx` — Asistente de chat global RAG interactivo con badges de reuniones referenciadas.
+  - `AnalysisScreen.jsx` — Dashboard con los resultados del análisis (resumen, decisiones, tareas).
+  - `ChatPanel.jsx` — Panel lateral de conversación interactiva sobre la reunión actual.
+  - `OfflineOverlay.jsx` — Pantalla de bloqueo e indicación visual de backend fuera de línea.
+  - `StatusBar.jsx` — Barra de estado inferior (versión, modelos activos).
+  - `Toast.jsx` — Notificaciones flotantes rápidas.
+  - `analysis/`
+    - `TranscriptPanel.jsx` — Visualizador segmentado del diálogo con diarización.
+    - `InsightsPanel.jsx` — Desglose de tareas, decisiones e insights estructurados.
 
 ## Cómo Ejecutar
 1. Doble clic en `start.bat` (instalará dependencias automáticamente la primera vez)
@@ -79,29 +118,59 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - Observación de densidad
 - 👥 **Diarización Textual**: Separación de hablantes ("Hablante A", etc.) utilizando el LLM estructurado.
 - ⚙️ **Configuración Dinámica**: Ajustes de modelos, credenciales de API y modo de grabación persistentes.
-- 📁 Historial de grabaciones
-- 🎨 UI Premium Dark Mode (Slate/Indigo)
+- 📁 Historial de grabaciones completo con renombrado y eliminación física.
+- 💬 **Chat de Reunión & RAG Global**: Chatea con una reunión en específico o consulta todo el historial consolidado con un buscador semántico basado en keywords.
+- 🎛️ **Probador de Audio y RMS**: Comprobación en vivo del volumen RMS del sistema y micrófono antes y durante la grabación.
+- ⚡ **Streaming en tiempo real a disco**: Evita el desbordamiento de memoria (OOM) durante grabaciones largas.
+- 🎨 UI Premium Dark Mode (Slate/Indigo) con animaciones pulidas e indicador offline.
 
 ## Decisiones Descartadas
 - ❌ Extensión de navegador — sustituida por app de escritorio nativa para capturar audio del sistema operativo sin restricciones de permisos web.
 - ❌ Diarización de audio (Pyannote) — descartada por alto consumo de RAM/GPU. **Reemplazada exitosamente** por Diarización Textual (pasando los segmentos de tiempo a través del LLM para agrupar por contexto).
+- ❌ Base de datos pesada (SQL/NoSQL) — reemplazada por almacenamiento local liviano basado en archivos JSON autogestionados de metadatos (caché local rápida, portable y privada).
 
 ## Estructura de Carpetas
 ```
 f:\Proyectos\Extension-reuniones\
-├── .agents/skills/meeting_analyzer_context/SKILL.md
+├── .agents/
+│   └── skills/
+│       └── meeting_analyzer_context/
+│           └── SKILL.md
 ├── backend/
-│   ├── main.py, audio_capture.py, transcriber.py, analyzer.py, config_manager.py, state.py
-│   ├── requirements.txt, config.json
-│   ├── routers/        (endpoints divididos)
-│   └── recordings/     (archivos WAV generados)
+│   ├── api/
+│   │   └── routers/               # Endpoints modulares (analysis, history, recording, system)
+│   ├── core/
+│   │   └── config.py              # Clase Config singleton
+│   ├── domain/
+│   │   └── interfaces.py          # Interfaces abstractas del sistema
+│   ├── services/                  # Capa de servicios / lógica de negocio
+│   │   ├── audio_service.py
+│   │   ├── transcription_service.py
+│   │   ├── analysis_service.py
+│   │   ├── session_manager.py
+│   │   ├── metadata_repository.py
+│   │   └── ollama_heartbeat.py
+│   ├── recordings/                # WAVs generados y archivos de metadatos .json
+│   ├── main.py                    # Punto de entrada FastAPI
+│   ├── config.json                # Preferencias del usuario persistidas
+│   ├── requirements.txt
+│   └── (archivos legados: audio_capture.py, transcriber.py, analyzer.py, config_manager.py, state.py)
 ├── frontend/
-│   ├── electron/main.js, preload.js
-│   ├── src/ (App.jsx, components/, index.css, api.js, context/)
+│   ├── electron/
+│   │   ├── main.js
+│   │   └── preload.js
+│   ├── src/
+│   │   ├── components/            # Componentes React (pantallas, chat, barra de título)
+│   │   ├── context/
+│   │   │   └── SystemContext.jsx  # Contexto de estado y eventos SSE
+│   │   ├── hooks/
+│   │   │   └── useAnalysisPipeline.js
+│   │   ├── App.jsx
+│   │   ├── index.css
+│   │   └── api.js
 │   └── package.json
-├── start.bat           (punto de entrada único)
-├── .gitignore
-└── .agents/skills/meeting_analyzer_context/SKILL.md
+├── start.bat                      # Lanzador unificado de desarrollo
+└── .gitignore
 ```
 
 ---
@@ -119,18 +188,6 @@ feature/<nombre>  → nuevas funcionalidades (ej: feature/export-pdf, feature/sp
 fix/<nombre>      → correcciones de bugs (ej: fix/whisper-crash, fix/audio-loopback)
 release/<versión> → preparación de release (ej: release/1.1.0) — bump de versión, changelog
 ```
-
-**Flujo estándar para una feature:**
-```
-develop → feature/nombre → (PR/merge) → develop → release/x.y.z → main → tag vX.Y.Z
-```
-
-**Flujo para un fix urgente en producción:**
-```
-main → fix/nombre → main → tag vX.Y.Z+1 → merge back a develop
-```
-
----
 
 ### Mensajes de Commit — Conventional Commits
 
@@ -151,8 +208,6 @@ Formato: `<tipo>(<ámbito>): <descripción imperativa corta>`
 **Ámbitos válidos del proyecto:**
 `backend` · `frontend` · `electron` · `audio` · `transcriber` · `analyzer` · `ui` · `api` · `skill` · `deps` · `build` · `config`
 
----
-
 ### Versionado Semántico (SemVer)
 
 `vMAJOR.MINOR.PATCH`
@@ -163,7 +218,7 @@ Formato: `<tipo>(<ámbito>): <descripción imperativa corta>`
 | `MINOR` | Nueva funcionalidad retrocompatible |
 | `PATCH` | Corrección de bug sin nuevas features |
 
-**Versión actual del proyecto:** `v1.1.0`
+**Versión actual del proyecto:** `v1.2.0` (v1.3.1 en develop)
 
 ---
 
@@ -185,26 +240,14 @@ Antes de sugerir o ejecutar cualquier `git add` + `git commit`, verificar:
 
 ---
 
-### Flujo de Trabajo para el Agente
-
-Cuando el agente realice cambios de código, debe seguir este flujo:
-
-1. **Identificar el tipo de cambio** (feature / fix / refactor / docs)
-2. **Verificar la rama actual** con `git branch --show-current`
-3. **Crear rama** si el cambio es significativo: `git checkout -b feature/<nombre>`
-4. **Ejecutar el checklist pre-commit** antes de hacer `git add`
-5. **Redactar el mensaje** siguiendo Conventional Commits
-6. **Actualizar `## Historial de Versiones`** en este SKILL.md si el cambio amerita un registro
-7. **Sugerir al usuario** el tag de versión si el merge es a `main`
-
----
-
 ## Historial de Versiones
 
 > Este registro se actualiza cada vez que se completa un cambio significativo y se hace merge a `main`.
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.3.2` | 2026-09-18 | Cierre y Estabilización: Blindaje de seguridad (path traversal), prevención de pérdida de datos (splitext en metadatos multiformato), cancelación en Whisper, prevención de fugas SSE, suite de 22 tests automatizados y circuit breaker robusto. | `feature/mic-tester` |
+| `v1.3.1` | 2026-07-02 | Streaming de audio a disco en tiempo real (evita OOM) y corrección de compatibilidad con micrófonos Bluetooth/híbridos (cbSize/SubFormat) en Windows. | `develop` |
 | `v1.3.0` | 2026-07-02 | Probador de audio en tiempo real: medidores de nivel RMS en Configuración y Grabación, grabación de prueba temporal y reproductor integrado. | `develop` |
 | `v1.2.0` | 2026-07-02 | Chat global de historial (RAG): Búsqueda semántica/palabras clave, snippets automáticos, HistoryChatScreen con badges interactivos y navegación directa. | `main` |
 | `v1.1.0` | 2026-06-26 | Análisis Híbrido: Integración de OpenAI API, Diarización Textual, nueva pantalla SettingsScreen y gestión de `config.json`. | `main` |

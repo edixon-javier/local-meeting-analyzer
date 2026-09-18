@@ -111,7 +111,7 @@ export default function HistoryChatScreen({ onNavigate }) {
   }
 
   return (
-    <div className="history-chat-screen" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="history-chat-screen" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       
       {/* Cabecera */}
       <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -200,7 +200,7 @@ export default function HistoryChatScreen({ onNavigate }) {
                     >
                       <span>🎙️</span>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 600 }}>{ref.filename.replace(/\.(wav|mp3)$/i, '')}</span>
+                        <span style={{ fontWeight: 600 }}>{ref.filename.replace(/\.[^/.]+$/, '')}</span>
                         <span style={{ fontSize: '9.5px', color: 'var(--text-secondary)' }}>
                           {ref.category} · {formatDate(ref.created)}
                         </span>

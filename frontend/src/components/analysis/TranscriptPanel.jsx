@@ -13,7 +13,8 @@ export default function TranscriptPanel({
   handleTimeUpdate, 
   activeSegmentIndex, 
   handleSegmentClick,
-  formatSegmentTime
+  formatSegmentTime,
+  reprocess
 }) {
   return (
     <div className="transcript-panel">
@@ -23,9 +24,18 @@ export default function TranscriptPanel({
             <span>📝</span>
             Transcripción
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onBack}>
-            + Nueva Reunión
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button 
+              className="btn btn-secondary btn-sm" 
+              onClick={reprocess} 
+              title="Volver a transcribir y analizar esta reunión"
+            >
+              🔄 Reprocesar
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={onBack}>
+              + Nueva Reunión
+            </button>
+          </div>
         </div>
         
         {/* Reproductor de Audio Integrado */}
@@ -61,7 +71,7 @@ export default function TranscriptPanel({
                 style={{
                   padding: '12px 16px',
                   borderRadius: 'var(--radius-md)',
-                  background: 'rgba(30, 41, 59, 0.4)',
+                  background: 'var(--bg-surface)',
                   border: '1px solid var(--border-subtle)',
                   display: 'flex',
                   flexDirection: 'column',

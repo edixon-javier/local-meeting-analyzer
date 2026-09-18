@@ -8,9 +8,25 @@ import os
 from typing import Optional
 from faster_whisper import WhisperModel
 
-# Asegurar que ffmpeg esté en el PATH de Windows para Whisper
-if r"C:\ffmpeg\bin" not in os.environ["PATH"]:
-    os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\bin"
+import sys
+# Asegurar que ffmpeg local esté en el PATH para Whisper y subprocesos
+def get_root_dir() -> str:
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        if os.path.basename(exe_dir).lower() == "backend":
+            return os.path.dirname(exe_dir)
+        return exe_dir
+    else:
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+_root_dir = get_root_dir()
+_local_bin = os.path.join(_root_dir, "bin")
+if os.path.exists(_local_bin):
+    if _local_bin not in os.environ["PATH"]:
+        os.environ["PATH"] = _local_bin + os.pathsep + os.environ["PATH"]
+else:
+    if r"C:\ffmpeg\bin" not in os.environ["PATH"]:
+        os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\bin"
 
 # Variable global para trackear el progreso de la transcripción actual
 transcription_progress = 0.0

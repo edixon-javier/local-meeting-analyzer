@@ -43,6 +43,17 @@ import time
 import traceback
 import subprocess
 
+def _get_ffmpeg_path() -> str:
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        root_dir = os.path.dirname(exe_dir) if os.path.basename(exe_dir).lower() == "backend" else exe_dir
+    else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_ffmpeg = os.path.join(root_dir, "bin", "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+    if os.path.exists(local_ffmpeg):
+        return local_ffmpeg
+    return "ffmpeg"
+
 # Configuración de audio
 SAMPLE_RATE = 48000
 DTYPE = "float32"
@@ -288,7 +299,7 @@ class AudioCapture:
                 mp3_path = self._output_path.replace(".wav", ".mp3")
                 print("[AudioCapture] Comprimiendo a MP3 con FFmpeg...")
                 # Llama a ffmpeg (se asume en PATH o configurado por backend)
-                cmd = ["ffmpeg", "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
+                cmd = [_get_ffmpeg_path(), "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
                 # Ejecutar y suprimir la salida de consola de ffmpeg
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 

@@ -3,7 +3,7 @@
 
 import axios from 'axios'
 
-const BASE_URL = 'http://localhost:8765'
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8765'
 export const getAudioUrl = (audioPath) => `${BASE_URL}/recordings/audio?path=${encodeURIComponent(audioPath)}`
 
 // Estado local de conectividad en la capa de red
@@ -65,7 +65,7 @@ api.interceptors.response.use(
 )
 
 export const getStatus = () => api.get('/status')
-export const startRecording = () => api.post('/recording/start')
+export const startRecording = () => api.post('/recording/start', {})
 export const stopRecording = () => api.post('/recording/stop')
 export const pauseRecording = () => api.post('/recording/pause')
 export const resumeRecording = () => api.post('/recording/resume')

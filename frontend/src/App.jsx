@@ -2,7 +2,7 @@
 // Componente raíz. Gestiona el routing y los atajos de teclado globales.
 // El estado global se maneja ahora en SystemContext.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import StatusBar from './components/StatusBar'
@@ -19,8 +19,8 @@ import OfflineOverlay from './components/OfflineOverlay'
 import './index.css'
 
 // Componente intermedio para poder usar useSystem() para atajos
-function AppContent({ view, setView, audioPath, setAudioPath, handleRecordingDone, handleNavigate }) {
-  const { systemStatus, isRecording, setIsRecording, showToast, isBackendOffline } = useSystem()
+function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavigate }) {
+  const { isRecording, setIsRecording, showToast, isBackendOffline } = useSystem()
 
   // Registrar listener del atajo global de teclado (Ctrl+Shift+R)
   useEffect(() => {
@@ -33,25 +33,27 @@ function AppContent({ view, setView, audioPath, setAudioPath, handleRecordingDon
         try {
           if (isRecording) {
             // Detener grabación
-            const res = await stopRecording()
             setIsRecording(false)
+            const res = await stopRecording()
             showToast({ type: 'info', message: '✅ Grabación guardada (Atajo). Procesando...' })
             handleRecordingDone(res.data.audio_path)
           } else {
             // Iniciar grabación (el backend usará la fuente configurada)
-            const res = await startRecording()
             setIsRecording(true)
-            showToast({ type: 'success', message: '🎙️ Grabación iniciada (Atajo)' })
             setView('record') // Forzar navegación a la pantalla de grabación
+            await startRecording()
+            showToast({ type: 'success', message: '🎙️ Grabación iniciada (Atajo)' })
           }
         } catch (err) {
           console.error('Error al accionar atajo de teclado global:', err)
           showToast({ type: 'error', message: 'Error al cambiar grabación con atajo' })
+          // Revertir estado si falla
+          setIsRecording(isRecording)
         }
       })
       return () => unsubscribe()
     }
-  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDone])
+  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDone, isBackendOffline])
 
   return (
     <div className="app-body">
@@ -112,19 +114,19 @@ export default function App() {
   const [audioPath, setAudioPath] = useState(null)   // Ruta del WAV grabado
   const [toast, setToast] = useState(null)
 
-  const showToast = (t) => {
+  const showToast = useCallback((t) => {
     setToast(t)
-  }
+  }, [])
 
-  const handleRecordingDone = (path) => {
+  const handleRecordingDone = useCallback((path) => {
     setAudioPath(path)
     setView('analysis')
-  }
+  }, [])
 
-  const handleNavigate = (newView, data) => {
+  const handleNavigate = useCallback((newView, data) => {
     setView(newView)
     if (data?.path) setAudioPath(data.path)
-  }
+  }, [])
 
   return (
     <SystemProvider onToast={showToast}>

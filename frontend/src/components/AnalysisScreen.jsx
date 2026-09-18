@@ -8,17 +8,24 @@ import ChatPanel from './ChatPanel'
 export default function AnalysisScreen({ audioPath, onBack }) {
   const { showToast, systemStatus } = useSystem()
   
-  const { step, transcript, segments, analysis, errorMsg, cancelPipeline } = useAnalysisPipeline(audioPath, showToast)
+  const { 
+    step, 
+    transcript, 
+    segments, 
+    analysis, 
+    errorMsg, 
+    elapsedSeconds, 
+    progressPercent, 
+    cancelPipeline, 
+    reprocess 
+  } = useAnalysisPipeline(audioPath, showToast)
 
   // Audio Player State
-  const [currentTime, setCurrentTime] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1)
   const audioRef = useRef(null)
   
   const [activeTab, setActiveTab] = useState('insights') // insights | chat
-
-  const progressPercent = systemStatus?.transcription_progress ? Math.round(systemStatus.transcription_progress) : 0
 
   const formatSegmentTime = (seconds) => {
     if (seconds === undefined || seconds === null) return '00:00'
@@ -29,7 +36,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
 
   const generateMarkdown = () => {
     if (!analysis) return ''
-    const title = audioPath.split(/[/\\]/).pop().replace(/\.(wav|mp3)$/i, '')
+    const title = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
     let md = `# Análisis de Reunión: ${title}\n\n`
     
     md += `## 📊 Información General\n`
@@ -87,8 +94,6 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   const handleTimeUpdate = () => {
     if (audioRef.current) {
       const time = audioRef.current.currentTime
-      setCurrentTime(time)
-      
       if (segments && segments.length > 0) {
         const index = segments.findIndex(seg => time >= seg.start && time <= seg.end + 0.5)
         if (index !== -1 && index !== activeSegmentIndex) {
@@ -127,16 +132,20 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.(wav|mp3)$/i, '')
-    a.href = url
+    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
     a.download = `analisis_${cleanName}.md`
+    a.href = url
     a.click()
     URL.revokeObjectURL(url)
     showToast({ type: 'success', message: '📥 Archivo Markdown (.md) descargado' })
   }
 
   const handleExportPDF = async () => {
-    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.(wav|mp3)$/i, '')
+    if (!window.electronAPI?.exportPDF) {
+      showToast({ type: 'warning', message: 'La exportación a PDF requiere la aplicación de escritorio' })
+      return
+    }
+    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
     const defaultFilename = `analisis_${cleanName}.pdf`
     try {
       const success = await window.electronAPI.exportPDF(defaultFilename)
@@ -160,7 +169,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     return (
       <div className="processing-overlay">
         <div className="big-spinner" />
-        <div className="processing-label">Verificando caché local...</div>
+        <div className="processing-label">Verificando datos locales...</div>
       </div>
     )
   }
@@ -169,34 +178,54 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     return (
       <div className="processing-overlay">
         <div className="big-spinner" style={{ borderTopColor: 'var(--accent-violet)', animation: 'spin 1.2s linear infinite' }} />
-        <div className="processing-label">Procesamiento local en curso...</div>
+        <div className="processing-label">Proceso previo en curso o en cola</div>
         <div className="processing-sub" style={{ maxWidth: 500, textAlign: 'center', lineHeight: '1.6', marginBottom: 20 }}>
-          El sistema está procesando actualmente la transcripción o análisis de otra reunión.
+          El sistema indica que una tarea de IA estaba en ejecución o quedó pendiente de liberación.
           <br /><br />
-          Para optimizar los recursos de tu PC, las tareas de IA se procesan de forma secuencial.
-          <br />
-          <strong style={{ color: 'var(--text-accent)' }}>Esta pantalla se actualizará automáticamente apenas finalice el proceso actual.</strong>
+          Puedes forzar el reprocesamiento inmediato de este archivo.
         </div>
-        <button className="btn btn-secondary" onClick={onBack}>
-          Volver Atrás
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="btn btn-primary" onClick={reprocess}>
+            ⚡ Desbloquear y Reprocesar
+          </button>
+          <button className="btn btn-secondary" onClick={onBack}>
+            Volver Atrás
+          </button>
+        </div>
       </div>
     )
   }
 
   if (step === 'transcribing') {
+    const isCloud = systemStatus?.ai_provider === 'openai'
     return (
       <div className="processing-overlay">
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 90, height: 90, marginBottom: 10 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 96, height: 96, marginBottom: 8 }}>
           <div className="big-spinner" style={{ width: '100%', height: '100%', borderWidth: '4px', borderTopColor: 'var(--accent-primary)', position: 'absolute' }} />
           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'monospace', zIndex: 1 }}>
             {progressPercent}%
           </div>
         </div>
-        <div className="processing-label">Transcribiendo con Whisper...</div>
-        <div className="processing-sub" style={{ marginBottom: 20 }}>
-          El modelo de IA está convirtiendo el audio a texto. Esto puede tardar unos minutos dependiendo de la duración de la reunión.
+        
+        {/* Barra de Progreso Lineal */}
+        <div style={{ width: 280, height: 8, background: 'var(--border-subtle)', borderRadius: 'var(--radius-full)', overflow: 'hidden', margin: '4px 0 8px' }}>
+          <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 0.4s ease' }} />
         </div>
+
+        <div className="processing-label">
+          Transcribiendo con {isCloud ? 'OpenAI Whisper (Nube)' : `Whisper Local (${systemStatus?.whisper_model || 'small'})`}...
+        </div>
+        
+        <div style={{ fontSize: 13, color: 'var(--text-accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          ⏱️ Tiempo transcurrido: {elapsedSeconds}s
+        </div>
+
+        <div className="processing-sub" style={{ marginBottom: 20, maxWidth: 450 }}>
+          {isCloud 
+            ? 'Convirtiendo el audio a texto con el modelo de alta precisión en OpenAI.' 
+            : 'El modelo local está procesando el audio. El progreso se actualiza automáticamente con cada segmento detectado.'}
+        </div>
+        
         <button className="btn btn-secondary" onClick={handleCancelAndBack}>
           Cancelar Procesamiento
         </button>
@@ -205,13 +234,22 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   }
 
   if (step === 'analyzing') {
+    const isCloud = systemStatus?.ai_provider === 'openai'
     return (
       <div className="processing-overlay">
-        <div className="big-spinner" style={{ borderTopColor: 'var(--accent-violet)' }} />
-        <div className="processing-label">Analizando con Ollama...</div>
-        <div className="processing-sub" style={{ marginBottom: 20 }}>
-          La IA local está extrayendo tareas, resumen, tono y categoría de tu reunión.
+        <div className="big-spinner" style={{ borderTopColor: 'var(--accent-violet)', width: 56, height: 56, borderWidth: 4 }} />
+        <div className="processing-label">
+          Analizando con {isCloud ? 'OpenAI (GPT-4o)' : 'Ollama (Phi-3 Local)'}...
         </div>
+
+        <div style={{ fontSize: 13, color: 'var(--accent-violet)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 8px' }}>
+          ⏱️ Tiempo transcurrido: {elapsedSeconds}s
+        </div>
+
+        <div className="processing-sub" style={{ marginBottom: 20, maxWidth: 450 }}>
+          Extrayendo puntos clave del resumen, tareas pendientes, acuerdos, tono de la reunión y categorías temáticas.
+        </div>
+
         <button className="btn btn-secondary" onClick={handleCancelAndBack}>
           Cancelar Procesamiento
         </button>
@@ -223,9 +261,16 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     return (
       <div className="processing-overlay">
         <div style={{ fontSize: 48 }}>⚠️</div>
-        <div className="processing-label" style={{ color: '#FCA5A5' }}>Error en el procesamiento</div>
-        <div className="processing-sub">{errorMsg}</div>
-        <button className="btn btn-secondary" onClick={onBack}>← Volver a Grabación</button>
+        <div className="processing-label" style={{ color: '#EF4444' }}>Error en el procesamiento</div>
+        <div className="processing-sub" style={{ maxWidth: 450 }}>{errorMsg}</div>
+        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <button className="btn btn-primary" onClick={reprocess}>
+            🔄 Reprocesar Audio
+          </button>
+          <button className="btn btn-secondary" onClick={onBack}>
+            ← Volver a Grabación
+          </button>
+        </div>
       </div>
     )
   }
@@ -246,6 +291,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         activeSegmentIndex={activeSegmentIndex}
         handleSegmentClick={handleSegmentClick}
         formatSegmentTime={formatSegmentTime}
+        reprocess={reprocess}
       />
 
       <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>

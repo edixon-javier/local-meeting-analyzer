@@ -39,6 +39,16 @@
     "files": [
       "dist/**/*",
       "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/main.exe",
+        "to": "backend/main.exe"
+      },
+      {
+        "from": "../bin/ffmpeg.exe",
+        "to": "bin/ffmpeg.exe"
+      }
     ]
   }
 }

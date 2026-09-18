@@ -2,13 +2,11 @@
 // Pantalla principal de grabación: botón record, timer, pause/resume, waveform animado.
 
 import { useState, useEffect, useRef } from 'react'
-import { startRecording, stopRecording, pauseRecording, resumeRecording, getStatus, uploadAudioFile, getAudioTestLevels } from '../api'
+import { startRecording, stopRecording, pauseRecording, resumeRecording, uploadAudioFile, getAudioTestLevels } from '../api'
 import { useSystem } from '../context/SystemContext'
 
 export default function RecordScreen({ onRecordingDone }) {
-  const { showToast, isBackendOffline, isRecording: globalIsRecording, setIsRecording: setGlobalIsRecording, systemStatus } = useSystem()
-  const [isRecording, setIsRecording] = useState(globalIsRecording)
-  const [isPaused, setIsPaused] = useState(false)
+  const { showToast, isBackendOffline, isRecording, setIsRecording, isPaused, setIsPaused } = useSystem()
   const [seconds, setSeconds] = useState(0)
   const timerRef = useRef(null)
   const audioPathRef = useRef(null)
@@ -105,38 +103,6 @@ export default function RecordScreen({ onRecordingDone }) {
     }
   }
 
-
-  // Sincronizar con el estado global (Atajos de teclado)
-  useEffect(() => {
-    setIsRecording(globalIsRecording)
-  }, [globalIsRecording])
-
-  // Sincronizar con el status del polling
-  useEffect(() => {
-    if (systemStatus) {
-      setIsRecording(systemStatus.recording)
-      setIsPaused(systemStatus.paused)
-    }
-  }, [systemStatus])
-
-  // Restaurar estado si ya hay una grabación activa al entrar/recargar
-  useEffect(() => {
-    if (isBackendOffline) return
-    const checkActiveSession = async () => {
-      try {
-        const res = await getStatus()
-        if (res.data.recording) {
-          setIsRecording(true)
-          setGlobalIsRecording(true)
-          setIsPaused(res.data.paused)
-        }
-      } catch (err) {
-        console.warn('No se pudo verificar el estado inicial de grabación.')
-      }
-    }
-    checkActiveSession()
-  }, [isBackendOffline])
-
   // Timer: incrementa solo si está grabando y no está pausado
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -160,32 +126,34 @@ export default function RecordScreen({ onRecordingDone }) {
     if (!isRecording) {
       // INICIAR GRABACIÓN
       try {
-        const res = await startRecording()
-        audioPathRef.current = res.data.audio_path
         setIsRecording(true)
-        setGlobalIsRecording(true)
         setIsPaused(false)
         setSeconds(0)
+
+        const res = await startRecording()
+        audioPathRef.current = res.data.audio_path
         showToast({ type: 'success', message: '🎙️ Grabación iniciada' })
       } catch (err) {
+        setIsRecording(false)
+        setIsPaused(false)
         const msg = err.response?.data?.detail || 'Error al iniciar la grabación'
         showToast({ type: 'error', message: msg })
       }
     } else {
       // DETENER GRABACIÓN
       try {
-        const res = await stopRecording()
+        const currentPath = audioPathRef.current
         setIsRecording(false)
-        setGlobalIsRecording(false)
         setIsPaused(false)
+
+        const res = await stopRecording()
         showToast({ type: 'info', message: '✅ Grabación guardada. Procesando...' })
-        onRecordingDone(res.data.audio_path)
+        onRecordingDone(res.data.audio_path || currentPath)
       } catch (err) {
+        setIsRecording(false)
+        setIsPaused(false)
         const msg = err.response?.data?.detail || 'Error al detener la grabación'
         showToast({ type: 'error', message: msg })
-        setIsRecording(false)
-        setGlobalIsRecording(false)
-        setIsPaused(false)
       }
     }
   }
@@ -194,18 +162,20 @@ export default function RecordScreen({ onRecordingDone }) {
     if (isBackendOffline) return
     if (isPaused) {
       try {
-        await resumeRecording()
         setIsPaused(false)
+        await resumeRecording()
         showToast({ type: 'success', message: '🎙️ Grabación reanudada' })
-      } catch (err) {
+      } catch {
+        setIsPaused(true)
         showToast({ type: 'error', message: 'Error al reanudar la grabación' })
       }
     } else {
       try {
-        await pauseRecording()
         setIsPaused(true)
+        await pauseRecording()
         showToast({ type: 'info', message: '⏸️ Grabación pausada' })
-      } catch (err) {
+      } catch {
+        setIsPaused(false)
         showToast({ type: 'error', message: 'Error al pausar la grabación' })
       }
     }

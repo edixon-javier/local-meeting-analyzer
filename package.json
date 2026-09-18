@@ -1,0 +1,13 @@
+{
+  "name": "local-meeting-analyzer-root",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Workspace raíz de Local Meeting Analyzer",
+  "scripts": {
+    "dev": "node scripts/orchestrator.js",
+    "setup": "node scripts/setup.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

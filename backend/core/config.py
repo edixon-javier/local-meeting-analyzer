@@ -5,13 +5,14 @@ from typing import Dict, Any
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
 
 class Config:
-    def __init__(self):
+    def __init__(self, config_path: str = None):
+        self._config_path = config_path or CONFIG_PATH
         self._default_config = {
             "whisper_model": "small",
             "ollama_model": "phi3",
-            "ai_provider": "local",
+            "ai_provider": "openai",
             "openai_api_key": "",
-            "openai_model": "gpt-4o-mini",
+            "openai_model": "gpt-4o",
             "analysis_focus": "",
             "record_mode": "both",
             "mic_device_id": "default",
@@ -20,11 +21,11 @@ class Config:
         self.settings: Dict[str, Any] = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
-        if not os.path.exists(CONFIG_PATH):
+        if not os.path.exists(self._config_path):
             self._save_to_disk(self._default_config)
             return self._default_config.copy()
         try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(self._config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
                 # Ensure all default keys exist
                 for k, v in self._default_config.items():
@@ -37,7 +38,7 @@ class Config:
 
     def _save_to_disk(self, config_dict: Dict[str, Any]):
         try:
-            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(config_dict, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"[Core Config] Error saving config: {e}")

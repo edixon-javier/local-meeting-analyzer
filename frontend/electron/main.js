@@ -29,7 +29,7 @@ function createWindow() {
   })
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(process.env.VITE_DEV_URL || 'http://localhost:5173')
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
@@ -100,7 +100,18 @@ ipcMain.on('window:maximize', () => {
   else mainWindow?.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close()) // Esto gatillará el close interceptado
-ipcMain.on('open:external', (_, url) => shell.openExternal(url))
+ipcMain.on('open:external', (_, url) => {
+  try {
+    const parsedUrl = new URL(url)
+    if (['http:', 'https:'].includes(parsedUrl.protocol)) {
+      shell.openExternal(url)
+    } else {
+      console.warn('[Electron Security] Se bloqueó intento de abrir protocolo no seguro:', parsedUrl.protocol)
+    }
+  } catch (e) {
+    console.error('[Electron Security] Error al analizar URL para apertura externa:', url, e)
+  }
+})
 
 // Exportar a PDF usando la API de impresión nativa de Electron Chromium
 ipcMain.handle('export:pdf', async (event, defaultFilename) => {
@@ -147,11 +158,29 @@ app.whenReady().then(() => {
   })
 })
 
+app.on('before-quit', () => {
+  isQuitting = true
+})
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
 })
 
+function killProcessTree(pid) {
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', pid, '/f', '/t'])
+  } else {
+    try {
+      process.kill(pid)
+    } catch (e) {
+      console.error('[Electron] Error al matar proceso:', e)
+    }
+  }
+}
+
 app.on('window-all-closed', () => {
-  if (pythonProcess) pythonProcess.kill()
+  if (pythonProcess) {
+    killProcessTree(pythonProcess.pid)
+  }
   if (process.platform !== 'darwin') app.quit()
 })

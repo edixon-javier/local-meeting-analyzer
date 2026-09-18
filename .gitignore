@@ -29,3 +29,11 @@ desktop.ini
 
 # Whisper cache (modelos descargados)
 *.pt
+
+# Binarios locales pesados
+bin/
+*.exe
+
+# Entornos y configuración local
+.env
+

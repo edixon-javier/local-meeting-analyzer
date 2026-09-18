@@ -9,12 +9,8 @@ from api.routers.system import get_config, get_session_manager, get_audio_servic
 
 router = APIRouter()
 
-class StartRecordingRequest(BaseModel):
-    pass
-
 @router.post("/start")
 def start_recording(
-    request: Optional[StartRecordingRequest] = None,
     config: Config = Depends(get_config),
     session: SessionManager = Depends(get_session_manager),
     audio: IAudioCapture = Depends(get_audio_service)

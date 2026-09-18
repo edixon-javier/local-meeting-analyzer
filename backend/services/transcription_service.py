@@ -122,6 +122,10 @@ class TranscriptionService(ITranscriber):
         print(f"[TranscriptionService] Duración total del audio detectada: {total_duration:.1f}s")
 
         for segment in segments_generator:
+            from services.session_manager import session_manager
+            if not session_manager.is_processing():
+                print("[TranscriptionService] Transcripción abortada por cancelación del usuario.")
+                raise RuntimeError("Transcripción cancelada.")
             result_segments.append({
                 "start": segment.start,
                 "end": segment.end,

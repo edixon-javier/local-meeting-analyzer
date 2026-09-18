@@ -24,11 +24,11 @@ export default function HistoryScreen({ onNavigate }) {
     if (!isBackendOffline) {
       loadRecordings()
     }
-  }, [isBackendOffline])
+  }, [isBackendOffline, loadRecordings])
 
   // Filtrado y ordenamiento de reuniones
   const filteredRecordings = recordings.filter(rec => {
-    const cleanName = rec.filename.replace(/\.(wav|mp3)$/i, '').toLowerCase()
+    const cleanName = rec.filename.replace(/\.[^/.]+$/, '').toLowerCase()
     const matchesSearch = cleanName.includes(searchQuery.toLowerCase())
     const matchesCategory = categoryFilter === 'All' || rec.category === categoryFilter
     return matchesSearch && matchesCategory
@@ -53,7 +53,7 @@ export default function HistoryScreen({ onNavigate }) {
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
-    const cleanName = rec.filename.replace(/\.(wav|mp3)$/i, '')
+    const cleanName = rec.filename.replace(/\.[^/.]+$/, '')
     setRenamingFile(rec)
     setNewNameInput(cleanName)
   }
@@ -185,8 +185,8 @@ export default function HistoryScreen({ onNavigate }) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ overflow: 'hidden', paddingRight: 40 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.(wav|mp3)$/i, '')}>
-                      {rec.filename.replace(/\.(wav|mp3)$/i, '')}
+                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.[^/.]+$/, '')}>
+                      {rec.filename.replace(/\.[^/.]+$/, '')}
                     </h3>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(rec.created)}</span>
                   </div>
