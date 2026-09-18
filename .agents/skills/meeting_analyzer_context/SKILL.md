@@ -249,6 +249,7 @@ Antes de sugerir o ejecutar cualquier `git add` + `git commit`, verificar:
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.5.0` | 2026-09-18 | Minutas Ejecutivas y Renombrado Interactivo de Hablantes: Exportación de reportes ejecutivos (PDF formal, Markdown estructurado y portapapeles con HTML/Markdown), modal interactivo para renombrar hablantes ("Hablante A" -> Nombre real) con persistencia en JSON y sincronización RAG. | `feature/export-and-speaker-rename` |
 | `v1.4.0` | 2026-09-18 | Live Transcription SSE: Streaming en tiempo real palabra por palabra con Faster-Whisper, segmentación VAD, reconexión inteligente, UI en RecordScreen con auto-scroll no intrusivo y cancelación limpia de recursos. | `feature/live-transcription` |
 | `v1.3.2` | 2026-09-18 | Cierre y Estabilización: Blindaje de seguridad (path traversal), prevención de pérdida de datos (splitext en metadatos multiformato), cancelación en Whisper, prevención de fugas SSE, suite de 22 tests automatizados y circuit breaker robusto. | `feature/mic-tester` |
 | `v1.3.1` | 2026-07-02 | Streaming de audio a disco en tiempo real (evita OOM) y corrección de compatibilidad con micrófonos Bluetooth/híbridos (cbSize/SubFormat) en Windows. | `develop` |
