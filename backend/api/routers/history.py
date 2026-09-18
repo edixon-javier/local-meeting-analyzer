@@ -13,6 +13,10 @@ router = APIRouter()
 class RenameRequest(BaseModel):
     new_name: str
 
+class RenameSpeakerRequest(BaseModel):
+    old_speaker: str
+    new_speaker: str
+
 SUPPORTED_AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".aac", ".flac")
 
 def get_metadata_repo() -> IMetadataRepository:
@@ -156,6 +160,50 @@ def rename_recording(filename: str, request: RenameRequest, repo: IMetadataRepos
         return {"status": "renamed", "new_filename": new_filename_audio, "new_path": new_audio_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{filename}/rename-speaker")
+def rename_speaker(
+    filename: str,
+    request: RenameSpeakerRequest,
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """Renombra un hablante en todos los segmentos y metadatos de una grabación."""
+    safe_filename = os.path.basename(filename)
+    recordings_dir = _get_recordings_dir()
+    audio_path = os.path.join(recordings_dir, safe_filename)
+    json_path = _get_json_path(audio_path)
+
+    if not os.path.exists(json_path) and not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Grabación o metadatos no encontrados.")
+
+    old_speaker = request.old_speaker.strip()
+    new_speaker = request.new_speaker.strip()
+
+    if not old_speaker or not new_speaker:
+        raise HTTPException(status_code=400, detail="Los nombres de hablante no pueden estar vacíos.")
+
+    target_path = json_path if os.path.exists(json_path) else audio_path
+    updated_meta = repo.rename_speaker(target_path, old_speaker, new_speaker)
+    if not updated_meta:
+        raise HTTPException(status_code=500, detail="Error al actualizar metadatos del hablante.")
+
+    try:
+        from services.session_manager import session_manager
+        current_audio = session_manager.get_audio_path()
+        if current_audio and os.path.basename(current_audio) == safe_filename:
+            session_manager.set_transcript(updated_meta.get("transcript"))
+            if updated_meta.get("analysis"):
+                session_manager.set_analysis(updated_meta.get("analysis"))
+    except Exception as e:
+        print(f"[HistoryRouter] Advertencia sincronizando session_manager: {e}")
+
+    return {
+        "status": "updated",
+        "filename": safe_filename,
+        "old_speaker": old_speaker,
+        "new_speaker": new_speaker,
+        "metadata": updated_meta
+    }
 
 @router.get("/audio")
 def get_audio_file(path: str):
