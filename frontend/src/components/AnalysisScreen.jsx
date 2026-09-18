@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useSystem } from '../context/SystemContext'
 import { useAnalysisPipeline } from '../hooks/useAnalysisPipeline'
+import { renameSpeaker } from '../api'
+import { 
+  copyExecutiveMinutes, 
+  downloadExecutiveMarkdown, 
+  exportExecutivePdf 
+} from '../utils/minutesExport'
 import TranscriptPanel from './analysis/TranscriptPanel'
 import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
+import SpeakerRenameModal from './SpeakerRenameModal'
 
 export default function AnalysisScreen({ audioPath, onBack }) {
   const { showToast, systemStatus } = useSystem()
@@ -17,7 +24,8 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     elapsedSeconds, 
     progressPercent, 
     cancelPipeline, 
-    reprocess 
+    reprocess,
+    updateSpeakerInState
   } = useAnalysisPipeline(audioPath, showToast)
 
   // Audio Player State
@@ -34,61 +42,64 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  const generateMarkdown = () => {
-    if (!analysis) return ''
-    const title = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
-    let md = `# Análisis de Reunión: ${title}\n\n`
-    
-    md += `## 📊 Información General\n`
-    md += `- **Categoría:** ${analysis.category || 'Sin categorizar'}\n`
-    md += `- **Tono general:** ${analysis.tone || 'Desconocido'}\n`
-    if (analysis.duration_insight) {
-      md += `- **Observación de densidad:** ${analysis.duration_insight}\n`
-    }
-    md += `\n`
+  // Speaker Rename Modal State
+  const [speakerModalOpen, setSpeakerModalOpen] = useState(false)
+  const [selectedSpeaker, setSelectedSpeaker] = useState('')
 
-    md += `## 📋 Resumen Ejecutivo\n`
-    analysis.summary?.forEach(point => {
-      md += `- ${point}\n`
-    })
-    md += `\n`
-
-    if (analysis.key_decisions?.length > 0) {
-      md += `## 🎯 Decisiones Clave\n`
-      analysis.key_decisions.forEach(d => {
-        md += `- ${d}\n`
-      })
-      md += `\n`
-    }
-
-    md += `## ✅ Tareas Pendientes\n`
-    if (analysis.action_items?.length > 0) {
-      analysis.action_items.forEach(item => {
-        md += `- **Tarea:** ${item.task}\n`
-        md += `  - **Responsable:** ${item.assignee || 'Sin asignar'}\n`
-        md += `  - **Fecha Límite:** ${item.deadline || 'Sin fecha'}\n`
-      })
-    } else {
-      md += `*No se identificaron tareas pendientes.*\n`
-    }
-    md += `\n`
-
-    md += `## 📝 Transcripción Completa\n`
-    if (segments && segments.length > 0) {
-      segments.forEach(seg => {
-        md += `**[${formatSegmentTime(seg.start)} - ${formatSegmentTime(seg.end)}] ${seg.speaker || 'Hablante'}:** ${seg.text}\n\n`
-      })
-    } else {
-      md += `${transcript}\n`
-    }
-
-    return md
+  const handleOpenRenameSpeaker = (speakerName) => {
+    setSelectedSpeaker(speakerName)
+    setSpeakerModalOpen(true)
   }
 
-  const handleCopyToClipboard = () => {
-    const md = generateMarkdown()
-    navigator.clipboard.writeText(md)
-    showToast({ type: 'success', message: '📋 Formato Markdown copiado al portapapeles' })
+  const handleConfirmRenameSpeaker = async (newSpeakerName) => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : ''
+    if (!filename) return
+    try {
+      await renameSpeaker(filename, selectedSpeaker, newSpeakerName)
+      updateSpeakerInState(selectedSpeaker, newSpeakerName)
+      showToast({
+        type: 'success',
+        message: `👥 Hablante renombrado a "${newSpeakerName}" en toda la reunión`
+      })
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Error al renombrar el hablante'
+      showToast({ type: 'error', message: msg })
+      throw err
+    }
+  }
+
+  const selectedSpeakerSegmentsCount = segments
+    ? segments.filter(s => s.speaker === selectedSpeaker).length
+    : 0
+
+  const cleanTitle = audioPath ? audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '') : 'Reunión'
+
+  const getMinutesData = () => ({
+    title: cleanTitle,
+    date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+    category: analysis?.category || 'General',
+    tone: analysis?.tone || 'Profesional',
+    durationInsight: analysis?.duration_insight || '',
+    summary: analysis?.summary || [],
+    keyDecisions: analysis?.key_decisions || [],
+    actionItems: analysis?.action_items || [],
+    segments: segments || [],
+    transcript: transcript || ''
+  })
+
+  const handleCopyMinutes = async () => {
+    if (!analysis) return
+    await copyExecutiveMinutes(getMinutesData(), showToast)
+  }
+
+  const handleDownloadMarkdown = () => {
+    if (!analysis) return
+    downloadExecutiveMarkdown(getMinutesData(), cleanTitle, showToast)
+  }
+
+  const handleExportPDF = async () => {
+    if (!analysis) return
+    await exportExecutivePdf(getMinutesData(), cleanTitle, showToast)
   }
 
   const handleTimeUpdate = () => {
@@ -130,38 +141,6 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       }
     }
   }, [activeSegmentIndex])
-
-  const handleExportMarkdown = () => {
-    const md = generateMarkdown()
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
-    a.download = `analisis_${cleanName}.md`
-    a.href = url
-    a.click()
-    URL.revokeObjectURL(url)
-    showToast({ type: 'success', message: '📥 Archivo Markdown (.md) descargado' })
-  }
-
-  const handleExportPDF = async () => {
-    if (!window.electronAPI?.exportPDF) {
-      showToast({ type: 'warning', message: 'La exportación a PDF requiere la aplicación de escritorio' })
-      return
-    }
-    const cleanName = audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
-    const defaultFilename = `analisis_${cleanName}.pdf`
-    try {
-      const success = await window.electronAPI.exportPDF(defaultFilename)
-      if (success) {
-        showToast({ type: 'success', message: '📥 PDF exportado correctamente' })
-      } else {
-        showToast({ type: 'info', message: 'Exportación a PDF cancelada' })
-      }
-    } catch (err) {
-      showToast({ type: 'error', message: 'Error al exportar PDF: ' + err.message })
-    }
-  }
 
   const handleCancelAndBack = async () => {
     await cancelPipeline()
@@ -296,6 +275,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         handleSegmentClick={handleSegmentClick}
         formatSegmentTime={formatSegmentTime}
         reprocess={reprocess}
+        onOpenRenameSpeaker={handleOpenRenameSpeaker}
       />
 
       <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -320,28 +300,28 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           {activeTab === 'insights' && (
             <div style={{ display: 'flex', gap: 6 }}>
               <button 
-                onClick={handleCopyToClipboard} 
+                onClick={handleCopyMinutes} 
                 className="btn btn-secondary btn-sm" 
-                title="Copiar al portapapeles (Markdown)"
+                title="Copiar Minuta Ejecutiva (lista para Slack/Email en Markdown y formato enriquecido)"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📋 Copiar
+                📋 Copiar Minuta
               </button>
               <button 
-                onClick={handleExportMarkdown} 
+                onClick={handleDownloadMarkdown} 
                 className="btn btn-secondary btn-sm" 
-                title="Exportar archivo Markdown"
+                title="Descargar archivo Markdown (.md) estructurado"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📥 MD
+                📥 Descargar MD
               </button>
               <button 
                 onClick={handleExportPDF} 
                 className="btn btn-secondary btn-sm" 
-                title="Exportar archivo PDF"
+                title="Generar y guardar Minuta Ejecutiva en PDF"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📥 PDF
+                📄 PDF
               </button>
             </div>
           )}
@@ -355,6 +335,106 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Modal Interactivo de Renombrado de Hablantes */}
+      <SpeakerRenameModal
+        isOpen={speakerModalOpen}
+        oldSpeaker={selectedSpeaker}
+        segmentsCount={selectedSpeakerSegmentsCount}
+        onConfirm={handleConfirmRenameSpeaker}
+        onClose={() => setSpeakerModalOpen(false)}
+      />
+
+      {/* Plantilla invisible en pantalla para impresión / PDF formal */}
+      {analysis && (
+        <div className="executive-print-report" aria-hidden="true">
+          <div className="print-header">
+            <div className="print-badge-header">MEETING ANALYZER &bull; MINUTA EJECUTIVA OFICIAL</div>
+            <h1 className="print-title">📋 Minuta Ejecutiva: {cleanTitle}</h1>
+            <div className="print-meta-row">
+              <span>📅 {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+              <span>🏷️ <strong>Categoría:</strong> {analysis.category || 'General'}</span>
+              <span>🎭 <strong>Tono:</strong> {analysis.tone || 'Neutro'}</span>
+            </div>
+            {analysis.duration_insight && (
+              <div className="print-insight-box">
+                💡 <strong>Observación:</strong> {analysis.duration_insight}
+              </div>
+            )}
+          </div>
+
+          <div className="print-section">
+            <h2 className="print-section-title">📌 Resumen Ejecutivo</h2>
+            <ul className="print-summary-list">
+              {analysis.summary && analysis.summary.length > 0 ? (
+                analysis.summary.map((pt, idx) => <li key={idx}>{pt}</li>)
+              ) : (
+                <li>Sin puntos de resumen disponibles.</li>
+              )}
+            </ul>
+          </div>
+
+          {analysis.key_decisions && analysis.key_decisions.length > 0 && (
+            <div className="print-section">
+              <h2 className="print-section-title">🎯 Decisiones Clave</h2>
+              <ul className="print-decisions-list">
+                {analysis.key_decisions.map((dec, idx) => <li key={idx}>{dec}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div className="print-section">
+            <h2 className="print-section-title">✅ Tareas y Compromisos</h2>
+            <table className="print-tasks-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '45px', textAlign: 'center' }}>OK</th>
+                  <th>Tarea / Acción</th>
+                  <th style={{ width: '150px' }}>Responsable</th>
+                  <th style={{ width: '130px' }}>Fecha Límite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.action_items && analysis.action_items.length > 0 ? (
+                  analysis.action_items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ textAlign: 'center' }}>⬜</td>
+                      <td className="task-desc">{item.task}</td>
+                      <td><span className="print-pill-assignee">{item.assignee || 'Sin asignar'}</span></td>
+                      <td className="task-date">{item.deadline || 'Sin fecha'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', color: '#64748b' }}>
+                      No se identificaron tareas pendientes.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="print-section print-page-break">
+            <h2 className="print-section-title">📝 Transcripción Completa</h2>
+            <div className="print-transcript-list">
+              {segments && segments.length > 0 ? (
+                segments.map((seg, idx) => (
+                  <div key={idx} className="print-transcript-item">
+                    <div className="print-transcript-speaker">
+                      <strong>👥 {seg.speaker || 'Hablante'}</strong>
+                      <span className="print-transcript-time">⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
+                    </div>
+                    <p className="print-transcript-text">{seg.text}</p>
+                  </div>
+                ))
+              ) : (
+                <p style={{ whiteSpace: 'pre-wrap' }}>{transcript || 'Sin transcripción.'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

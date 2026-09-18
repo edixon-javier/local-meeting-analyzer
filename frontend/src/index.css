@@ -1113,79 +1113,233 @@ body::after {
   color: var(--text-accent);
 }
 
-/* ─── Print Media Styles ─── */
+/* ─── Speaker Badge Interactive Button ─── */
+.speaker-badge-btn {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  color: var(--text-accent);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all var(--transition-fast);
+}
+
+.speaker-badge-btn:hover {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.35);
+}
+
+/* Ocultar el reporte ejecutivo en la vista interactiva normal */
+.executive-print-report {
+  display: none;
+}
+
+/* ─── Print Media Styles (Minuta Ejecutiva Formal en PDF) ─── */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  @page {
+    size: A4;
+    margin: 14mm;
   }
   
+  body {
+    background: white !important;
+    color: #0f172a !important;
+  }
+  
+  /* Ocultar elementos de UI interactiva durante la impresión */
   .sidebar,
   .title-bar,
   .status-bar,
-  .panel-header button,
-  .panel-header .btn,
+  .modal-overlay,
+  .panel-header,
+  .audio-player-container,
+  .transcript-panel,
+  .insights-panel,
+  .filters-container,
+  .meeting-card,
   .btn,
-  .insights-panel .panel-header > div:last-child {
+  button {
     display: none !important;
   }
   
   .app-layout,
   .app-body,
   .main-content,
-  .analysis-screen {
+  .analysis-screen,
+  .history-screen {
     display: block !important;
     height: auto !important;
     overflow: visible !important;
     background: white !important;
-    color: black !important;
-    border: none !important;
-  }
-  
-  .analysis-screen {
-    flex-direction: column !important;
-    gap: 30px !important;
-  }
-  
-  .transcript-panel,
-  .insights-panel {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
+    color: #0f172a !important;
     border: none !important;
     padding: 0 !important;
-    margin-bottom: 30px !important;
-    page-break-inside: avoid;
+    margin: 0 !important;
   }
   
-  .chat-bubble {
-    background: #f1f5f9 !important;
-    border: 1px solid #e2e8f0 !important;
-    color: #0f172a !important;
-    page-break-inside: avoid;
-  }
-  
-  .chat-bubble span {
-    color: #475569 !important;
-  }
-  
-  .insight-card {
-    background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
-    color: #0f172a !important;
-    page-break-inside: avoid;
-  }
-  
-  .task-item {
-    background: #f1f5f9 !important;
-    border: 1px solid #e2e8f0 !important;
+  /* Renderizado exclusivo del reporte ejecutivo formal */
+  .executive-print-report {
+    display: block !important;
+    width: 100% !important;
+    background: #ffffff !important;
     color: #0f172a !important;
   }
-  
-  .task-badge {
-    background: #e2e8f0 !important;
-    color: #334155 !important;
+
+  .print-header {
+    border-bottom: 2px solid #4f46e5;
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+  }
+
+  .print-badge-header {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #4f46e5;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .print-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1e1b4b;
+    margin: 0 0 6px 0;
+  }
+
+  .print-meta-row {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #475569;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .print-insight-box {
+    background: #f8fafc;
+    border-left: 4px solid #f59e0b;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #475569;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  .print-section {
+    margin-bottom: 22px;
+    page-break-inside: avoid;
+  }
+
+  .print-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #312e81;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+
+  .print-summary-list,
+  .print-decisions-list {
+    padding-left: 20px;
+    font-size: 13px;
+    color: #1e293b;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .print-summary-list li,
+  .print-decisions-list li {
+    margin-bottom: 4px;
+  }
+
+  .print-tasks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .print-tasks-table th {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #cbd5e1;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .print-tasks-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1e293b;
+  }
+
+  .print-tasks-table .task-desc {
+    font-weight: 600;
+  }
+
+  .print-pill-assignee {
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .print-tasks-table .task-date {
+    color: #64748b;
+    font-size: 11px;
+  }
+
+  .print-page-break {
+    page-break-before: auto;
+  }
+
+  .print-transcript-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .print-transcript-item {
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-left: 3px solid #6366f1;
+    border-radius: 4px;
+    page-break-inside: avoid;
+  }
+
+  .print-transcript-speaker {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #4338ca;
+    margin-bottom: 2px;
+  }
+
+  .print-transcript-time {
+    color: #94a3b8;
+  }
+
+  .print-transcript-text {
+    margin: 0;
+    font-size: 12px;
+    color: #1e293b;
+    line-height: 1.4;
   }
 }
 

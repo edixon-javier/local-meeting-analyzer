@@ -191,6 +191,31 @@ export function useAnalysisPipeline(audioPath, onToast) {
     checkCacheAndRun(audioPath, true, true)
   }
 
+  const updateSpeakerInState = useCallback((oldSpeaker, newSpeaker) => {
+    setSegments(prevSegments => {
+      if (!prevSegments) return []
+      return prevSegments.map(seg => 
+        seg.speaker === oldSpeaker ? { ...seg, speaker: newSpeaker } : seg
+      )
+    })
+
+    setTranscript(prevTranscript => {
+      if (!prevTranscript) return ''
+      return prevTranscript.replaceAll(`${oldSpeaker}:`, `${newSpeaker}:`)
+    })
+
+    setAnalysis(prevAnalysis => {
+      if (!prevAnalysis) return prevAnalysis
+      const updatedActionItems = (prevAnalysis.action_items || []).map(item => 
+        item.assignee === oldSpeaker ? { ...item, assignee: newSpeaker } : item
+      )
+      return {
+        ...prevAnalysis,
+        action_items: updatedActionItems
+      }
+    })
+  }, [])
+
   return { 
     step, 
     transcript, 
@@ -200,6 +225,7 @@ export function useAnalysisPipeline(audioPath, onToast) {
     elapsedSeconds,
     progressPercent,
     cancelPipeline, 
-    reprocess 
+    reprocess,
+    updateSpeakerInState
   }
 }

@@ -14,7 +14,8 @@ export default function TranscriptPanel({
   activeSegmentIndex, 
   handleSegmentClick,
   formatSegmentTime,
-  reprocess
+  reprocess,
+  onOpenRenameSpeaker
 }) {
   return (
     <div className="transcript-panel">
@@ -78,8 +79,33 @@ export default function TranscriptPanel({
                   gap: 4
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed var(--border-subtle)', paddingBottom: 4, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, color: 'var(--text-accent)' }}>👥 {seg.speaker}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed var(--border-subtle)', paddingBottom: 6, marginBottom: 6 }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenRenameSpeaker?.(seg.speaker)
+                    }}
+                    className="speaker-badge-btn"
+                    title={`Clic para renombrar a "${seg.speaker}" en toda la reunión`}
+                    style={{
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                      borderRadius: 'var(--radius-full)',
+                      padding: '2px 8px',
+                      color: 'var(--text-accent)',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    <span>👥 {seg.speaker}</span>
+                    <span style={{ fontSize: 10, opacity: 0.7 }}>✏️</span>
+                  </button>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, margin: 0 }}>{seg.text}</p>

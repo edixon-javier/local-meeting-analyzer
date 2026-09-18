@@ -84,6 +84,11 @@ export const getRecordings = () => api.get('/recordings')
 export const getRecordingMetadata = (path) => api.get('/recordings/metadata', { params: { path } })
 export const deleteRecording = (filename) => api.delete(`/recordings/${filename}`)
 export const renameRecording = (filename, newName) => api.post(`/recordings/${filename}/rename`, { new_name: newName })
+export const renameSpeaker = (filename, oldSpeaker, newSpeaker) =>
+  api.post(`/recordings/${encodeURIComponent(filename)}/rename-speaker`, {
+    old_speaker: oldSpeaker,
+    new_speaker: newSpeaker,
+  })
 export const getConfig = () => api.get('/config')
 export const updateConfig = (config) => api.post('/config', config)
 export const chatWithMeeting = (audioPath, messages, question) => api.post('/chat', { audio_path: audioPath, messages, question })
