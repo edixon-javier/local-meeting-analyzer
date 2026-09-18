@@ -33,6 +33,10 @@ class IAudioCapture(ABC):
     def stop(self) -> str:
         pass
 
+    @abstractmethod
+    def cancel(self):
+        pass
+
     @property
     @abstractmethod
     def is_testing(self) -> bool:

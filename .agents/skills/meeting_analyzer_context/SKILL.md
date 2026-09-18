@@ -36,6 +36,7 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `interfaces.py` — Interfaces abstractas del sistema (`IAudioCapture`, `ITranscriber`, `IAnalyzer`, `IMetadataRepository`).
 - `services/` — Lógica de negocio e implementaciones de interfaces.
   - `audio_service.py` — Captura de audio (loopback y micrófono), medidor RMS en tiempo real, streaming directo a disco para evitar OOM y compatibilidad con Bluetooth/dispositivos híbridos.
+  - `live_transcription_service.py` — Streaming en tiempo real palabra por palabra con Faster-Whisper, segmentación VAD, timestamps por palabra, emisión SSE y gestión de sesiones.
   - `transcription_service.py` — Transcripción local usando modelos Whisper.
   - `analysis_service.py` — Procesamiento de análisis híbrido con Ollama (Phi-3) y OpenAI (GPT-4o), diarización textual por contexto y chat.
   - `session_manager.py` — Gestión en memoria del estado de la sesión activa del usuario.
@@ -43,7 +44,7 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `ollama_heartbeat.py` — Monitoreo periódico del estado de Ollama y push de eventos SSE.
 - `api/routers/` — Controladores HTTP modulares.
   - `system.py` — Ajustes de configuración, selección de dispositivos, estado general y SSE `/events`.
-  - `recording.py` — Iniciar, parar, pausar, reanudar grabación, control de prueba y niveles RMS en tiempo real.
+  - `recording.py` — Iniciar, parar, pausar, reanudar, cancelar grabación, SSE en vivo `/recording/live-transcription`, control de prueba y niveles RMS en tiempo real.
   - `analysis.py` — Transcripción, análisis estructurado dual, chat individual y consulta RAG con historial global.
   - `history.py` — Listado, borrado, renombrado y subida externa de archivos en el historial.
 
@@ -57,10 +58,12 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `GET /status/ollama-models` — Modelos de Ollama instalados localmente.
   - `GET /events` — Canal de Server-Sent Events (SSE) para transmitir estados del sistema en tiempo real.
 - **Grabación (`/api/routers/recording.py`):**
-  - `POST /recording/start` — Iniciar grabación.
-  - `POST /recording/stop` — Detener grabación y guardar archivo WAV.
-  - `POST /recording/pause` — Pausar grabación activa.
-  - `POST /recording/resume` — Reanudar grabación pausada.
+  - `POST /recording/start` — Iniciar grabación y sesión de streaming SSE.
+  - `POST /recording/stop` — Detener grabación, finalizar stream en vivo y guardar archivo WAV/MP3.
+  - `POST /recording/pause` — Pausar grabación y streaming de transcripción en vivo.
+  - `POST /recording/resume` — Reanudar grabación y streaming de transcripción en vivo.
+  - `POST /recording/cancel` — Cancelar grabación y transcripción en vivo liberando todos los recursos.
+  - `GET /recording/live-transcription` — Canal SSE en tiempo real palabra por palabra con reconexión segura.
   - `POST /recording/test/start` / `/test/stop` — Iniciar/detener grabación de prueba temporal.
   - `GET /recording/test/levels` — Obtener niveles RMS en tiempo real de micrófono y sistema.
 - **Transcripción & Análisis (`/api/routers/analysis.py`):**
@@ -246,6 +249,7 @@ Antes de sugerir o ejecutar cualquier `git add` + `git commit`, verificar:
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.4.0` | 2026-09-18 | Live Transcription SSE: Streaming en tiempo real palabra por palabra con Faster-Whisper, segmentación VAD, reconexión inteligente, UI en RecordScreen con auto-scroll no intrusivo y cancelación limpia de recursos. | `feature/live-transcription` |
 | `v1.3.2` | 2026-09-18 | Cierre y Estabilización: Blindaje de seguridad (path traversal), prevención de pérdida de datos (splitext en metadatos multiformato), cancelación en Whisper, prevención de fugas SSE, suite de 22 tests automatizados y circuit breaker robusto. | `feature/mic-tester` |
 | `v1.3.1` | 2026-07-02 | Streaming de audio a disco en tiempo real (evita OOM) y corrección de compatibilidad con micrófonos Bluetooth/híbridos (cbSize/SubFormat) en Windows. | `develop` |
 | `v1.3.0` | 2026-07-02 | Probador de audio en tiempo real: medidores de nivel RMS en Configuración y Grabación, grabación de prueba temporal y reproductor integrado. | `develop` |

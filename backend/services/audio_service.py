@@ -87,6 +87,10 @@ class AudioService(IAudioCapture):
         self._file_mic = None
         self._last_sys_level = 0.0
         self._last_mic_level = 0.0
+        self._live_listeners = []
+        self._live_listeners_lock = threading.Lock()
+        self._pending_chunks = {}
+        self._mix_lock = threading.Lock()
 
     def _get_loopback_device(self):
         try:
@@ -108,6 +112,56 @@ class AudioService(IAudioCapture):
     @property
     def is_testing(self) -> bool:
         return self._is_testing
+
+    def add_live_listener(self, callback):
+        with self._live_listeners_lock:
+            if callback not in self._live_listeners:
+                self._live_listeners.append(callback)
+
+    def remove_live_listener(self, callback):
+        with self._live_listeners_lock:
+            if callback in self._live_listeners:
+                self._live_listeners.remove(callback)
+
+    def _notify_live_listeners(self, chunk_16k: np.ndarray):
+        with self._live_listeners_lock:
+            listeners = list(self._live_listeners)
+        for listener in listeners:
+            try:
+                listener(chunk_16k)
+            except Exception as e:
+                print(f"[AudioService] Error notificando listener en vivo: {e}")
+
+    def _handle_live_chunk(self, source_type: str, mono_chunk: np.ndarray):
+        if not self._live_listeners or self._is_testing or mono_chunk is None or len(mono_chunk) == 0:
+            return
+
+        if self._mode in ["mic", "system"]:
+            if (self._mode == "mic" and source_type == "mic") or (self._mode == "system" and source_type == "sys"):
+                n = (len(mono_chunk) // 3) * 3
+                if n > 0:
+                    c = mono_chunk[:n]
+                    chunk_16k = (c[0::3] + c[1::3] + c[2::3]) / 3.0
+                    self._notify_live_listeners(chunk_16k.astype(np.float32))
+        elif self._mode == "both":
+            with self._mix_lock:
+                if source_type in self._pending_chunks:
+                    old = self._pending_chunks.pop(source_type)
+                    n = (len(old) // 3) * 3
+                    if n > 0:
+                        c = old[:n]
+                        chunk_16k = (c[0::3] + c[1::3] + c[2::3]) / 3.0
+                        self._notify_live_listeners(chunk_16k.astype(np.float32))
+                self._pending_chunks[source_type] = mono_chunk
+                if "sys" in self._pending_chunks and "mic" in self._pending_chunks:
+                    sys_c = self._pending_chunks.pop("sys")
+                    mic_c = self._pending_chunks.pop("mic")
+                    min_len = min(len(sys_c), len(mic_c))
+                    n = (min_len // 3) * 3
+                    if n > 0:
+                        mixed = sys_c[:n] + mic_c[:n]
+                        chunk_16k = (mixed[0::3] + mixed[1::3] + mixed[2::3]) / 3.0
+                        self._notify_live_listeners(chunk_16k.astype(np.float32))
 
     def start(self, output_dir: str, mode: str, mic_device_id: str) -> str:
         if self._recording or self._is_testing:
@@ -253,6 +307,7 @@ class AudioService(IAudioCapture):
                                 file_handle.flush()
                             except (ValueError, OSError):
                                 break
+                        self._handle_live_chunk(source_type, mono_chunk)
         except Exception as e:
             print(f"[AudioService] Error en grabación {source_type}: {e}")
             traceback.print_exc()
@@ -440,6 +495,9 @@ class AudioService(IAudioCapture):
                 except Exception as e:
                     print(f"[AudioService] Advertencia al eliminar archivo temporal {temp_path}: {e}")
 
+        with self._mix_lock:
+            self._pending_chunks.clear()
+
         self._last_sys_level = 0.0
         self._last_mic_level = 0.0
         return self._output_path
@@ -452,6 +510,53 @@ class AudioService(IAudioCapture):
         self._paused = False
         
         return self._save_and_clean_audio()
+
+    def cancel(self):
+        """Cancela inmediatamente la grabación activa, detiene hilos y libera recursos."""
+        self._recording = False
+        self._is_testing = False
+        self._paused = False
+
+        if self._thread_sys:
+            self._thread_sys.join(timeout=2)
+            self._thread_sys = None
+        if self._thread_mic:
+            self._thread_mic.join(timeout=2)
+            self._thread_mic = None
+
+        if hasattr(self, "_file_sys") and self._file_sys:
+            try:
+                self._file_sys.close()
+            except Exception:
+                pass
+            self._file_sys = None
+
+        if hasattr(self, "_file_mic") and self._file_mic:
+            try:
+                self._file_mic.close()
+            except Exception:
+                pass
+            self._file_mic = None
+
+        for temp_path in [self._temp_sys_path, self._temp_mic_path]:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+        if self._output_path and os.path.exists(self._output_path):
+            try:
+                os.remove(self._output_path)
+            except Exception:
+                pass
+
+        with self._mix_lock:
+            self._pending_chunks.clear()
+
+        self._last_sys_level = 0.0
+        self._last_mic_level = 0.0
+        print("[AudioService] Grabación cancelada y recursos liberados.")
 
     def stop_test(self) -> str:
         if not self._is_testing:

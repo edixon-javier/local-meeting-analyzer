@@ -67,8 +67,11 @@ api.interceptors.response.use(
 export const getStatus = () => api.get('/status')
 export const startRecording = () => api.post('/recording/start', {})
 export const stopRecording = () => api.post('/recording/stop')
+export const cancelRecording = () => api.post('/recording/cancel')
 export const pauseRecording = () => api.post('/recording/pause')
 export const resumeRecording = () => api.post('/recording/resume')
+export const getLiveTranscriptionUrl = (sessionId = null) => 
+  `${BASE_URL}/recording/live-transcription${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`
 export const getAudioDevices = () => api.get('/audio/devices')
 export const getOllamaModels = () => api.get('/status/ollama-models')
 export const transcribeAudio = (audioPath, language = null, diarize = false) =>

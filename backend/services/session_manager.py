@@ -7,10 +7,12 @@ class SessionManager:
     def __init__(self):
         self._lock = threading.Lock()
         self._state: Dict[str, Any] = {
+            "session_id": None,
             "recording": False,
             "paused": False,
             "audio_path": None,
             "transcript": None,
+            "live_transcript": None,
             "analysis": None,
             "processing": False
         }
@@ -55,9 +57,27 @@ class SessionManager:
         with self._lock:
             return self._state.get("transcript")
 
+    def set_session_id(self, session_id: Optional[str]):
+        with self._lock:
+            self._state["session_id"] = session_id
+
+    def get_session_id(self) -> Optional[str]:
+        with self._lock:
+            return self._state.get("session_id")
+
+    def set_live_transcript(self, transcript: Optional[str]):
+        with self._lock:
+            self._state["live_transcript"] = transcript
+
+    def get_live_transcript(self) -> Optional[str]:
+        with self._lock:
+            return self._state.get("live_transcript")
+
     def reset_for_new_recording(self):
         with self._lock:
+            self._state["session_id"] = None
             self._state["transcript"] = None
+            self._state["live_transcript"] = None
             self._state["analysis"] = None
 
 # Single instance for the application lifecycle
