@@ -15,6 +15,7 @@ import {
   getLiveTranscriptionUrl
 } from '../api'
 import { useSystem } from '../context/SystemContext'
+import LiveTranscriptPanel from './recording/LiveTranscriptPanel'
 
 export default function RecordScreen({ onRecordingDone }) {
   const { showToast, isBackendOffline, isRecording, setIsRecording, isPaused, setIsPaused } = useSystem()
@@ -30,12 +31,12 @@ export default function RecordScreen({ onRecordingDone }) {
   const [_sessionId, setSessionId] = useState(null)
   const [liveSegments, setLiveSegments] = useState([])
   const [partialText, setPartialText] = useState('')
-  const [streamStatus, setStreamStatus] = useState('idle') // idle | connecting | listening | transcribing | paused | finalizing
+  const [streamStatus, setStreamStatus] = useState('idle') // idle | connecting | listening | transcribing | paused | reconnecting | finalizing
+  const [streamError, setStreamError] = useState('')
+  const [isPreparing, setIsPreparing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
 
   const sseRef = useRef(null)
-  const transcriptContainerRef = useRef(null)
-  const userScrolledUpRef = useRef(false)
 
   // Polling de niveles de audio mientras se graba activamente
   useEffect(() => {
@@ -161,8 +162,8 @@ export default function RecordScreen({ onRecordingDone }) {
 
     setLiveSegments([])
     setPartialText('')
+    setStreamError('')
     setStreamStatus('connecting')
-    userScrolledUpRef.current = false
 
     const url = getLiveTranscriptionUrl(sid)
     const es = new EventSource(url)
@@ -170,6 +171,7 @@ export default function RecordScreen({ onRecordingDone }) {
 
     es.onopen = () => {
       setStreamStatus('listening')
+      setStreamError('')
     }
 
     es.onmessage = (event) => {
@@ -215,7 +217,7 @@ export default function RecordScreen({ onRecordingDone }) {
     }
 
     es.onerror = () => {
-      setStreamStatus((prev) => (prev === 'idle' ? 'idle' : 'connecting'))
+      setStreamStatus((prev) => (prev === 'idle' ? 'idle' : 'reconnecting'))
     }
   }, [])
 
@@ -229,28 +231,16 @@ export default function RecordScreen({ onRecordingDone }) {
     }
   }, [])
 
-  // Auto-scroll inteligente: solo baja automáticamente si el usuario no ha subido manualmente
-  const handleTranscriptScroll = () => {
-    const el = transcriptContainerRef.current
-    if (!el) return
-    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-    userScrolledUpRef.current = !isNearBottom
-  }
-
-  useEffect(() => {
-    if (!userScrolledUpRef.current && transcriptContainerRef.current) {
-      transcriptContainerRef.current.scrollTop = transcriptContainerRef.current.scrollHeight
-    }
-  }, [liveSegments, partialText])
-
   const handleStartStop = async () => {
-    if (isBackendOffline) return
+    if (isBackendOffline || isPreparing || isCancelling) return
     if (!isRecording) {
       // INICIAR GRABACIÓN
       try {
+        setIsPreparing(true)
         setIsRecording(true)
         setIsPaused(false)
         setSeconds(0)
+        setStreamError('')
 
         const res = await startRecording()
         audioPathRef.current = res.data.audio_path
@@ -261,8 +251,12 @@ export default function RecordScreen({ onRecordingDone }) {
       } catch (err) {
         setIsRecording(false)
         setIsPaused(false)
+        setStreamStatus('idle')
         const msg = err.response?.data?.detail || 'Error al iniciar la grabación'
+        setStreamError(msg)
         showToast({ type: 'error', message: msg })
+      } finally {
+        setIsPreparing(false)
       }
     } else {
       // DETENER GRABACIÓN
@@ -283,6 +277,7 @@ export default function RecordScreen({ onRecordingDone }) {
       } catch (err) {
         setIsRecording(false)
         setIsPaused(false)
+        setStreamStatus('idle')
         const msg = err.response?.data?.detail || 'Error al detener la grabación'
         showToast({ type: 'error', message: msg })
       }
@@ -290,7 +285,7 @@ export default function RecordScreen({ onRecordingDone }) {
   }
 
   const handleCancelRecording = async () => {
-    if (isBackendOffline || isCancelling) return
+    if (isBackendOffline || isCancelling || isPreparing) return
     try {
       setIsCancelling(true)
       if (sseRef.current) {
@@ -306,6 +301,7 @@ export default function RecordScreen({ onRecordingDone }) {
       audioPathRef.current = null
       setSessionId(null)
       setStreamStatus('idle')
+      setStreamError('')
       showToast({ type: 'info', message: 'Grabación y transcripción canceladas' })
     } catch (err) {
       console.error('Error al cancelar grabación:', err)
@@ -316,7 +312,7 @@ export default function RecordScreen({ onRecordingDone }) {
   }
 
   const handlePauseResume = async () => {
-    if (isBackendOffline) return
+    if (isBackendOffline || isCancelling || isPreparing) return
     if (isPaused) {
       try {
         setIsPaused(false)
@@ -348,10 +344,10 @@ export default function RecordScreen({ onRecordingDone }) {
     ) + (partialText ? partialText.split(/\s+/).filter(Boolean).length : 0)
 
   return (
-    <div className="record-screen" style={{ paddingTop: isRecording ? 40 : 80 }}>
+    <div className={`record-screen ${isRecording ? 'is-recording' : ''}`}>
       {/* Estado inactivo / Inicial */}
       {!isRecording && (
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
           <h1 className="record-title" style={{ fontSize: 36, marginBottom: 12 }}>Listo para grabar</h1>
           <p className="record-subtitle" style={{ margin: '0 auto', fontSize: 16 }}>
             Presiona el botón para iniciar la captura de audio y análisis automático con IA.
@@ -359,21 +355,21 @@ export default function RecordScreen({ onRecordingDone }) {
         </div>
       )}
 
-      {/* Tarjeta de Grabación Activa */}
+      {/* Monitor de Grabación Activa */}
       {isRecording && (
-        <div className="glass record-active-card">
+        <div className="glass record-active-card" role="region" aria-label="Monitor de grabación activa">
           <div style={{ textAlign: 'center' }}>
             <h1 className="record-title" style={{ fontSize: 24, color: isPaused ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
               {isPaused ? 'Grabación pausada' : 'Grabando reunión...'}
             </h1>
-            <p className="record-subtitle" style={{ margin: '8px auto 0', fontSize: 14 }}>
+            <p className="record-subtitle" style={{ margin: '6px auto 0', fontSize: 14 }}>
               {isPaused 
                 ? 'El audio no está siendo capturado. Haz clic en Reanudar para continuar.' 
-                : 'Capturando audio y transcribiendo en vivo.'}
+                : 'Capturando audio y transcribiendo en vivo con IA.'}
             </p>
           </div>
 
-          <div className={`waveform ${isPaused ? 'paused' : ''}`} style={{ marginTop: 12, marginBottom: 12 }}>
+          <div className={`waveform ${isPaused ? 'paused' : ''}`} style={{ marginTop: 6, marginBottom: 6 }} aria-hidden="true">
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 key={i}
@@ -388,7 +384,7 @@ export default function RecordScreen({ onRecordingDone }) {
             ))}
           </div>
 
-          <div className="timer big-digital" style={{ opacity: isPaused ? 0.5 : 1 }}>
+          <div className="timer big-digital" style={{ opacity: isPaused ? 0.5 : 1 }} aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
             {formatTime(seconds)}
           </div>
 
@@ -398,17 +394,17 @@ export default function RecordScreen({ onRecordingDone }) {
               display: 'flex', 
               justifyContent: 'center', 
               gap: 20, 
-              marginTop: 12, 
               padding: '6px 16px',
-              background: 'rgba(0,0,0,0.15)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-full)',
               width: 'fit-content',
-              margin: '12px auto 0'
-            }}>
+              margin: '0 auto'
+            }} aria-label="Niveles de audio en vivo">
               {/* Medidor de Micrófono */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span>🎤 Mic:</span>
-                <div style={{ width: 45, height: 4, background: 'var(--bg-elevated)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: 45, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ width: `${micLevel}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 80ms ease' }} />
                 </div>
               </div>
@@ -416,162 +412,131 @@ export default function RecordScreen({ onRecordingDone }) {
               {/* Medidor de Sistema */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span>🖥️ Sis:</span>
-                <div style={{ width: 45, height: 4, background: 'var(--bg-elevated)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: 45, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ width: `${sysLevel}%`, height: '100%', background: 'linear-gradient(90deg, #10B981, var(--accent-primary))', transition: 'width 80ms ease' }} />
                 </div>
               </div>
             </div>
           )}
+
+          {/* Controles de Grabación Integrados */}
+          <div style={{ display: 'flex', gap: 20, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handlePauseResume}
+              disabled={isBackendOffline || isCancelling || isPreparing}
+              style={{
+                borderRadius: 'var(--radius-full)',
+                width: 52,
+                height: 52,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 18,
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
+                transition: 'transform var(--transition-fast)',
+                opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1
+              }}
+              onMouseEnter={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1.05)')}
+              onMouseLeave={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1)')}
+              aria-label={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
+              title={isBackendOffline ? 'Sin conexión al backend' : (isPaused ? 'Reanudar grabación' : 'Pausar grabación')}
+            >
+              {isPaused ? '▶️' : '⏸️'}
+            </button>
+
+            <div className={`record-btn-wrapper recording ${isPaused ? 'paused' : ''} ${isBackendOffline ? 'offline' : ''}`}>
+              <button
+                type="button"
+                className="record-btn"
+                onClick={handleStartStop}
+                disabled={isBackendOffline || isCancelling || isPreparing}
+                style={{
+                  width: 80,
+                  height: 80,
+                  cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
+                  opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1,
+                  filter: isBackendOffline ? 'grayscale(1)' : 'none'
+                }}
+                aria-label="Detener y procesar reunión"
+                title={isBackendOffline ? 'Sin conexión al backend' : 'Detener grabación'}
+              >
+                <span className="btn-icon" style={{ fontSize: 28 }}>
+                  ⬛
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleCancelRecording}
+              disabled={isBackendOffline || isCancelling || isPreparing}
+              style={{
+                borderRadius: 'var(--radius-full)',
+                width: 52,
+                height: 52,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 18,
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#EF4444',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
+                transition: 'transform var(--transition-fast), background var(--transition-fast)',
+                opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1
+              }}
+              onMouseEnter={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1.05)')}
+              onMouseLeave={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1)')}
+              aria-label="Cancelar y descartar grabación"
+              title="Cancelar y descartar grabación"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Controles de Grabación */}
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center', justifyContent: 'center', marginTop: isRecording ? -20 : 0, zIndex: 10 }}>
-        {isRecording && (
+      {/* Botón Iniciar Grabación (Solo cuando NO está grabando) */}
+      {!isRecording && (
+        <div className={`record-btn-wrapper ${isBackendOffline ? 'offline' : ''}`}>
           <button
-            className="btn btn-secondary"
-            onClick={handlePauseResume}
-            disabled={isBackendOffline || isCancelling}
-            style={{
-              borderRadius: 'var(--radius-full)',
-              width: 56,
-              height: 56,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              boxShadow: 'var(--shadow-md)',
-              cursor: isBackendOffline || isCancelling ? 'not-allowed' : 'pointer',
-              transition: 'transform var(--transition-fast)',
-              opacity: isBackendOffline || isCancelling ? 0.5 : 1
-            }}
-            onMouseEnter={(e) => !isBackendOffline && !isCancelling && (e.currentTarget.style.transform = 'scale(1.05)')}
-            onMouseLeave={(e) => !isBackendOffline && !isCancelling && (e.currentTarget.style.transform = 'scale(1)')}
-            title={isBackendOffline ? 'Sin conexión al backend' : (isPaused ? 'Reanudar grabación' : 'Pausar grabación')}
-          >
-            {isPaused ? '▶️' : '⏸️'}
-          </button>
-        )}
-
-        <div className={`record-btn-wrapper ${isRecording ? 'recording' : ''} ${isPaused ? 'paused' : ''} ${isBackendOffline ? 'offline' : ''}`}>
-          <button
+            type="button"
             className="record-btn"
             onClick={handleStartStop}
-            disabled={isBackendOffline || isCancelling}
+            disabled={isBackendOffline || isPreparing}
             style={{
-              cursor: isBackendOffline || isCancelling ? 'not-allowed' : 'pointer',
-              opacity: isBackendOffline || isCancelling ? 0.5 : 1,
+              cursor: isBackendOffline || isPreparing ? 'not-allowed' : 'pointer',
+              opacity: isBackendOffline || isPreparing ? 0.5 : 1,
               filter: isBackendOffline ? 'grayscale(1)' : 'none'
             }}
-            title={isBackendOffline ? 'Sin conexión al backend' : (isRecording ? 'Detener grabación' : 'Iniciar grabación')}
+            aria-label={isPreparing ? 'Iniciando grabación...' : 'Iniciar grabación'}
+            title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación'}
           >
             <span className="btn-icon">
-              {isRecording ? '⬛' : '⏺'}
+              ⏺
             </span>
           </button>
         </div>
-
-        {/* Botón Cancelar Grabación */}
-        {isRecording && (
-          <button
-            className="btn btn-secondary"
-            onClick={handleCancelRecording}
-            disabled={isBackendOffline || isCancelling}
-            style={{
-              borderRadius: 'var(--radius-full)',
-              width: 56,
-              height: 56,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              background: 'rgba(239, 68, 68, 0.12)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#EF4444',
-              boxShadow: 'var(--shadow-md)',
-              cursor: isBackendOffline || isCancelling ? 'not-allowed' : 'pointer',
-              transition: 'transform var(--transition-fast), background var(--transition-fast)',
-              opacity: isBackendOffline || isCancelling ? 0.5 : 1
-            }}
-            onMouseEnter={(e) => !isBackendOffline && !isCancelling && (e.currentTarget.style.transform = 'scale(1.05)')}
-            onMouseLeave={(e) => !isBackendOffline && !isCancelling && (e.currentTarget.style.transform = 'scale(1)')}
-            title="Cancelar y descartar grabación"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Panel de Transcripción en Vivo (Visible mientras se graba) */}
       {isRecording && (
-        <div className="live-transcript-card">
-          <div className="live-transcript-header">
-            <div className="live-transcript-status">
-              <span
-                className={`live-status-dot ${
-                  streamStatus === 'transcribing'
-                    ? 'pulsing'
-                    : streamStatus === 'paused'
-                    ? 'paused'
-                    : streamStatus === 'listening'
-                    ? 'listening'
-                    : ''
-                }`}
-              />
-              <span>
-                {streamStatus === 'transcribing'
-                  ? 'Transcribiendo en vivo'
-                  : streamStatus === 'listening'
-                  ? 'Escuchando audio...'
-                  : streamStatus === 'paused'
-                  ? 'Pausado'
-                  : streamStatus === 'connecting'
-                  ? 'Conectando stream...'
-                  : streamStatus === 'finalizing'
-                  ? 'Finalizando...'
-                  : 'En vivo'}
-              </span>
-            </div>
-            <div className="live-transcript-badge">
-              📝 {totalWords} {totalWords === 1 ? 'palabra' : 'palabras'}
-            </div>
-          </div>
-
-          <div
-            ref={transcriptContainerRef}
-            onScroll={handleTranscriptScroll}
-            className="live-transcript-body"
-          >
-            {liveSegments.length === 0 && !partialText && (
-              <div className="live-transcript-empty">
-                🎙️ Habla con normalidad. La transcripción aparecerá aquí palabra por palabra en tiempo real...
-              </div>
-            )}
-
-            {liveSegments.map((seg, idx) => (
-              <div key={seg.seq || idx} className="live-segment-item">
-                <span className="live-segment-time">
-                  [{formatSegmentTime(seg.start)}]
-                </span>
-                <span className="live-segment-text">{seg.text}</span>
-              </div>
-            ))}
-
-            {partialText && (
-              <div className="live-segment-item">
-                <span className="live-segment-time">
-                  [{formatSegmentTime(seconds)}]
-                </span>
-                <span className="live-partial-text">
-                  {partialText}
-                  <span className="live-typing-caret" />
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        <LiveTranscriptPanel
+          liveSegments={liveSegments}
+          partialText={partialText}
+          streamStatus={streamStatus}
+          errorMessage={streamError}
+          totalWords={totalWords}
+          isPaused={isPaused}
+          formatSegmentTime={formatSegmentTime}
+        />
       )}
 
       {/* Carga de audio (Solo si no está grabando) */}
