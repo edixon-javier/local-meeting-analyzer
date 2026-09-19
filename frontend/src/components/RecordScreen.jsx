@@ -359,17 +359,25 @@ export default function RecordScreen({ onRecordingDone }) {
       {isRecording && (
         <div className="glass record-active-card" role="region" aria-label="Monitor de grabación activa">
           <div style={{ textAlign: 'center' }}>
-            <h1 className="record-title" style={{ fontSize: 24, color: isPaused ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-              {isPaused ? 'Grabación pausada' : 'Grabando reunión...'}
+            <h1 className="record-title" style={{ fontSize: 22, color: isPaused ? 'var(--text-secondary)' : 'var(--text-primary)', marginBottom: 2 }}>
+              {isPaused ? 'Grabación en pausa' : 'Grabando reunión...'}
             </h1>
-            <p className="record-subtitle" style={{ margin: '6px auto 0', fontSize: 14 }}>
+            <p className="record-subtitle" style={{ margin: '4px auto 0', fontSize: 13 }}>
               {isPaused 
-                ? 'El audio no está siendo capturado. Haz clic en Reanudar para continuar.' 
+                ? 'El audio está detenido. Haz clic en Reanudar para continuar capturando.' 
                 : 'Capturando audio y transcribiendo en vivo con IA.'}
             </p>
           </div>
 
-          <div className={`waveform ${isPaused ? 'paused' : ''}`} style={{ marginTop: 6, marginBottom: 6 }} aria-hidden="true">
+          {/* Banner visual de pausa */}
+          {isPaused && (
+            <div className="recording-paused-banner" role="status">
+              <span>⏸️</span>
+              <span>Grabación pausada — El micrófono no está capturando audio</span>
+            </div>
+          )}
+
+          <div className={`waveform ${isPaused ? 'paused' : ''}`} style={{ marginTop: 2, marginBottom: 2 }} aria-hidden="true">
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 key={i}
@@ -378,23 +386,24 @@ export default function RecordScreen({ onRecordingDone }) {
                   animationDelay: `${i * 0.1}s`,
                   animationPlayState: isPaused ? 'paused' : 'running',
                   opacity: isPaused ? 0.3 : 1,
-                  background: isPaused ? 'var(--text-muted)' : 'var(--accent-primary)'
+                  background: isPaused ? 'var(--text-muted)' : 'var(--accent-primary)',
+                  height: isPaused ? 12 : undefined
                 }}
               />
             ))}
           </div>
 
-          <div className="timer big-digital" style={{ opacity: isPaused ? 0.5 : 1 }} aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
+          <div className="timer big-digital" style={{ opacity: isPaused ? 0.6 : 1 }} aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
             {formatTime(seconds)}
           </div>
 
-          {/* Indicadores de volumen discretos */}
+          {/* Indicadores de volumen discretos (solo cuando no está pausado) */}
           {!isPaused && (
             <div style={{ 
               display: 'flex', 
               justifyContent: 'center', 
-              gap: 20, 
-              padding: '6px 16px',
+              gap: 16, 
+              padding: '4px 14px',
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-full)',
@@ -404,7 +413,7 @@ export default function RecordScreen({ onRecordingDone }) {
               {/* Medidor de Micrófono */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span>🎤 Mic:</span>
-                <div style={{ width: 45, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: 42, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ width: `${micLevel}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 80ms ease' }} />
                 </div>
               </div>
@@ -412,93 +421,94 @@ export default function RecordScreen({ onRecordingDone }) {
               {/* Medidor de Sistema */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
                 <span>🖥️ Sis:</span>
-                <div style={{ width: 45, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: 42, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{ width: `${sysLevel}%`, height: '100%', background: 'linear-gradient(90deg, #10B981, var(--accent-primary))', transition: 'width 80ms ease' }} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Controles de Grabación Integrados */}
-          <div style={{ display: 'flex', gap: 20, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handlePauseResume}
-              disabled={isBackendOffline || isCancelling || isPreparing}
-              style={{
-                borderRadius: 'var(--radius-full)',
-                width: 52,
-                height: 52,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 18,
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                boxShadow: 'var(--shadow-sm)',
-                cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
-                transition: 'transform var(--transition-fast)',
-                opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1
-              }}
-              onMouseEnter={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1.05)')}
-              onMouseLeave={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1)')}
-              aria-label={isPaused ? 'Reanudar grabación' : 'Pausar grabación'}
-              title={isBackendOffline ? 'Sin conexión al backend' : (isPaused ? 'Reanudar grabación' : 'Pausar grabación')}
-            >
-              {isPaused ? '▶️' : '⏸️'}
-            </button>
+          {/* Controles de Grabación Accesibles con Iconos y Texto */}
+          <div className="record-controls-row">
+            {isPaused ? (
+              /* ESTADO PAUSADO: El botón de Reanudar es la acción principal destacada */
+              <>
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-resume"
+                  onClick={handlePauseResume}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Reanudar grabación"
+                  title="Reanudar captura de audio de la reunión"
+                >
+                  <span style={{ fontSize: 15 }}>▶️</span>
+                  <span>Reanudar Grabación</span>
+                </button>
 
-            <div className={`record-btn-wrapper recording ${isPaused ? 'paused' : ''} ${isBackendOffline ? 'offline' : ''}`}>
-              <button
-                type="button"
-                className="record-btn"
-                onClick={handleStartStop}
-                disabled={isBackendOffline || isCancelling || isPreparing}
-                style={{
-                  width: 80,
-                  height: 80,
-                  cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
-                  opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1,
-                  filter: isBackendOffline ? 'grayscale(1)' : 'none'
-                }}
-                aria-label="Detener y procesar reunión"
-                title={isBackendOffline ? 'Sin conexión al backend' : 'Detener grabación'}
-              >
-                <span className="btn-icon" style={{ fontSize: 28 }}>
-                  ⬛
-                </span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-stop"
+                  onClick={handleStartStop}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Finalizar y procesar reunión"
+                  title="Detener y enviar a análisis con IA"
+                >
+                  <span style={{ fontSize: 13 }}>⏹</span>
+                  <span>Finalizar</span>
+                </button>
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleCancelRecording}
-              disabled={isBackendOffline || isCancelling || isPreparing}
-              style={{
-                borderRadius: 'var(--radius-full)',
-                width: 52,
-                height: 52,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 18,
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#EF4444',
-                boxShadow: 'var(--shadow-sm)',
-                cursor: isBackendOffline || isCancelling || isPreparing ? 'not-allowed' : 'pointer',
-                transition: 'transform var(--transition-fast), background var(--transition-fast)',
-                opacity: isBackendOffline || isCancelling || isPreparing ? 0.5 : 1
-              }}
-              onMouseEnter={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1.05)')}
-              onMouseLeave={(e) => !isBackendOffline && !isCancelling && !isPreparing && (e.currentTarget.style.transform = 'scale(1)')}
-              aria-label="Cancelar y descartar grabación"
-              title="Cancelar y descartar grabación"
-            >
-              ✕
-            </button>
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-cancel"
+                  onClick={handleCancelRecording}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Descartar grabación"
+                  title="Descartar grabación sin guardar"
+                >
+                  <span>✕</span>
+                  <span>Descartar</span>
+                </button>
+              </>
+            ) : (
+              /* ESTADO GRABANDO: Opciones claras para Pausar, Finalizar o Descartar */
+              <>
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-pause"
+                  onClick={handlePauseResume}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Pausar grabación"
+                  title="Pausar grabación temporalmente"
+                >
+                  <span style={{ fontSize: 15 }}>⏸️</span>
+                  <span>Pausar</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-stop"
+                  onClick={handleStartStop}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Finalizar y procesar reunión"
+                  title="Detener reunión y generar análisis con IA"
+                >
+                  <span style={{ fontSize: 13 }}>⏹</span>
+                  <span>Finalizar</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="record-ctrl-btn btn-cancel"
+                  onClick={handleCancelRecording}
+                  disabled={isBackendOffline || isCancelling || isPreparing}
+                  aria-label="Descartar grabación"
+                  title="Descartar grabación sin guardar"
+                >
+                  <span>✕</span>
+                  <span>Descartar</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
