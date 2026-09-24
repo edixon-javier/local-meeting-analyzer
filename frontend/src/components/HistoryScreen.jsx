@@ -208,7 +208,7 @@ export default function HistoryScreen({ onNavigate }) {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ overflow: 'hidden', paddingRight: 40 }}>
+                  <div style={{ overflow: 'hidden', paddingRight: 140 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.[^/.]+$/, '')}>
                       {rec.filename.replace(/\.[^/.]+$/, '')}
                     </h3>

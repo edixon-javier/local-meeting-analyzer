@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { updateConfig } from '../api'
 import { useSystem } from '../context/SystemContext'
 import { useRecordings } from '../context/RecordingsContext'
+import logoImg from '../assets/icon.jpg'
 
 export default function Sidebar({ currentView, onNavigate }) {
   const { systemStatus, showToast, isBackendOffline } = useSystem()
@@ -59,7 +60,7 @@ export default function Sidebar({ currentView, onNavigate }) {
       <div className="sidebar-header">
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">🎙️</div>
+          <img src={logoImg} alt="MeetingAI" className="sidebar-logo-icon" style={{ objectFit: 'cover' }} />
           <div>
             <div className="sidebar-logo-text">MeetingAI</div>
             <div className="sidebar-logo-sub">

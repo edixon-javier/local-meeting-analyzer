@@ -78,33 +78,123 @@ class TranscriptionService(ITranscriber):
         if not self.openai_client:
             raise RuntimeError("El cliente de OpenAI no está configurado (API Key faltante).")
         
-        global _transcription_progress
-        with open(audio_path, "rb") as audio_file:
-            response = self.openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                response_format="verbose_json",
-                language=language
-            )
+        import os
+        import subprocess
+        import tempfile
+        import glob
         
-        _transcription_progress = 100.0
-        text = response.text
-        segments = []
-        if hasattr(response, "segments") and response.segments:
-            for seg in response.segments:
-                segments.append({
-                    "start": seg.start,
-                    "end": seg.end,
-                    "text": seg.text.strip()
-                })
-        else:
-            segments = [{"start": 0.0, "end": 0.0, "text": text}]
+        file_size = os.path.getsize(audio_path)
+        MAX_SIZE = 24 * 1024 * 1024  # 24 MB
+        
+        global _transcription_progress
+        
+        if file_size <= MAX_SIZE:
+            with open(audio_path, "rb") as audio_file:
+                response = self.openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json",
+                    language=language
+                )
             
-        return {
-            "text": text,
-            "segments": segments,
-            "language": getattr(response, "language", language or "es")
-        }
+            _transcription_progress = 100.0
+            text = response.text
+            segments = []
+            if hasattr(response, "segments") and response.segments:
+                for seg in response.segments:
+                    segments.append({
+                        "start": seg.start,
+                        "end": seg.end,
+                        "text": seg.text.strip()
+                    })
+            else:
+                segments = [{"start": 0.0, "end": 0.0, "text": text}]
+                
+            return {
+                "text": text,
+                "segments": segments,
+                "language": getattr(response, "language", language or "es")
+            }
+            
+        # Chunking para archivos largos
+        print(f"[TranscriptionService] Archivo de {file_size/1024/1024:.2f}MB supera el límite de OpenAI. Dividiendo en chunks...")
+        from services.audio_service import _get_ffmpeg_path
+        ffmpeg_path = _get_ffmpeg_path()
+        
+        temp_dir = tempfile.mkdtemp()
+        chunk_pattern = os.path.join(temp_dir, "chunk_%03d.mp3")
+        
+        # 1200 segundos (20 min). A 64kbps, ~9.6 MB
+        cmd = [
+            ffmpeg_path, "-y", "-i", audio_path, 
+            "-f", "segment", "-segment_time", "1200", 
+            "-c", "copy", chunk_pattern
+        ]
+        
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            chunks = sorted(glob.glob(os.path.join(temp_dir, "chunk_*.mp3")))
+            
+            full_text = ""
+            all_segments = []
+            time_offset = 0.0
+            last_lang = language or "es"
+            
+            for i, chunk_path in enumerate(chunks):
+                _transcription_progress = (i / len(chunks)) * 100.0
+                print(f"[TranscriptionService] Transcribiendo chunk {i+1}/{len(chunks)}...")
+                
+                with open(chunk_path, "rb") as audio_file:
+                    response = self.openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="verbose_json",
+                        language=language
+                    )
+                
+                chunk_text = response.text
+                full_text += chunk_text + " "
+                chunk_duration = getattr(response, "duration", None)
+                last_lang = getattr(response, "language", last_lang)
+                
+                if hasattr(response, "segments") and response.segments:
+                    for seg in response.segments:
+                        all_segments.append({
+                            "start": seg.start + time_offset,
+                            "end": seg.end + time_offset,
+                            "text": seg.text.strip()
+                        })
+                    if chunk_duration is None:
+                        chunk_duration = response.segments[-1].end
+                else:
+                    if chunk_duration is None:
+                        chunk_duration = 1200.0
+                    all_segments.append({
+                        "start": time_offset,
+                        "end": time_offset + chunk_duration,
+                        "text": chunk_text.strip()
+                    })
+                    
+                time_offset += chunk_duration
+                
+                try:
+                    os.remove(chunk_path)
+                except Exception:
+                    pass
+                    
+            _transcription_progress = 100.0
+            return {
+                "text": full_text.strip(),
+                "segments": all_segments,
+                "language": last_lang
+            }
+        finally:
+            # Limpiar directorio temporal
+            for f in glob.glob(os.path.join(temp_dir, "chunk_*.mp3")):
+                try: os.remove(f)
+                except: pass
+            try: os.rmdir(temp_dir)
+            except: pass
 
     def _transcribe_local(self, audio_path: str, language: Optional[str]) -> Dict[str, Any]:
         global _transcription_progress

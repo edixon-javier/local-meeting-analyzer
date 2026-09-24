@@ -53,37 +53,67 @@ export function useAnalysisPipeline(audioPath, onToast) {
       setProgressPercent(95)
     } else if (step === 'done') {
       setProgressPercent(100)
+    } else if (step === 'processing_busy') {
+      let simulatedTick = progressPercent || 10
+      progressInterval = setInterval(async () => {
+        try {
+          const res = await getStatus()
+          if (!res.data.processing) {
+            checkCacheAndRun(audioPath, true)
+          } else {
+            const backendProgress = res.data?.transcription_progress
+            if (backendProgress && backendProgress > 0) {
+              setProgressPercent(Math.round(backendProgress))
+            } else {
+              simulatedTick = Math.min(95, simulatedTick + (simulatedTick < 60 ? 5 : 1))
+              setProgressPercent(simulatedTick)
+            }
+          }
+        } catch {
+          // Ignorar fallo de red temporal
+        }
+      }, 3000)
     }
     return () => {
       if (progressInterval) clearInterval(progressInterval)
     }
-  }, [step])
+  }, [step, audioPath]) // eliminamos checkCacheAndRun de las dependencias directas para evitar warnings si no está memorizada arriba, o podemos confiar en useCallback.
 
-  const runPipeline = useCallback(async (path, active) => {
+  const runPipeline = useCallback(async (path, active, cachedMeta = null) => {
     try {
       const configRes = await getConfig()
       if (isCancelledRef.current || !active) return
       const cfg = configRes.data
       const doDiarize = cfg.diarize || false
 
-      setStep('transcribing')
       let text = ''
       let segs = []
-      try {
-        const transcribeRes = await transcribeAudio(path, null, doDiarize)
-        if (isCancelledRef.current || !active || transcribeRes.data?.status === 'cancelled') return
-        text = transcribeRes.data.text
-        segs = transcribeRes.data.segments || []
+
+      // Reanudación: Si ya existe un transcript parcial guardado, nos saltamos la transcripción
+      if (cachedMeta && cachedMeta.transcript && cachedMeta.transcript.trim() !== '') {
+        text = cachedMeta.transcript
+        segs = cachedMeta.segments || []
         setTranscript(text)
         setSegments(segs)
-      } catch (err) {
-        if (isCancelledRef.current || !active) return
-        if (err.response?.status === 400 && 
-           (err.response.data?.detail?.includes('curso') || err.response.data?.detail?.includes('proceso'))) {
-          setStep('processing_busy')
-          return
+        onToastRef.current?.({ type: 'info', message: 'Reanudando desde transcripción previa...' })
+      } else {
+        setStep('transcribing')
+        try {
+          const transcribeRes = await transcribeAudio(path, null, doDiarize)
+          if (isCancelledRef.current || !active || transcribeRes.data?.status === 'cancelled') return
+          text = transcribeRes.data.text
+          segs = transcribeRes.data.segments || []
+          setTranscript(text)
+          setSegments(segs)
+        } catch (err) {
+          if (isCancelledRef.current || !active) return
+          if (err.response?.status === 400 && 
+             (err.response.data?.detail?.includes('curso') || err.response.data?.detail?.includes('proceso'))) {
+            setStep('processing_busy')
+            return
+          }
+          throw err
         }
-        throw err
       }
 
       setStep('analyzing')
@@ -117,18 +147,19 @@ export function useAnalysisPipeline(audioPath, onToast) {
 
     try {
       setStep('loading')
+      let cachedMeta = null
       if (!forceFresh) {
         try {
           const cacheRes = await getRecordingMetadata(path)
           if (!active) return
           if (cacheRes.data && cacheRes.data.exists !== false) {
-            const meta = cacheRes.data
-            const isErrorAnalysis = meta.analysis?.category === 'Error' || (meta.analysis?.summary && meta.analysis.summary[0]?.includes('Error durante'))
-            // Si el análisis previo no fue un error, cargar de caché
-            if (!isErrorAnalysis && meta.analysis) {
-              setTranscript(meta.transcript || '')
-              setSegments(meta.segments || [])
-              setAnalysis(meta.analysis)
+            cachedMeta = cacheRes.data
+            const isErrorAnalysis = cachedMeta.analysis?.category === 'Error' || (cachedMeta.analysis?.summary && cachedMeta.analysis.summary[0]?.includes('Error durante'))
+            // Si el análisis existe y no es de error, terminamos aquí
+            if (!isErrorAnalysis && cachedMeta.analysis) {
+              setTranscript(cachedMeta.transcript || '')
+              setSegments(cachedMeta.segments || [])
+              setAnalysis(cachedMeta.analysis)
               setStep('done')
               onToastRef.current?.({ type: 'success', message: '⚡ Metadatos cargados desde caché local' })
               return
@@ -148,7 +179,7 @@ export function useAnalysisPipeline(audioPath, onToast) {
         return
       }
 
-      runPipeline(path, active)
+      runPipeline(path, active, cachedMeta)
     } catch (err) {
       if (isCancelledRef.current || !active) return
       setStep('error')

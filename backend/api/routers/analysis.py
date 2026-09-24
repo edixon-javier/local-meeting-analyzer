@@ -253,6 +253,17 @@ def transcribe_audio(
         else:
             session.set_transcript(result["text"])
             
+        # Guardar metadatos parciales para permitir reanudación si se corta la conexión
+        from api.routers.history import get_metadata_repo
+        repo = get_metadata_repo()
+        repo.save_meeting_metadata(
+            audio_path=request.audio_path,
+            transcript=session.get_transcript(),
+            analysis=None,
+            language=result["language"],
+            segments=segments
+        )
+            
         session.set_processing(False)
         return {
             "status": "done",

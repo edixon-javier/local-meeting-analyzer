@@ -3,40 +3,45 @@
    Premium Dark Mode, Slate + Indigo/Violet accents
    ═══════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ─── CSS Variables ─── */
 :root {
-  /* Background layers */
-  --bg-base: #F8FAFC;
-  --bg-surface: #FFFFFF;
-  --bg-elevated: #F1F5F9;
-  --bg-hover: #E2E8F0;
+  /* Background layers (Deep Slate) */
+  --bg-base: #090E17;
+  --bg-surface: #111827;
+  --bg-elevated: #1F2937;
+  --bg-hover: #1E293B;
 
   /* Borders */
-  --border-subtle: #E2E8F0;
-  --border-default: #CBD5E1;
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.1);
 
   /* Brand */
   --accent-primary: #6366F1;
-  --accent-primary-hover: #4F46E5;
-  --accent-primary-glow: rgba(99, 102, 241, 0.1);
+  --accent-primary-hover: #818CF8;
+  --accent-primary-glow: rgba(99, 102, 241, 0.15);
   --accent-violet: #8B5CF6;
-  --accent-violet-glow: rgba(139, 92, 246, 0.1);
+  --accent-violet-glow: rgba(139, 92, 246, 0.15);
 
   /* Status */
-  --red-record: #EF4444;
-  --red-glow: rgba(239, 68, 68, 0.2);
-  --red-pulse: rgba(239, 68, 68, 0.08);
-  --green-ok: #10B981;
-  --green-glow: rgba(16, 185, 129, 0.15);
-  --yellow-warn: #D97706;
+  --red-record: #F87171;
+  --red-glow: rgba(248, 113, 113, 0.2);
+  --red-pulse: rgba(248, 113, 113, 0.08);
+  --green-ok: #34D399;
+  --green-glow: rgba(52, 211, 153, 0.15);
+  --yellow-warn: #FBBF24;
 
   /* Text */
-  --text-primary: #1E293B;
-  --text-secondary: #475569;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
   --text-muted: #64748B;
-  --text-accent: #4F46E5;
+  --text-accent: #818CF8;
+
+  /* Typography */
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   /* Misc */
   --radius-sm: 6px;
@@ -45,11 +50,11 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  --shadow-sm: 0 2px 8px rgba(31, 38, 135, 0.02);
-  --shadow-md: 0 8px 24px rgba(31, 38, 135, 0.04);
-  --shadow-lg: 0 12px 32px rgba(31, 38, 135, 0.06);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
   --shadow-glow-indigo: 0 0 24px rgba(99, 102, 241, 0.15);
-  --shadow-glow-red: 0 0 32px rgba(239, 68, 68, 0.25);
+  --shadow-glow-red: 0 0 32px rgba(248, 113, 113, 0.25);
 
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;

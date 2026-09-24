@@ -27,7 +27,7 @@ const updateNetworkStatus = (offline) => {
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 300000, // 5 min para transcripciones largas
+  timeout: 0, // Sin timeout para procesamientos muy largos
 })
 
 // Interceptor de Peticiones: Circuit Breaker

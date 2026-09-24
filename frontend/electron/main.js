@@ -10,7 +10,7 @@ let pythonProcess
 let tray = null
 let isQuitting = false
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+const isDev = process.env.NODE_ENV === 'development'
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -46,11 +46,33 @@ function createWindow() {
 }
 
 function startPythonBackend() {
-  if (!isDev) {
-    const pythonPath = path.join(process.resourcesPath, 'backend', 'main.exe')
-    pythonProcess = spawn(pythonPath, [], { detached: false })
-    pythonProcess.stdout.on('data', (data) => console.log('[Python]', data.toString()))
-    pythonProcess.stderr.on('data', (data) => console.error('[Python ERR]', data.toString()))
+  if (process.env.EXTERNAL_BACKEND === 'true') {
+    console.log('[Electron] Usando backend externo (start_dev.bat)');
+    return;
+  }
+
+  let pythonExecutable;
+  let args = [];
+
+  if (app.isPackaged) {
+    pythonExecutable = path.join(process.resourcesPath, 'backend', 'main.exe');
+  } else {
+    pythonExecutable = path.join(__dirname, '../../backend/venv/Scripts/python.exe');
+    args = [path.join(__dirname, '../../backend/main.py')];
+  }
+
+  try {
+    // windowsHide: true evita que se abra una ventana cmd visible
+    pythonProcess = spawn(pythonExecutable, args, { detached: false, windowsHide: true });
+    
+    pythonProcess.stdout.on('data', (data) => console.log('[Python]', data.toString()));
+    pythonProcess.stderr.on('data', (data) => console.error('[Python ERR]', data.toString()));
+    
+    pythonProcess.on('error', (err) => {
+      console.error('[Electron] Error al intentar iniciar el backend Python:', err);
+    });
+  } catch (e) {
+    console.error('[Electron] Excepción al lanzar backend Python:', e);
   }
 }
 

@@ -2,6 +2,8 @@
 // Barra de título personalizada para ventana sin bordes (frameless).
 // La zona de drag permite mover la ventana.
 
+import logoImg from '../assets/icon.jpg'
+
 export default function TitleBar({ currentView }) {
   const viewLabels = {
     record: 'Grabación',
@@ -16,7 +18,8 @@ export default function TitleBar({ currentView }) {
 
   return (
     <div className="title-bar">
-      <span className="title-bar-title">
+      <span className="title-bar-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <img src={logoImg} alt="Logo" style={{ width: 14, height: 14, borderRadius: '2px', objectFit: 'cover' }} />
         Local Meeting Analyzer — {viewLabels[currentView] || ''}
       </span>
       <div className="title-bar-controls">
