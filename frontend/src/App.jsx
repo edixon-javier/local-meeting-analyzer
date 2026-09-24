@@ -16,6 +16,8 @@ import { startRecording, stopRecording } from './api'
 import { SystemProvider, useSystem } from './context/SystemContext'
 import { RecordingsProvider } from './context/RecordingsContext'
 import OfflineOverlay from './components/OfflineOverlay'
+import ErrorBoundary from './components/ErrorBoundary'
+import logoImg from './assets/icon.jpg'
 import './index.css'
 
 // Componente intermedio para poder usar useSystem() para atajos
@@ -80,7 +82,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
 
         {view === 'analysis' && !audioPath && (
           <div className="empty-state" style={{ flex: 1 }}>
-            <div className="empty-state-icon">🎙️</div>
+            <img src={logoImg} alt="Empty" className="empty-state-icon" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', opacity: 0.6 }} />
             <div className="empty-state-title">Sin grabación</div>
             <div className="empty-state-sub">Primero graba una reunión para poder analizarla.</div>
             <button className="btn btn-primary" onClick={() => setView('record')}>
@@ -142,14 +144,16 @@ export default function App() {
           {/* Barra de título personalizada (frameless) */}
           <TitleBar currentView={view} />
 
-          <AppContent 
-            view={view} 
-            setView={setView}
-            audioPath={audioPath}
-            setAudioPath={setAudioPath}
-            handleRecordingDone={handleRecordingDone}
-            handleNavigate={handleNavigate}
-          />
+          <ErrorBoundary>
+            <AppContent 
+              view={view} 
+              setView={setView}
+              audioPath={audioPath}
+              setAudioPath={setAudioPath}
+              handleRecordingDone={handleRecordingDone}
+              handleNavigate={handleNavigate}
+            />
+          </ErrorBoundary>
 
           {/* Barra de estado inferior */}
           <StatusBar />

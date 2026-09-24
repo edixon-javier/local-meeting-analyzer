@@ -29,12 +29,15 @@ export default function RecordScreen({ onRecordingDone }) {
 
   // Estados de Transcripción en Vivo (Live Transcription SSE)
   const [_sessionId, setSessionId] = useState(null)
+  const sessionIdRef = useRef(null)
   const [liveSegments, setLiveSegments] = useState([])
   const [partialText, setPartialText] = useState('')
   const [streamStatus, setStreamStatus] = useState('idle') // idle | connecting | listening | transcribing | paused | reconnecting | finalizing
   const [streamError, setStreamError] = useState('')
   const [isPreparing, setIsPreparing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
+  
+  const [isLiveTranscriptionEnabled, setIsLiveTranscriptionEnabled] = useState(false)
 
   const sseRef = useRef(null)
 
@@ -246,8 +249,11 @@ export default function RecordScreen({ onRecordingDone }) {
         audioPathRef.current = res.data.audio_path
         const sid = res.data.session_id
         setSessionId(sid)
-        connectLiveSse(sid)
-        showToast({ type: 'success', message: '🎙️ Grabación y transcripción en vivo iniciadas' })
+        sessionIdRef.current = sid
+        if (isLiveTranscriptionEnabled) {
+          connectLiveSse(sid)
+        }
+        showToast({ type: 'success', message: '🎙️ Grabación iniciada' })
       } catch (err) {
         setIsRecording(false)
         setIsPaused(false)
@@ -300,6 +306,7 @@ export default function RecordScreen({ onRecordingDone }) {
       setSeconds(0)
       audioPathRef.current = null
       setSessionId(null)
+      sessionIdRef.current = null
       setStreamStatus('idle')
       setStreamError('')
       showToast({ type: 'info', message: 'Grabación y transcripción canceladas' })
@@ -352,6 +359,16 @@ export default function RecordScreen({ onRecordingDone }) {
           <p className="record-subtitle" style={{ margin: '0 auto', fontSize: 16 }}>
             Presiona el botón para iniciar la captura de audio y análisis automático con IA.
           </p>
+          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)' }}>
+              <input 
+                type="checkbox" 
+                checked={isLiveTranscriptionEnabled} 
+                onChange={(e) => setIsLiveTranscriptionEnabled(e.target.checked)} 
+              />
+              Transcripción en tiempo real
+            </label>
+          </div>
         </div>
       )}
 
@@ -427,6 +444,27 @@ export default function RecordScreen({ onRecordingDone }) {
               </div>
             </div>
           )}
+
+          {/* Toggle de Traducción en Tiempo Real durante grabación */}
+          <div style={{ marginTop: 20, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '6px 14px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
+              <input 
+                type="checkbox" 
+                checked={isLiveTranscriptionEnabled} 
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setIsLiveTranscriptionEnabled(enabled);
+                  if (enabled && sessionIdRef.current) {
+                    connectLiveSse(sessionIdRef.current);
+                  } else if (!enabled && sseRef.current) {
+                    sseRef.current.close();
+                    sseRef.current = null;
+                  }
+                }} 
+              />
+              Transcripción en tiempo real
+            </label>
+          </div>
 
           {/* Controles de Grabación Accesibles con Iconos y Texto */}
           <div className="record-controls-row">
@@ -524,20 +562,27 @@ export default function RecordScreen({ onRecordingDone }) {
             style={{
               cursor: isBackendOffline || isPreparing ? 'not-allowed' : 'pointer',
               opacity: isBackendOffline || isPreparing ? 0.5 : 1,
-              filter: isBackendOffline ? 'grayscale(1)' : 'none'
+              filter: isBackendOffline ? 'grayscale(1)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
             aria-label={isPreparing ? 'Iniciando grabación...' : 'Iniciar grabación'}
             title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación'}
           >
-            <span className="btn-icon">
-              ⏺
-            </span>
+            {isPreparing ? (
+              <div className="spinner-small" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff', width: 24, height: 24, borderWidth: 3 }}></div>
+            ) : (
+              <span className="btn-icon">
+                ⏺
+              </span>
+            )}
           </button>
         </div>
       )}
 
-      {/* Panel de Transcripción en Vivo (Visible mientras se graba) */}
-      {isRecording && (
+      {/* Panel de Transcripción en Vivo (Visible mientras se graba y está habilitado) */}
+      {isRecording && isLiveTranscriptionEnabled && (
         <LiveTranscriptPanel
           liveSegments={liveSegments}
           partialText={partialText}
