@@ -1,12 +1,25 @@
-name: Build/Release Electron App
+name: Build/Release Windows
 
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '22'
+  # Build LGPL estático de FFmpeg (BtbN). Solo se usa para codificar MP3 y convertir audio.
+  FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
   build:
@@ -14,36 +27,128 @@ jobs:
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+      - name: Verificar que el tag coincide con la versión de la app
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $pkgVersion = (Get-Content frontend/package.json -Raw | ConvertFrom-Json).version
+          $tagVersion = "${{ github.ref_name }}".TrimStart('v')
+          if ($pkgVersion -ne $tagVersion) {
+            throw "El tag ($tagVersion) no coincide con frontend/package.json ($pkgVersion)"
+          }
 
       - name: Install Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-build.txt
+
+      - name: Crear venv e instalar dependencias del backend
+        shell: pwsh
+        run: |
+          python -m venv backend/venv
+          backend/venv/Scripts/python -m pip install --upgrade pip
+          backend/venv/Scripts/python -m pip install -r backend/requirements-build.txt
+
+      - name: Pruebas del backend (unittest)
+        working-directory: backend
+        shell: pwsh
+        run: venv/Scripts/python -m unittest discover -s tests -v
+
+      - name: Descargar FFmpeg (build LGPL)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp -Force
+          $exe = Get-ChildItem ffmpeg-tmp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $exe.FullName bin/ffmpeg.exe -Force
+          $buildconf = (& bin/ffmpeg.exe -hide_banner -buildconf) -join "`n"
+          if ($buildconf -match 'enable-gpl|enable-nonfree') {
+            throw 'El build de FFmpeg descargado no es LGPL'
+          }
+          # La app codifica MP3 (audio_service.py): se requiere libmp3lame
+          $encoders = (& bin/ffmpeg.exe -hide_banner -encoders) -join "`n"
+          if ($encoders -notmatch 'libmp3lame') {
+            throw 'El build de FFmpeg descargado no incluye libmp3lame'
+          }
+          & bin/ffmpeg.exe -hide_banner -version | Select-Object -First 1
+          Remove-Item ffmpeg.zip, ffmpeg-tmp -Recurse -Force
+
+      - name: Congelar backend (PyInstaller)
+        run: node scripts/build-backend.js
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Frontend Dependencies
         working-directory: ./frontend
         run: npm ci
 
-      - name: Build React App
+      - name: Lint del frontend (oxlint)
         working-directory: ./frontend
-        run: npm run build
+        run: npm run lint
 
-      - name: Build Electron App (Windows)
+      - name: Pruebas del frontend (vitest)
         working-directory: ./frontend
-        run: npx electron-builder --win -c.extraMetadata.main=electron/main.js
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm test
+
+      - name: Empaquetar app (NSIS + AppX)
+        working-directory: ./frontend
+        shell: pwsh
+        # owner/repo se toman del repositorio real para que el auto-update apunte a sus Releases
+        run: |
+          npm run build
+          npx electron-builder --win --x64 --publish never `
+            "-c.publish.owner=${{ github.repository_owner }}" `
+            "-c.publish.repo=${{ github.event.repository.name }}"
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: windows-executable
-          path: frontend/dist-electron/*.exe
+          name: windows-installers
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            frontend/dist-electron/*.exe
+            frontend/dist-electron/*.exe.blockmap
+            frontend/dist-electron/*.appx
+            frontend/dist-electron/latest.yml
+
+  release:
+    # Publica el instalador NSIS + latest.yml en un borrador de GitHub Release.
+    # El paquete .appx se sube a mano a Partner Center (ver docs/DISTRIBUCION.md).
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Descargar artefactos
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installers
+          path: dist
+
+      - name: Publicar borrador de GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            gh release create "$TAG" --repo "$REPO" --draft --title "$TAG" \
+              --notes "Instalador para Windows 10/11 (x64). El análisis 100% local requiere Ollama (https://ollama.com)."
+          fi
+          gh release upload "$TAG" --repo "$REPO" --clobber \
+            dist/*.exe dist/*.exe.blockmap dist/latest.yml

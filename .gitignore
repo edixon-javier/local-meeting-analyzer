@@ -9,6 +9,11 @@ backend/recordings/
 *.pyd
 .Python
 *.egg-info/
+backend/logs/
+
+# Builds de distribución (PyInstaller / electron-builder)
+backend/build/
+backend/dist/
 
 # Node / Electron
 frontend/node_modules/

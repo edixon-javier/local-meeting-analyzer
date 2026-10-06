@@ -6,6 +6,8 @@ import json
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
+from core.paths import get_recordings_dir
 
 from fastapi.testclient import TestClient
 from main import app
@@ -73,7 +75,7 @@ class TestSpeakerRename(unittest.TestCase):
         self.assertIn("Carlos Mendoza: Todo en orden por aquí.", reloaded["transcript"])
 
     def test_api_rename_speaker_endpoint(self):
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        recordings_dir = get_recordings_dir()
         os.makedirs(recordings_dir, exist_ok=True)
 
         test_audio_name = "test_rename_speaker_api.wav"

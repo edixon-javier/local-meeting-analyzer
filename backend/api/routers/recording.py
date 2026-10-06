@@ -8,6 +8,7 @@ import asyncio
 import json
 
 from core.config import Config
+from core.paths import get_recordings_dir
 from domain.interfaces import IAudioCapture
 from services.session_manager import SessionManager
 from services.live_transcription_service import live_transcription_service, LiveTranscriptionService
@@ -32,7 +33,7 @@ def start_recording(
         raise HTTPException(status_code=400, detail="Ya hay una grabación en curso.")
 
     try:
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "recordings")
+        recordings_dir = get_recordings_dir()
         record_mode = config.get("record_mode", "both")
         mic_device_id = config.get("mic_device_id", "default")
 
@@ -284,7 +285,7 @@ def start_test(
         raise HTTPException(status_code=400, detail="Ya hay una prueba de audio en curso.")
 
     try:
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "recordings")
+        recordings_dir = get_recordings_dir()
         record_mode = config.get("record_mode", "both")
         mic_device_id = config.get("mic_device_id", "default")
 

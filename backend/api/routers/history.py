@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from domain.interfaces import IMetadataRepository
 from services.metadata_repository import MetadataRepository
+from core.paths import get_recordings_dir
 
 
 router = APIRouter()
@@ -35,7 +36,7 @@ def _get_json_path(audio_path: str) -> str:
     return base_path + ".json"
 
 def _get_recordings_dir() -> str:
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "recordings")
+    return get_recordings_dir()
 
 def _is_safe_recording_path(path: str) -> bool:
     try:

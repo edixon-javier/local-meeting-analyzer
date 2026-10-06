@@ -57,15 +57,9 @@ _apply_soundcard_hotfix()
 # ---------------------------------------------------
 
 def _get_ffmpeg_path() -> str:
-    if getattr(sys, "frozen", False):
-        exe_dir = os.path.dirname(sys.executable)
-        root_dir = os.path.dirname(exe_dir) if os.path.basename(exe_dir).lower() == "backend" else exe_dir
-    else:
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    local_ffmpeg = os.path.join(root_dir, "bin", "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
-    if os.path.exists(local_ffmpeg):
-        return local_ffmpeg
-    return "ffmpeg"
+    # Delegado a core.paths (bin/ empaquetado, MEETING_ANALYZER_BIN_DIR o PATH)
+    from core.paths import get_ffmpeg_path
+    return get_ffmpeg_path()
 
 SAMPLE_RATE = 48000
 DTYPE = "float32"

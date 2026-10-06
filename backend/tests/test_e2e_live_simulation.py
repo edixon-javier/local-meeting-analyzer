@@ -6,6 +6,7 @@ import numpy as np
 import asyncio
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
 
 from services.live_transcription_service import LiveTranscriptionService, SAMPLE_RATE
 from faster_whisper.audio import decode_audio

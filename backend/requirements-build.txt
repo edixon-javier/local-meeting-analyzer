@@ -1,0 +1,4 @@
+# Dependencias solo de build (no se empaquetan en la app).
+# Uso: venv\Scripts\pip install -r requirements-build.txt
+-r requirements.txt
+pyinstaller>=6.16,<7

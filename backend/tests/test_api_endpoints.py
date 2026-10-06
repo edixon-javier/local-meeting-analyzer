@@ -7,11 +7,14 @@ import json
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
+from core.paths import get_recordings_dir
 
 from fastapi.testclient import TestClient
 from main import app
 from core.config import system_config
 from services.session_manager import session_manager
+from api.routers.system import _analyzer_instance
 
 
 class TestApiEndpoints(unittest.TestCase):
@@ -67,7 +70,7 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertFalse(session_manager.is_processing())
 
     def test_upload_and_list_recording(self):
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        recordings_dir = get_recordings_dir()
         os.makedirs(recordings_dir, exist_ok=True)
         
         test_filename = "test_upload_audio_sample.wav"
@@ -161,7 +164,7 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertIn("response", data)
 
     def test_chat_history_with_unanalyzed_meeting_handles_null_analysis(self):
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        recordings_dir = get_recordings_dir()
         os.makedirs(recordings_dir, exist_ok=True)
         test_filename = "test_meeting_null_analysis.wav"
         test_audio_path = os.path.join(recordings_dir, test_filename)
@@ -178,10 +181,13 @@ class TestApiEndpoints(unittest.TestCase):
             }, f)
 
         try:
-            res = self.client.post("/chat/history", json={
-                "messages": [],
-                "question": "¿Qué hablamos sobre arquitectura?"
-            })
+            # Se simula solo la llamada al LLM: la prueba valida el manejo de analysis=None
+            # sin depender de una API key real ni de Ollama.
+            with patch.object(_analyzer_instance, "chat_with_history", return_value="Respuesta simulada"):
+                res = self.client.post("/chat/history", json={
+                    "messages": [],
+                    "question": "¿Qué hablamos sobre arquitectura?"
+                })
             self.assertEqual(res.status_code, 200)
             data = res.json()
             self.assertEqual(data["status"], "done")
@@ -215,7 +221,7 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertFalse(any(b["id"] == bm_id for b in remaining))
 
     def test_recording_bookmark_metadata_endpoints(self):
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        recordings_dir = get_recordings_dir()
         os.makedirs(recordings_dir, exist_ok=True)
         test_filename = "test_meeting_for_bookmarks.wav"
         test_audio_path = os.path.join(recordings_dir, test_filename)
@@ -325,7 +331,7 @@ class TestApiEndpoints(unittest.TestCase):
             self.assertIn("latency_ms", data)
 
     def test_update_meeting_task_status_lifecycle(self):
-        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        recordings_dir = get_recordings_dir()
         os.makedirs(recordings_dir, exist_ok=True)
         test_filename = "test_meeting_for_task_status.wav"
         test_audio_path = os.path.join(recordings_dir, test_filename)

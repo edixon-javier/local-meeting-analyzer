@@ -4,6 +4,15 @@ import time as time_module
 import uuid
 from typing import Optional, Dict, Any, List
 from domain.interfaces import IMetadataRepository
+from core.paths import get_recordings_dir
+
+
+def _resolve_path(path: str) -> str:
+    """Un nombre de archivo sin carpeta se interpreta relativo a la carpeta de grabaciones (no al CWD)."""
+    if path and not os.path.dirname(path):
+        return os.path.join(get_recordings_dir(), path)
+    return path
+
 
 class MetadataRepository(IMetadataRepository):
     def save_meeting_metadata(
@@ -17,6 +26,7 @@ class MetadataRepository(IMetadataRepository):
     ):
         if not audio_path:
             return
+        audio_path = _resolve_path(audio_path)
         base_path, _ = os.path.splitext(audio_path)
         json_path = base_path + ".json"
         
@@ -48,6 +58,7 @@ class MetadataRepository(IMetadataRepository):
             print(f"[MetadataRepo] Error al guardar metadatos: {e}")
 
     def get_metadata(self, json_path: str) -> Optional[Dict[str, Any]]:
+        json_path = _resolve_path(json_path)
         if not os.path.exists(json_path):
             return None
         try:
@@ -61,6 +72,7 @@ class MetadataRepository(IMetadataRepository):
         if not audio_path:
             return None
 
+        audio_path = _resolve_path(audio_path)
         if audio_path.lower().endswith(".json"):
             json_path = audio_path
         else:
@@ -126,6 +138,7 @@ class MetadataRepository(IMetadataRepository):
     def add_bookmark(self, audio_path: str, time: float, note: str = "") -> Optional[Dict[str, Any]]:
         if not audio_path:
             return None
+        audio_path = _resolve_path(audio_path)
         if audio_path.lower().endswith(".json"):
             json_path = audio_path
         else:
@@ -165,6 +178,7 @@ class MetadataRepository(IMetadataRepository):
     def delete_bookmark(self, audio_path: str, bookmark_id: str) -> Optional[Dict[str, Any]]:
         if not audio_path or not bookmark_id:
             return None
+        audio_path = _resolve_path(audio_path)
         if audio_path.lower().endswith(".json"):
             json_path = audio_path
         else:
@@ -200,6 +214,7 @@ class MetadataRepository(IMetadataRepository):
     def update_action_item_status(self, audio_path: str, task_index: int, completed: bool) -> Optional[Dict[str, Any]]:
         if not audio_path or task_index < 0:
             return None
+        audio_path = _resolve_path(audio_path)
         if audio_path.lower().endswith(".json"):
             json_path = audio_path
         else:

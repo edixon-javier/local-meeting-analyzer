@@ -2,17 +2,46 @@ import os
 import json
 from typing import Dict, Any
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
+from core.paths import get_config_path
+
+# En desarrollo: backend/config.json. Empaquetado: <MEETING_ANALYZER_DATA_DIR>/config.json
+CONFIG_PATH = get_config_path()
+
+# Modelo de Ollama por defecto: Apache-2.0, buen español, ~2.5 GB
+DEFAULT_OLLAMA_MODEL = "qwen3:4b"
+
+# Carácter usado para ocultar la clave de API en las respuestas de la API
+API_KEY_MASK_CHAR = "•"
+
+
+def mask_api_key(key: Any) -> str:
+    """'sk-abc...wxyz' -> '••••••••wxyz'. Cadena vacía si no hay clave."""
+    if not key or not isinstance(key, str):
+        return ""
+    key = key.strip()
+    if not key:
+        return ""
+    tail = key[-4:] if len(key) >= 12 else ""
+    return API_KEY_MASK_CHAR * 8 + tail
+
+
+def is_masked_api_key(value: Any) -> bool:
+    """True si el valor es un enmascarado devuelto por GET /config (nunca una clave real)."""
+    return isinstance(value, str) and API_KEY_MASK_CHAR in value
+
 
 class Config:
     def __init__(self, config_path: str = None):
         self._config_path = config_path or CONFIG_PATH
         self._default_config = {
             "whisper_model": "small",
-            "ollama_model": "phi3",
-            "ai_provider": "openai",
+            "ollama_model": DEFAULT_OLLAMA_MODEL,
+            "ai_provider": "local",
             "openai_api_key": "",
             "openai_model": "gpt-4o",
+            # Privacidad: solo se usa OpenAI si el usuario lo eligió (ai_provider = "openai")
+            # o activó explícitamente este respaldo cuando Ollama no está disponible.
+            "allow_cloud_fallback": False,
             "analysis_focus": "",
             "record_mode": "both",
             "mic_device_id": "default",
@@ -27,7 +56,7 @@ class Config:
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                # Ensure all default keys exist
+                # Ensure all default keys exist (claves nuevas en configuraciones antiguas)
                 for k, v in self._default_config.items():
                     if k not in config:
                         config[k] = v
@@ -54,6 +83,14 @@ class Config:
 
     def save(self):
         self._save_to_disk(self.settings)
+
+    def public_settings(self) -> Dict[str, Any]:
+        """Copia de la configuración apta para enviar a la UI: la clave de API va enmascarada."""
+        public = dict(self.settings)
+        key = public.get("openai_api_key", "")
+        public["has_api_key"] = bool(key)
+        public["openai_api_key"] = mask_api_key(key)
+        return public
 
 # Singleton instance for app-wide configuration
 system_config = Config()

@@ -6,6 +6,7 @@ import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
 
 from services.live_transcription_service import LiveTranscriptionService, SAMPLE_RATE
 from fastapi.testclient import TestClient
