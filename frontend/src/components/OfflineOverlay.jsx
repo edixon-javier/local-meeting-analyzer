@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { getStatus } from '../api'
-import { useSystem } from '../context/SystemContext'
+import { useSystem } from '../hooks/useSystem'
+import Icon from './Icon'
 
 export default function OfflineOverlay() {
-  const { isBackendOffline, showToast } = useSystem()
+  const { isBackendOffline, isStartupComplete, showToast } = useSystem()
   const [retrying, setRetrying] = useState(false)
 
-  if (!isBackendOffline) return null
+  if (!isStartupComplete || !isBackendOffline) return null
 
   const handleRetry = async () => {
     setRetrying(true)
@@ -45,12 +46,12 @@ export default function OfflineOverlay() {
         boxShadow: 'var(--shadow-lg)'
       }}>
         <div style={{
-          fontSize: 48,
           marginBottom: 16,
-          animation: 'pulse 2s infinite ease-in-out',
-          display: 'inline-block'
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
-          📡
+          <Icon name="alert-triangle" size={52} style={{ color: 'var(--red-record)' }} />
         </div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
           Conexión del Backend Perdida
@@ -79,7 +80,9 @@ export default function OfflineOverlay() {
               Reintentando conexión...
             </>
           ) : (
-            'Reintentar Conexión'
+            <>
+              <Icon name="refresh" size={16} /> Reintentar Conexión
+            </>
           )}
         </button>
       </div>

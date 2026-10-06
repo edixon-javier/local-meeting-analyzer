@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useSystem } from '../context/SystemContext'
-import { useRecordings } from '../context/RecordingsContext'
+import { useSystem } from '../hooks/useSystem'
+import { useRecordings } from '../hooks/useRecordings'
 import { getRecordingMetadata } from '../api'
+import Icon from './Icon'
 import { 
   copyExecutiveMinutes, 
   downloadExecutiveMarkdown, 
@@ -14,6 +15,7 @@ export default function HistoryScreen({ onNavigate }) {
   const { 
     recordings, 
     loading, 
+    isRefreshing,
     loadRecordings, 
     setDeletingFile, 
     setRenamingFile, 
@@ -27,7 +29,7 @@ export default function HistoryScreen({ onNavigate }) {
 
   useEffect(() => {
     if (!isBackendOffline) {
-      loadRecordings()
+      loadRecordings({ silent: true })
     }
   }, [isBackendOffline, loadRecordings])
 
@@ -96,7 +98,7 @@ export default function HistoryScreen({ onNavigate }) {
     )
   }
 
-  if (loading) {
+  if (loading && recordings.length === 0) {
     return (
       <div className="processing-overlay">
         <div className="big-spinner" />
@@ -111,8 +113,15 @@ export default function HistoryScreen({ onNavigate }) {
       {/* Cabecera */}
       <div style={{ marginBottom: 24, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Historial de Reuniones</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Administra, busca y revisa los análisis de tus reuniones guardadas localmente.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Historial de Reuniones</h1>
+            {isRefreshing && (
+              <span style={{ fontSize: 11, color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
+                <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} /> Actualizando...
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Administra, busca y revisa los análisis de tus reuniones guardadas localmente.</p>
         </div>
       </div>
 
@@ -176,7 +185,9 @@ export default function HistoryScreen({ onNavigate }) {
       <div style={{ flex: 1 }}>
         {filteredRecordings.length === 0 ? (
           <div className="empty-state" style={{ padding: '48px 0', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
-            <div className="empty-state-icon">🔍</div>
+            <div className="empty-state-icon" style={{ opacity: 0.6 }}>
+              <Icon name="search" size={32} />
+            </div>
             <div className="empty-state-title">No se encontraron reuniones</div>
             <div className="empty-state-sub">Prueba con otros términos de búsqueda o filtros.</div>
           </div>
@@ -207,52 +218,62 @@ export default function HistoryScreen({ onNavigate }) {
                   e.currentTarget.style.transform = 'translateY(0)'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ overflow: 'hidden', paddingRight: 140 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+                  <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.[^/.]+$/, '')}>
                       {rec.filename.replace(/\.[^/.]+$/, '')}
                     </h3>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(rec.created)}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, position: 'absolute', right: 16, top: 16 }}>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
                     {rec.has_metadata && (
                       <button 
                         onClick={(e) => handleExportClick(e, rec)} 
                         className="btn btn-secondary btn-sm"
-                        style={{ padding: '4px 8px', fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)' }}
+                        style={{ padding: '4px 8px', fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                         title="Exportar Minuta Ejecutiva (PDF, MD, Copiar)"
                       >
-                        📋 Minuta
+                        <Icon name="file-text" size={13} />
+                        <span>Minuta</span>
                       </button>
                     )}
                     <button 
                       onClick={(e) => handleRenameClick(e, rec)} 
                       className="btn btn-secondary btn-sm"
-                      style={{ padding: '4px 8px', fontSize: 11 }}
+                      style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                       title="Renombrar"
+                      aria-label="Renombrar reunión"
                     >
-                      ✏️
+                      <Icon name="edit" size={13} />
                     </button>
                     <button 
                       onClick={(e) => handleDeleteClick(e, rec.filename)} 
                       className="btn btn-secondary btn-sm" 
-                      style={{ padding: '4px 8px', fontSize: 11, background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)' }}
+                      style={{ padding: '4px 8px', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                       title="Eliminar"
+                      aria-label="Eliminar reunión"
                     >
-                      🗑️
+                      <Icon name="trash" size={13} />
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>📁 {rec.size_mb} MB</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Icon name="folder" size={12} /> {rec.size_mb} MB
+                  </span>
                   {rec.has_metadata ? (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--green-glow)', color: 'var(--green-ok)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                      Analizado 🧠
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--green-glow)', color: 'var(--green-ok)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="check-circle" size={11} /> Analizado
                     </span>
                   ) : (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
-                      Sin análisis 🎙️
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="mic" size={11} /> Sin análisis
+                    </span>
+                  )}
+                  {rec.bookmarks_count > 0 && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="bookmark" size={11} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
                     </span>
                   )}
                 </div>
@@ -260,7 +281,7 @@ export default function HistoryScreen({ onNavigate }) {
                 {rec.has_metadata && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                     {rec.category && <span className="pill category" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.category}</span>}
-                    {rec.tone && <span className="pill tone" style={{ fontSize: 11, padding: '2px 8px' }}>🎭 {rec.tone}</span>}
+                    {rec.tone && <span className="pill tone" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.tone}</span>}
                   </div>
                 )}
               </div>
@@ -295,7 +316,7 @@ export default function HistoryScreen({ onNavigate }) {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>📋</span>
+                <Icon name="file-text" size={20} style={{ color: 'var(--accent-primary)' }} />
                 <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
                   Minuta Ejecutiva
                 </h3>
@@ -303,9 +324,10 @@ export default function HistoryScreen({ onNavigate }) {
               <button 
                 className="btn btn-secondary btn-sm"
                 onClick={() => setExportingMeeting(null)}
-                style={{ padding: '4px 8px', fontSize: 12 }}
+                style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                aria-label="Cerrar modal"
               >
-                ✕
+                <Icon name="x" size={14} />
               </button>
             </div>
 
@@ -314,9 +336,13 @@ export default function HistoryScreen({ onNavigate }) {
             </p>
 
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-              {exportingMeeting.createdDate && <span>📅 {exportingMeeting.createdDate}</span>}
-              {exportingMeeting.analysis?.category && <span>🏷️ {exportingMeeting.analysis.category}</span>}
-              {exportingMeeting.analysis?.tone && <span>🎭 {exportingMeeting.analysis.tone}</span>}
+              {exportingMeeting.createdDate && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="calendar" size={12} /> {exportingMeeting.createdDate}
+                </span>
+              )}
+              {exportingMeeting.analysis?.category && <span>{exportingMeeting.analysis.category}</span>}
+              {exportingMeeting.analysis?.tone && <span>{exportingMeeting.analysis.tone}</span>}
             </div>
 
             {exportingMeeting.analysis?.summary && exportingMeeting.analysis.summary.length > 0 && (
@@ -346,14 +372,15 @@ export default function HistoryScreen({ onNavigate }) {
                     keyDecisions: exportingMeeting.analysis?.key_decisions || [],
                     actionItems: exportingMeeting.analysis?.action_items || [],
                     segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || ''
+                    transcript: exportingMeeting.transcript || '',
+                    bookmarks: exportingMeeting.bookmarks || []
                   }
                   await copyExecutiveMinutes(data, showToast)
                   setExportingMeeting(null)
                 }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13 }}
+                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
               >
-                📋 Copiar Minuta (Listo para Slack / Email)
+                <Icon name="copy" size={15} /> Copiar Minuta (Slack / Email)
               </button>
 
               <button
@@ -369,14 +396,15 @@ export default function HistoryScreen({ onNavigate }) {
                     keyDecisions: exportingMeeting.analysis?.key_decisions || [],
                     actionItems: exportingMeeting.analysis?.action_items || [],
                     segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || ''
+                    transcript: exportingMeeting.transcript || '',
+                    bookmarks: exportingMeeting.bookmarks || []
                   }
                   downloadExecutiveMarkdown(data, exportingMeeting.title, showToast)
                   setExportingMeeting(null)
                 }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13 }}
+                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
               >
-                📥 Descargar Markdown (.md)
+                <Icon name="download" size={15} /> Descargar Markdown (.md)
               </button>
 
               <button
@@ -392,13 +420,14 @@ export default function HistoryScreen({ onNavigate }) {
                     keyDecisions: exportingMeeting.analysis?.key_decisions || [],
                     actionItems: exportingMeeting.analysis?.action_items || [],
                     segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || ''
+                    transcript: exportingMeeting.transcript || '',
+                    bookmarks: exportingMeeting.bookmarks || []
                   }
                   await exportExecutivePdf(data, exportingMeeting.title, showToast)
                 }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13 }}
+                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
               >
-                📄 Descargar / Imprimir PDF
+                <Icon name="file-text" size={15} /> Exportar / Imprimir PDF
               </button>
             </div>
           </div>

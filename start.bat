@@ -26,7 +26,6 @@ if not exist "backend\venv" (
 tasklist /fi "imagename eq ollama.exe" 2>nul | find /i "ollama.exe" >nul
 if errorlevel 1 (
     powershell -Command "Start-Process ollama -ArgumentList serve -WindowStyle Hidden"
-    timeout /t 3 /nobreak >nul
 )
 
 cd frontend

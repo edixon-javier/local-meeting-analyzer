@@ -1,29 +1,45 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getRecordings, deleteRecording, renameRecording } from '../api'
-import { useSystem } from './SystemContext'
-
-const RecordingsContext = createContext()
+import { useSystem } from '../hooks/useSystem'
+import { RecordingsContext } from './recordingsContextDef'
 
 export function RecordingsProvider({ children }) {
-  const { showToast, isBackendOffline } = useSystem()
+  const { showToast, isBackendOffline, isStartupComplete } = useSystem()
   const [recordings, setRecordings] = useState([])
   const [loading, setLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const isFetchingRef = useRef(false)
 
   // Estados de modales comunes
   const [deletingFile, setDeletingFile] = useState(null) // filename
   const [renamingFile, setRenamingFile] = useState(null) // { filename }
   const [newNameInput, setNewNameInput] = useState('')
 
-  const loadRecordings = useCallback(async () => {
-    if (isBackendOffline) return
-    setLoading(true)
+  const recordingsRef = useRef(recordings)
+  recordingsRef.current = recordings
+
+  const loadRecordings = useCallback(async (options = {}) => {
+    if (isBackendOffline || isFetchingRef.current) return
+    isFetchingRef.current = true
+
+    const isInitial = recordingsRef.current.length === 0 && !options.silent
+    if (isInitial) {
+      setLoading(true)
+    } else {
+      setIsRefreshing(true)
+    }
+
     try {
       const res = await getRecordings()
-      setRecordings(res.data.recordings || [])
+      const list = res.data.recordings || []
+      recordingsRef.current = list
+      setRecordings(list)
     } catch (err) {
       console.error('Error cargando grabaciones en contexto:', err)
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
+      isFetchingRef.current = false
     }
   }, [isBackendOffline])
 
@@ -64,18 +80,19 @@ export function RecordingsProvider({ children }) {
     })
   }
 
-  // Cargar grabaciones al montar o cuando cambie la conectividad
+  // Cargar grabaciones únicamente cuando el arranque esté completo y haya conectividad
   useEffect(() => {
-    if (!isBackendOffline) {
+    if (isStartupComplete && !isBackendOffline) {
       loadRecordings()
-    } else {
+    } else if (isBackendOffline) {
       setRecordings([])
     }
-  }, [isBackendOffline, loadRecordings])
+  }, [isStartupComplete, isBackendOffline, loadRecordings])
 
   const value = {
     recordings,
     loading,
+    isRefreshing,
     loadRecordings,
     deletingFile,
     setDeletingFile,
@@ -146,12 +163,4 @@ export function RecordingsProvider({ children }) {
       )}
     </RecordingsContext.Provider>
   )
-}
-
-export function useRecordings() {
-  const context = useContext(RecordingsContext)
-  if (!context) {
-    throw new Error('useRecordings debe usarse dentro de un RecordingsProvider')
-  }
-  return context
 }

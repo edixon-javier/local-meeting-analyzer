@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { chatWithHistory } from '../api'
-import { useSystem } from '../context/SystemContext'
-import { useRecordings } from '../context/RecordingsContext'
+import { useSystem } from '../hooks/useSystem'
+import { useRecordings } from '../hooks/useRecordings'
+import Icon from './Icon'
 
 export default function HistoryChatScreen({ onNavigate }) {
   const { isBackendOffline, systemStatus } = useSystem()
@@ -64,7 +65,7 @@ export default function HistoryChatScreen({ onNavigate }) {
         ...updatedMessages,
         {
           role: 'assistant',
-          content: `❌ Error: ${errorMsg}`,
+          content: `Error: ${errorMsg}`,
           referenced_meetings: []
         }
       ])
@@ -84,7 +85,9 @@ export default function HistoryChatScreen({ onNavigate }) {
     return (
       <div style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450 }}>
-          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div className="empty-state-icon" style={{ marginBottom: 16 }}>
+            <Icon name="alert-triangle" size={48} style={{ color: 'var(--red-record)' }} />
+          </div>
           <div className="empty-state-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Servidor Desconectado</div>
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             El chat global no está disponible porque el servidor local de la aplicación no está conectado.
@@ -99,13 +102,15 @@ export default function HistoryChatScreen({ onNavigate }) {
     return (
       <div style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 500 }}>
-          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+          <div className="empty-state-icon" style={{ marginBottom: 16 }}>
+            <Icon name="search" size={48} style={{ color: 'var(--text-muted)' }} />
+          </div>
           <div className="empty-state-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Sin datos en el historial</div>
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24, lineHeight: '1.6' }}>
             Para poder hacer consultas globales, primero necesitas tener reuniones guardadas con su respectiva transcripción y análisis.
           </div>
           <button className="btn btn-primary" onClick={() => onNavigate('record')}>
-            Ir a Nueva Grabación
+            <Icon name="mic" size={16} /> Ir a Nueva Grabación
           </button>
         </div>
       </div>
@@ -130,7 +135,10 @@ export default function HistoryChatScreen({ onNavigate }) {
         </div>
         
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-          <span>Motor activo: <strong>{systemStatus?.ai_provider === 'openai' ? '☁️ OpenAI (Nube)' : '💻 Ollama (Local)'}</strong></span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock'} size={14} />
+            Motor activo: <strong>{systemStatus?.ai_provider === 'openai' ? 'OpenAI (Nube)' : 'Ollama (Local)'}</strong>
+          </span>
         </div>
       </div>
 
@@ -172,8 +180,8 @@ export default function HistoryChatScreen({ onNavigate }) {
             {/* Visualización de referencias RAG */}
             {msg.referenced_meetings && msg.referenced_meetings.length > 0 && (
               <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>
-                  📂 Reuniones consultadas para esta respuesta:
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Icon name="folder" size={13} /> Reuniones consultadas para esta respuesta:
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {msg.referenced_meetings.map((ref, idx) => (
@@ -203,7 +211,7 @@ export default function HistoryChatScreen({ onNavigate }) {
                         e.currentTarget.style.borderColor = 'var(--border-subtle)'
                       }}
                     >
-                      <span>🎙️</span>
+                      <Icon name="mic" size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: 600 }}>{ref.filename.replace(/\.[^/.]+$/, '')}</span>
                         <span style={{ fontSize: '9.5px', color: 'var(--text-secondary)' }}>
@@ -254,7 +262,7 @@ export default function HistoryChatScreen({ onNavigate }) {
             className="btn btn-primary"
             style={{ borderRadius: 'var(--radius-xl)', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', gap: '8px', fontWeight: 600 }}
           >
-            Preguntar <span>↑</span>
+            Preguntar <Icon name="send" size={15} />
           </button>
         </form>
       </div>

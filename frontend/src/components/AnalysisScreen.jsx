@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { useSystem } from '../context/SystemContext'
+import { useSystem } from '../hooks/useSystem'
 import { useAnalysisPipeline } from '../hooks/useAnalysisPipeline'
-import { renameSpeaker } from '../api'
+import { renameSpeaker, addRecordingBookmark, deleteRecordingBookmark, updateRecordingTaskStatus } from '../api'
 import { 
   copyExecutiveMinutes, 
   downloadExecutiveMarkdown, 
@@ -11,6 +11,7 @@ import TranscriptPanel from './analysis/TranscriptPanel'
 import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
 import SpeakerRenameModal from './SpeakerRenameModal'
+import Icon from './Icon'
 
 export default function AnalysisScreen({ audioPath, onBack }) {
   const { showToast, systemStatus } = useSystem()
@@ -20,12 +21,15 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     transcript, 
     segments, 
     analysis, 
+    bookmarks,
+    setBookmarks,
     errorMsg, 
     elapsedSeconds, 
     progressPercent, 
     cancelPipeline, 
     reprocess,
-    updateSpeakerInState
+    updateSpeakerInState,
+    updateTaskInState
   } = useAnalysisPipeline(audioPath, showToast)
 
   // Audio Player State
@@ -59,12 +63,59 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       updateSpeakerInState(selectedSpeaker, newSpeakerName)
       showToast({
         type: 'success',
-        message: `👥 Hablante renombrado a "${newSpeakerName}" en toda la reunión`
+        message: `Hablante renombrado a "${newSpeakerName}" en toda la reunión`
       })
     } catch (err) {
       const msg = err.response?.data?.detail || 'Error al renombrar el hablante'
       showToast({ type: 'error', message: msg })
       throw err
+    }
+  }
+
+  const handleAddBookmark = async (time, note = '') => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : ''
+    if (!filename) return
+    try {
+      const res = await addRecordingBookmark(filename, time, note)
+      if (res.data?.bookmarks) {
+        setBookmarks(res.data.bookmarks)
+      }
+      showToast({ type: 'success', message: 'Marcador guardado' })
+    } catch (err) {
+      console.error('Error al agregar marcador:', err)
+      showToast({ type: 'error', message: 'Error al agregar marcador' })
+    }
+  }
+
+  const handleDeleteBookmark = async (bookmarkId) => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : ''
+    if (!filename) return
+    try {
+      const res = await deleteRecordingBookmark(filename, bookmarkId)
+      if (res.data?.bookmarks) {
+        setBookmarks(res.data.bookmarks)
+      }
+      showToast({ type: 'info', message: 'Marcador eliminado' })
+    } catch (err) {
+      console.error('Error al eliminar marcador:', err)
+      showToast({ type: 'error', message: 'Error al eliminar marcador' })
+    }
+  }
+
+  const handleToggleTaskStatus = async (taskIndex, completed) => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : ''
+    updateTaskInState(taskIndex, completed)
+    if (!filename) return
+    try {
+      await updateRecordingTaskStatus(filename, taskIndex, completed)
+      showToast({
+        type: 'success',
+        message: completed ? 'Tarea marcada como completada' : 'Tarea desmarcada'
+      })
+    } catch (err) {
+      console.error('Error al actualizar estado de la tarea:', err)
+      updateTaskInState(taskIndex, !completed)
+      showToast({ type: 'error', message: 'Error al actualizar el estado de la tarea' })
     }
   }
 
@@ -84,7 +135,8 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     keyDecisions: analysis?.key_decisions || [],
     actionItems: analysis?.action_items || [],
     segments: segments || [],
-    transcript: transcript || ''
+    transcript: transcript || '',
+    bookmarks: bookmarks || []
   })
 
   const handleCopyMinutes = async () => {
@@ -147,112 +199,175 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     onBack()
   }
 
-  // ── Pantallas de Carga y Espera ──
-  if (step === 'loading') {
+  const meetingFilename = audioPath ? audioPath.split(/[/\\]/).pop() : 'Reunión'
+
+  // ── Pantallas de Carga y Espera Unificada (Cero sobreposición de loaders) ──
+  if (step === 'checking') {
     return (
-      <div className="processing-overlay">
-        <div className="big-spinner" />
-        <div className="processing-label">Verificando datos locales...</div>
+      <div className="unified-processing-screen">
+        <div className="unified-processing-card" style={{ maxWidth: 440 }}>
+          <div className="processing-card-header">
+            <span className="processing-meeting-title">{meetingFilename}</span>
+          </div>
+          <div style={{ margin: '24px 0 16px', display: 'flex', justifyContent: 'center' }}>
+            <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} />
+          </div>
+          <h2 className="unified-processing-title" style={{ fontSize: 18 }}>Preparando reunión...</h2>
+          <p className="unified-processing-sub" style={{ fontSize: 13, marginBottom: 8 }}>
+            Verificando datos locales y configurando el motor de análisis.
+          </p>
+        </div>
       </div>
     )
   }
 
   if (step === 'processing_busy') {
     return (
-      <div className="processing-overlay">
-        <div className="big-spinner" style={{ borderTopColor: 'var(--accent-violet)', animation: 'spin 1.2s linear infinite' }} />
-        <div className="processing-label">Proceso previo en curso o en cola</div>
-        <div className="processing-sub" style={{ maxWidth: 500, textAlign: 'center', lineHeight: '1.6', marginBottom: 20 }}>
-          El sistema indica que una tarea de IA estaba en ejecución o quedó pendiente de liberación.
-          <br /><br />
-          Puedes forzar el reprocesamiento inmediato de este archivo.
-        </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn btn-primary" onClick={reprocess}>
-            ⚡ Desbloquear y Reprocesar
-          </button>
-          <button className="btn btn-secondary" onClick={onBack}>
-            Volver Atrás
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (step === 'transcribing') {
-    const isCloud = systemStatus?.ai_provider === 'openai'
-    return (
-      <div className="processing-overlay">
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 96, height: 96, marginBottom: 8 }}>
-          <div className="big-spinner" style={{ width: '100%', height: '100%', borderWidth: '4px', borderTopColor: 'var(--accent-primary)', position: 'absolute' }} />
-          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'monospace', zIndex: 1 }}>
-            {progressPercent}%
+      <div className="unified-processing-screen">
+        <div className="unified-processing-card">
+          <div className="processing-card-header">
+            <span className="processing-meeting-title">{meetingFilename}</span>
+          </div>
+          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' }}>
+            <Icon name="clock" size={30} />
+          </div>
+          <h2 className="unified-processing-title">Proceso previo en cola</h2>
+          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+            El motor de IA está finalizando una tarea anterior o liberando memoria. Puedes esperar o desbloquear el reprocesamiento inmediato.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+            <button type="button" className="btn btn-primary" onClick={reprocess}>
+              <Icon name="refresh" size={15} /> Desbloquear y Reprocesar
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onBack}>
+              <Icon name="arrow-left" size={15} /> Volver
+            </button>
           </div>
         </div>
-        
-        {/* Barra de Progreso Lineal */}
-        <div style={{ width: 280, height: 8, background: 'var(--border-subtle)', borderRadius: 'var(--radius-full)', overflow: 'hidden', margin: '4px 0 8px' }}>
-          <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 0.4s ease' }} />
-        </div>
-
-        <div className="processing-label">
-          Transcribiendo con {isCloud ? 'OpenAI Whisper (Nube)' : `Whisper Local (${systemStatus?.whisper_model || 'small'})`}...
-        </div>
-        
-        <div style={{ fontSize: 13, color: 'var(--text-accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          ⏱️ Tiempo transcurrido: {elapsedSeconds}s
-        </div>
-
-        <div className="processing-sub" style={{ marginBottom: 20, maxWidth: 450 }}>
-          {isCloud 
-            ? 'Convirtiendo el audio a texto con el modelo de alta precisión en OpenAI.' 
-            : 'El modelo local está procesando el audio. El progreso se actualiza automáticamente con cada segmento detectado.'}
-        </div>
-        
-        <button className="btn btn-secondary" onClick={handleCancelAndBack}>
-          Cancelar Procesamiento
-        </button>
       </div>
     )
   }
 
-  if (step === 'analyzing') {
+  if (step === 'transcribing' || step === 'analyzing') {
     const isCloud = systemStatus?.ai_provider === 'openai'
+    const isTranscribing = step === 'transcribing'
+    const pct = Math.min(100, Math.max(0, progressPercent || (isTranscribing ? 15 : 95)))
+    const strokeDashoffset = 251.2 - (251.2 * pct) / 100
+
     return (
-      <div className="processing-overlay">
-        <div className="big-spinner" style={{ borderTopColor: 'var(--accent-violet)', width: 56, height: 56, borderWidth: 4 }} />
-        <div className="processing-label">
-          Analizando con {isCloud ? 'OpenAI (GPT-4o)' : 'Ollama (Phi-3 Local)'}...
-        </div>
+      <div className="unified-processing-screen">
+        <div className="unified-processing-card">
+          <div className="processing-card-header">
+            <span className="processing-meeting-title">{meetingFilename}</span>
+          </div>
 
-        <div style={{ fontSize: 13, color: 'var(--accent-violet)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 8px' }}>
-          ⏱️ Tiempo transcurrido: {elapsedSeconds}s
-        </div>
+          {/* Anillo de Progreso Único (Cero sobreposiciones) */}
+          <div className="unified-progress-ring-box">
+            <svg className="progress-ring-svg" width="96" height="96" viewBox="0 0 96 96">
+              <circle
+                cx="48"
+                cy="48"
+                r="40"
+                stroke="var(--border-subtle)"
+                strokeWidth="6"
+                fill="transparent"
+              />
+              <circle
+                className="progress-ring-circle"
+                cx="48"
+                cy="48"
+                r="40"
+                stroke="url(#unified-gradient)"
+                strokeWidth="6"
+                strokeDasharray={251.2}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                fill="transparent"
+              />
+              <defs>
+                <linearGradient id="unified-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="var(--accent-primary)" />
+                  <stop offset="100%" stopColor="var(--accent-violet)" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className="progress-ring-text">{pct}%</div>
+          </div>
 
-        <div className="processing-sub" style={{ marginBottom: 20, maxWidth: 450 }}>
-          Extrayendo puntos clave del resumen, tareas pendientes, acuerdos, tono de la reunión y categorías temáticas.
-        </div>
+          {/* Título de Fase */}
+          <h2 className="unified-processing-title">
+            {isTranscribing
+              ? (isCloud ? 'Transcribiendo con OpenAI Whisper...' : `Transcribiendo con Whisper Local (${systemStatus?.whisper_model || 'small'})...`)
+              : (isCloud ? 'Analizando con OpenAI (GPT-4o)...' : 'Analizando con Phi-3 Local (Ollama)...')}
+          </h2>
 
-        <button className="btn btn-secondary" onClick={handleCancelAndBack}>
-          Cancelar Procesamiento
-        </button>
+          {/* Subtítulo descriptivo */}
+          <p className="unified-processing-sub">
+            {isTranscribing
+              ? (isCloud
+                  ? 'Convirtiendo el audio a texto con el modelo de alta precisión en OpenAI.'
+                  : 'El modelo local está procesando el audio en tu equipo con máxima privacidad.')
+              : 'Extrayendo puntos clave, resumen ejecutivo, acuerdos y tareas pendientes.'}
+          </p>
+
+          {/* Medidor de Tiempo Transcurrido */}
+          <div className="processing-elapsed-badge">
+            <Icon name="clock" size={13} />
+            <span>Tiempo transcurrido: {elapsedSeconds}s</span>
+          </div>
+
+          {/* Stepper de Fases del Pipeline */}
+          <div className="processing-stages-row">
+            <div className="processing-stage-item active">
+              <span className="stage-dot">
+                <Icon name="check" size={11} />
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 600 }}>Audio</span>
+            </div>
+            <div className="processing-stage-item active">
+              <span className="stage-dot">
+                {!isTranscribing ? <Icon name="check" size={11} /> : '2'}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 600 }}>Transcripción</span>
+            </div>
+            <div className={`processing-stage-item ${!isTranscribing ? 'active' : ''}`}>
+              <span className="stage-dot">3</span>
+              <span style={{ fontSize: 11, fontWeight: 600 }}>Análisis IA</span>
+            </div>
+          </div>
+
+          {/* Botón de Cancelación */}
+          <button type="button" className="btn btn-secondary" onClick={handleCancelAndBack}>
+            <Icon name="x" size={15} />
+            <span>Cancelar Procesamiento</span>
+          </button>
+        </div>
       </div>
     )
   }
 
   if (step === 'error') {
     return (
-      <div className="processing-overlay">
-        <div style={{ fontSize: 48 }}>⚠️</div>
-        <div className="processing-label" style={{ color: '#EF4444' }}>Error en el procesamiento</div>
-        <div className="processing-sub" style={{ maxWidth: 450 }}>{errorMsg}</div>
-        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-          <button className="btn btn-primary" onClick={reprocess}>
-            🔄 Reprocesar Audio
-          </button>
-          <button className="btn btn-secondary" onClick={onBack}>
-            ← Volver a Grabación
-          </button>
+      <div className="unified-processing-screen">
+        <div className="unified-processing-card">
+          <div className="processing-card-header">
+            <span className="processing-meeting-title">{meetingFilename}</span>
+          </div>
+          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#EF4444' }}>
+            <Icon name="alert-triangle" size={32} />
+          </div>
+          <h2 className="unified-processing-title" style={{ color: '#EF4444' }}>Error en el procesamiento</h2>
+          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+            {errorMsg || 'No fue posible completar el procesamiento de la reunión.'}
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+            <button type="button" className="btn btn-primary" onClick={reprocess}>
+              <Icon name="refresh" size={15} /> Reprocesar Audio
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onBack}>
+              <Icon name="arrow-left" size={15} /> Volver a Grabación
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -276,6 +391,9 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         formatSegmentTime={formatSegmentTime}
         reprocess={reprocess}
         onOpenRenameSpeaker={handleOpenRenameSpeaker}
+        bookmarks={bookmarks}
+        onAddBookmark={handleAddBookmark}
+        onDeleteBookmark={handleDeleteBookmark}
       />
 
       <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -286,14 +404,14 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               onClick={() => setActiveTab('insights')}
               style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
-              🧠 Resumen
+              <Icon name="file-text" size={14} /> Resumen
             </button>
             <button 
               className={`btn btn-sm ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('chat')}
               style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
-              💬 Chat IA
+              <Icon name="chat" size={14} /> Chat IA
             </button>
           </div>
           
@@ -305,7 +423,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
                 title="Copiar Minuta Ejecutiva (lista para Slack/Email en Markdown y formato enriquecido)"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📋 Copiar Minuta
+                <Icon name="copy" size={14} /> Copiar Minuta
               </button>
               <button 
                 onClick={handleDownloadMarkdown} 
@@ -313,7 +431,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
                 title="Descargar archivo Markdown (.md) estructurado"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📥 Descargar MD
+                <Icon name="download" size={14} /> Descargar MD
               </button>
               <button 
                 onClick={handleExportPDF} 
@@ -321,7 +439,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
                 title="Generar y guardar Minuta Ejecutiva en PDF"
                 style={{ padding: '6px 10px', fontSize: '13px' }}
               >
-                📄 PDF
+                <Icon name="file-text" size={14} /> PDF
               </button>
             </div>
           )}
@@ -331,7 +449,13 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           {activeTab === 'chat' ? (
             <ChatPanel audioPath={audioPath} />
           ) : (
-            <InsightsPanel analysis={analysis} />
+            <InsightsPanel 
+              analysis={analysis} 
+              bookmarks={bookmarks}
+              onSeekAudio={handleSegmentClick}
+              onToggleTask={handleToggleTaskStatus}
+              meetingTitle={cleanTitle}
+            />
           )}
         </div>
       </div>
@@ -373,6 +497,19 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               )}
             </ul>
           </div>
+
+          {bookmarks && bookmarks.length > 0 && (
+            <div className="print-section">
+              <h2 className="print-section-title">🔖 Momentos Clave Marcados</h2>
+              <ul className="print-summary-list">
+                {bookmarks.map((bm, idx) => (
+                  <li key={idx}>
+                    <strong>[{formatSegmentTime(bm.time)}]</strong> {bm.note || 'Momento clave marcado'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {analysis.key_decisions && analysis.key_decisions.length > 0 && (
             <div className="print-section">

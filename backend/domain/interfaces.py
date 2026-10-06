@@ -101,7 +101,7 @@ class IAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def analyze(self, transcript: str) -> Dict[str, Any]:
+    def analyze(self, transcript: str, bookmarks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -114,7 +114,15 @@ class IAnalyzer(ABC):
 
 class IMetadataRepository(ABC):
     @abstractmethod
-    def save_meeting_metadata(self, audio_path: str, transcript: str, analysis: Dict[str, Any], language: Optional[str] = None, segments: Optional[List] = None):
+    def save_meeting_metadata(
+        self, 
+        audio_path: str, 
+        transcript: str, 
+        analysis: Dict[str, Any], 
+        language: Optional[str] = None, 
+        segments: Optional[List] = None,
+        bookmarks: Optional[List] = None
+    ):
         pass
 
     @abstractmethod
@@ -123,4 +131,16 @@ class IMetadataRepository(ABC):
 
     @abstractmethod
     def rename_speaker(self, audio_path: str, old_speaker: str, new_speaker: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def add_bookmark(self, audio_path: str, time: float, note: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def delete_bookmark(self, audio_path: str, bookmark_id: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def update_action_item_status(self, audio_path: str, task_index: int, completed: bool) -> Optional[Dict[str, Any]]:
         pass

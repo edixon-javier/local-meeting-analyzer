@@ -1,29 +1,23 @@
 // src/components/Sidebar.jsx
 // Navegación lateral con estado del sistema y historial de reuniones.
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { updateConfig } from '../api'
-import { useSystem } from '../context/SystemContext'
-import { useRecordings } from '../context/RecordingsContext'
+import { useSystem } from '../hooks/useSystem'
+import { useRecordings } from '../hooks/useRecordings'
+import Icon from './Icon'
 import logoImg from '../assets/icon.jpg'
 
 export default function Sidebar({ currentView, onNavigate }) {
   const { systemStatus, showToast, isBackendOffline } = useSystem()
   const { 
     recordings, 
-    loadRecordings, 
     setDeletingFile, 
     setRenamingFile, 
     setNewNameInput, 
     formatDate 
   } = useRecordings()
   const [filterQuery, setFilterQuery] = useState('')
-
-  useEffect(() => {
-    if (!isBackendOffline) {
-      loadRecordings()
-    }
-  }, [currentView, isBackendOffline, loadRecordings]) // Recargar cuando cambie la vista o la conexión
 
   const handleToggleProvider = async () => {
     if (isBackendOffline) return
@@ -50,7 +44,7 @@ export default function Sidebar({ currentView, onNavigate }) {
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
-    const cleanName = rec.filename.replace(/\.(wav|mp3)$/i, '')
+    const cleanName = rec.filename.replace(/\.[^/.]+$/, '')
     setRenamingFile(rec)
     setNewNameInput(cleanName)
   }
@@ -64,7 +58,8 @@ export default function Sidebar({ currentView, onNavigate }) {
           <div>
             <div className="sidebar-logo-text">MeetingAI</div>
             <div className="sidebar-logo-sub">
-              {systemStatus?.ai_provider === 'openai' ? '☁️ OpenAI Cloud' : '🔒 100% Local'}
+              <Icon name={systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock'} size={12} style={{ marginRight: 4 }} />
+              {systemStatus?.ai_provider === 'openai' ? 'OpenAI Cloud' : '100% Local'}
             </div>
           </div>
         </div>
@@ -90,10 +85,14 @@ export default function Sidebar({ currentView, onNavigate }) {
                 fontSize: '10px',
                 cursor: isBackendOffline ? 'not-allowed' : 'pointer',
                 fontWeight: 600,
-                opacity: isBackendOffline ? 0.5 : 1
+                opacity: isBackendOffline ? 0.5 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
               }}
             >
-              {isBackendOffline ? '⚠️ Offline' : (systemStatus?.ai_provider === 'openai' ? '☁️ Nube' : '💻 Local')}
+              <Icon name={isBackendOffline ? 'alert-triangle' : (systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock')} size={11} />
+              {isBackendOffline ? 'Offline' : (systemStatus?.ai_provider === 'openai' ? 'Nube' : 'Local')}
             </button>
           </div>
           <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', marginTop: 6 }}>
@@ -119,14 +118,14 @@ export default function Sidebar({ currentView, onNavigate }) {
             className={`sidebar-nav-item ${currentView === 'record' ? 'active' : ''}`}
             onClick={() => onNavigate('record')}
           >
-            <span className="nav-icon">🎙️</span>
+            <span className="nav-icon"><Icon name="mic" size={17} /></span>
             Nueva Grabación
           </button>
           <button
             className={`sidebar-nav-item ${currentView === 'history' ? 'active' : ''}`}
             onClick={() => onNavigate('history')}
           >
-            <span className="nav-icon">📁</span>
+            <span className="nav-icon"><Icon name="folder" size={17} /></span>
             Historial
           </button>
           <button
@@ -136,14 +135,14 @@ export default function Sidebar({ currentView, onNavigate }) {
             title={isBackendOffline ? 'Sin conexión al backend' : 'Preguntar al historial de reuniones'}
             style={{ opacity: isBackendOffline ? 0.5 : 1, cursor: isBackendOffline ? 'not-allowed' : 'pointer' }}
           >
-            <span className="nav-icon">💬</span>
+            <span className="nav-icon"><Icon name="chat" size={17} /></span>
             Preguntar al Historial
           </button>
           <button
             className={`sidebar-nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => onNavigate('settings')}
           >
-            <span className="nav-icon">⚙️</span>
+            <span className="nav-icon"><Icon name="settings" size={17} /></span>
             Configuración
           </button>
         </nav>
@@ -192,7 +191,7 @@ export default function Sidebar({ currentView, onNavigate }) {
               title={rec.filename}
             >
               <div className="meeting-item-name" style={{ paddingRight: 45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {rec.filename.replace(/\.(wav|mp3)$/i, '')}
+                {rec.filename.replace(/\.[^/.]+$/, '')}
               </div>
               <div className="meeting-item-meta">
                 {formatDate(rec.created)} · {rec.size_mb} MB
@@ -203,18 +202,20 @@ export default function Sidebar({ currentView, onNavigate }) {
                   <button 
                     onClick={(e) => handleRenameClick(e, rec)}
                     className="btn btn-secondary btn-sm"
-                    style={{ padding: '2px 6px', fontSize: 10, minWidth: 'unset', opacity: 0.7 }}
+                    style={{ padding: '3px 6px', minWidth: 'unset', opacity: 0.75, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Renombrar"
+                    aria-label="Renombrar reunión"
                   >
-                    ✏️
+                    <Icon name="edit" size={12} />
                   </button>
                   <button 
                     onClick={(e) => handleDeleteClick(e, rec.filename)}
                     className="btn btn-secondary btn-sm"
-                    style={{ padding: '2px 6px', fontSize: 10, minWidth: 'unset', opacity: 0.7, background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)' }}
+                    style={{ padding: '3px 6px', minWidth: 'unset', opacity: 0.75, background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Eliminar"
+                    aria-label="Eliminar reunión"
                   >
-                    🗑️
+                    <Icon name="trash" size={12} />
                   </button>
                 </div>
               )}

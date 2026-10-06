@@ -29,6 +29,19 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertIn("processing", data)
         self.assertIn("ai_provider", data)
 
+    def test_get_ollama_models_endpoint(self):
+        response = self.client.get("/status/ollama-models")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("models", data)
+        self.assertIsInstance(data["models"], list)
+        self.assertGreater(len(data["models"]), 0)
+
+        # Segundo llamado inmediato debe responder desde caché en tiempo prácticamente nulo
+        cached_response = self.client.get("/status/ollama-models")
+        self.assertEqual(cached_response.status_code, 200)
+        self.assertEqual(cached_response.json(), data)
+
     def test_get_and_update_config(self):
         # Read current
         get_res = self.client.get("/config")
@@ -147,6 +160,224 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertEqual(data["status"], "done")
         self.assertIn("response", data)
 
+    def test_chat_history_with_unanalyzed_meeting_handles_null_analysis(self):
+        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_null_analysis.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_null_analysis.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": "Discusión sobre la arquitectura del sistema y el presupuesto",
+                "analysis": None,
+                "bookmarks": []
+            }, f)
+
+        try:
+            res = self.client.post("/chat/history", json={
+                "messages": [],
+                "question": "¿Qué hablamos sobre arquitectura?"
+            })
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "done")
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_live_bookmark_session_endpoints(self):
+        # 1. Agregar marcador en sesión en vivo
+        res = self.client.post("/recording/bookmark", json={"time": 45.2, "note": "Acuerdo de entregables"})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "ok")
+        bm = data["bookmark"]
+        self.assertEqual(bm["time"], 45.2)
+        self.assertEqual(bm["note"], "Acuerdo de entregables")
+        bm_id = bm["id"]
+
+        # 2. Consultar marcadores activos
+        list_res = self.client.get("/recording/bookmarks")
+        self.assertEqual(list_res.status_code, 200)
+        bookmarks = list_res.json()["bookmarks"]
+        self.assertTrue(any(b["id"] == bm_id for b in bookmarks))
+
+        # 3. Eliminar marcador
+        del_res = self.client.delete(f"/recording/bookmarks/{bm_id}")
+        self.assertEqual(del_res.status_code, 200)
+        remaining = del_res.json()["bookmarks"]
+        self.assertFalse(any(b["id"] == bm_id for b in remaining))
+
+    def test_recording_bookmark_metadata_endpoints(self):
+        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_for_bookmarks.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_for_bookmarks.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFfake_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({"transcript": "Texto de prueba", "bookmarks": []}, f)
+
+        try:
+            # 1. Agregar bookmark a reunión guardada
+            add_res = self.client.post(
+                f"/recordings/{test_filename}/bookmarks",
+                json={"time": 125.0, "note": "Decisión de lanzamiento"}
+            )
+            self.assertEqual(add_res.status_code, 200)
+            data = add_res.json()
+            bookmarks = data["bookmarks"]
+            self.assertEqual(len(bookmarks), 1)
+            self.assertEqual(bookmarks[0]["note"], "Decisión de lanzamiento")
+            bm_id = bookmarks[0]["id"]
+
+            # 2. Verificar que se incluye en list_recordings
+            list_res = self.client.get("/recordings/")
+            self.assertEqual(list_res.status_code, 200)
+            recs = list_res.json()["recordings"]
+            target = next((r for r in recs if r["filename"] == test_filename), None)
+            self.assertIsNotNone(target)
+            self.assertEqual(target.get("bookmarks_count"), 1)
+
+            # 3. Eliminar bookmark
+            del_res = self.client.delete(f"/recordings/{test_filename}/bookmarks/{bm_id}")
+            self.assertEqual(del_res.status_code, 200)
+            bookmarks_after = del_res.json()["bookmarks"]
+            self.assertEqual(len(bookmarks_after), 0)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_format_bookmarks_instruction(self):
+        from services.analysis_service import format_bookmarks_instruction
+        bms = [
+            {"time": 65.0, "note": "Revisión presupuesto"},
+            {"time": 12.5, "note": ""}
+        ]
+        instruction = format_bookmarks_instruction(bms)
+        self.assertIn("MOMENTOS CLAVE MARCADOS", instruction)
+        self.assertIn("[01:05] Revisión presupuesto", instruction)
+        self.assertIn("[00:12] Momento relevante marcado", instruction)
+
+    def test_test_ai_connection_invalid_provider(self):
+        response = self.client.post("/status/test-ai", json={"provider": "invalid_provider"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Proveedor desconocido", response.json()["detail"])
+
+    def test_test_ai_connection_openai_missing_key(self):
+        with patch.object(system_config, "get", return_value=""):
+            response = self.client.post("/status/test-ai", json={"provider": "openai", "api_key": ""})
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("API de OpenAI", response.json()["detail"])
+
+    def test_test_ai_connection_openai_mock_success(self):
+        with patch("openai.OpenAI") as mock_openai_cls:
+            mock_client = mock_openai_cls.return_value
+            mock_client.chat.completions.create.return_value = {
+                "choices": [{"message": {"content": "pong"}}]
+            }
+            response = self.client.post(
+                "/status/test-ai",
+                json={"provider": "openai", "api_key": "sk-test-key-mock", "model": "gpt-4o-mini"}
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["provider"], "openai")
+            self.assertEqual(data["model"], "gpt-4o-mini")
+            self.assertIn("latency_ms", data)
+            self.assertGreaterEqual(data["latency_ms"], 1)
+
+    def test_test_ai_connection_ollama_mock_offline(self):
+        import requests
+        with patch("requests.get", side_effect=requests.exceptions.ConnectionError("Connection refused")):
+            response = self.client.post("/status/test-ai", json={"provider": "local", "model": "phi3"})
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("Ollama no está en ejecución", response.json()["detail"])
+
+    def test_test_ai_connection_ollama_mock_success(self):
+        from unittest.mock import MagicMock
+        mock_tags = MagicMock()
+        mock_tags.status_code = 200
+        mock_tags.json.return_value = {"models": [{"name": "phi3:latest"}]}
+
+        mock_gen = MagicMock()
+        mock_gen.status_code = 200
+        mock_gen.json.return_value = {"response": "pong"}
+
+        with patch("requests.get", return_value=mock_tags), patch("requests.post", return_value=mock_gen):
+            response = self.client.post("/status/test-ai", json={"provider": "local", "model": "phi3"})
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["provider"], "local")
+            self.assertEqual(data["model"], "phi3")
+            self.assertIn("latency_ms", data)
+
+    def test_update_meeting_task_status_lifecycle(self):
+        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_for_task_status.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_for_task_status.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio_tasks")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": "Discusión de tareas y compromisos",
+                "analysis": {
+                    "summary": ["Resumen"],
+                    "action_items": [
+                        {"task": "Preparar informe trimestral", "assignee": "Carlos", "deadline": "Viernes", "completed": False},
+                        {"task": "Enviar contrato a cliente", "assignee": "Ana", "deadline": "Lunes"}
+                    ],
+                    "category": "Operaciones",
+                    "tone": "Formal"
+                }
+            }, f)
+
+        try:
+            # 1. Marcar primera tarea como completada (completed=True)
+            res1 = self.client.patch(f"/recordings/{test_filename}/tasks/0", json={"completed": True})
+            self.assertEqual(res1.status_code, 200)
+            data1 = res1.json()
+            self.assertEqual(data1["status"], "ok")
+            items1 = data1["action_items"]
+            self.assertTrue(items1[0]["completed"])
+            self.assertFalse(items1[1].get("completed", False))
+
+            # 2. Desmarcar la tarea (completed=False)
+            res2 = self.client.patch(f"/recordings/{test_filename}/tasks/0", json={"completed": False})
+            self.assertEqual(res2.status_code, 200)
+            items2 = res2.json()["action_items"]
+            self.assertFalse(items2[0]["completed"])
+
+            # 3. Índice fuera de rango debe retornar 400
+            res3 = self.client.patch(f"/recordings/{test_filename}/tasks/99", json={"completed": True})
+            self.assertEqual(res3.status_code, 400)
+
+            # 4. Archivo inexistente debe retornar 404
+            res4 = self.client.patch("/recordings/non_existent_meeting_123.wav/tasks/0", json={"completed": True})
+            self.assertEqual(res4.status_code, 404)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
 
 if __name__ == "__main__":
     unittest.main()
+

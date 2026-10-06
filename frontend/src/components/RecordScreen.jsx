@@ -12,9 +12,12 @@ import {
   resumeRecording,
   uploadAudioFile,
   getAudioTestLevels,
-  getLiveTranscriptionUrl
+  getLiveTranscriptionUrl,
+  addLiveBookmark,
+  deleteLiveBookmark
 } from '../api'
-import { useSystem } from '../context/SystemContext'
+import { useSystem } from '../hooks/useSystem'
+import Icon from './Icon'
 import LiveTranscriptPanel from './recording/LiveTranscriptPanel'
 
 export default function RecordScreen({ onRecordingDone }) {
@@ -37,15 +40,87 @@ export default function RecordScreen({ onRecordingDone }) {
   const [isPreparing, setIsPreparing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   
-  const [isLiveTranscriptionEnabled, setIsLiveTranscriptionEnabled] = useState(false)
+  const [isLiveTranscriptionEnabled, setIsLiveTranscriptionEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('meeting_live_transcription_enabled') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  // Marcadores de momentos clave en vivo (Live Bookmarking)
+  const [bookmarks, setBookmarks] = useState([])
+  const [bookmarkNote, setBookmarkNote] = useState('')
+  const noteInputRef = useRef(null)
+
+  const handleLiveBookmark = async (customNote = null) => {
+    if (!isRecording) return
+    const note = customNote !== null ? customNote : bookmarkNote
+    const currentSecs = seconds
+    const tempId = `bm_${Date.now()}`
+    const newBm = { id: tempId, time: currentSecs, note: note.trim() }
+
+    setBookmarks(prev => [...prev, newBm].sort((a, b) => a.time - b.time))
+    setBookmarkNote('')
+
+    try {
+      const res = await addLiveBookmark(currentSecs, note.trim())
+      if (res.data?.bookmarks) {
+        setBookmarks(res.data.bookmarks)
+      }
+      showToast({
+        type: 'success',
+        message: `Momento marcado [${formatTime(currentSecs)}]${note.trim() ? ': ' + note.trim() : ''}`
+      })
+    } catch (err) {
+      console.error('Error al guardar marcador:', err)
+    }
+  }
+
+  const handleDeleteBookmark = async (bookmarkId) => {
+    setBookmarks(prev => prev.filter(b => b.id !== bookmarkId))
+    try {
+      await deleteLiveBookmark(bookmarkId)
+    } catch (err) {
+      console.error('Error al eliminar marcador:', err)
+    }
+  }
+
+  // Atajo de teclado para marcar momento clave: tecla 'M' o 'Ctrl+B'
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return
+      if (!isRecording) return
+
+      if (e.key === 'm' || e.key === 'M' || (e.ctrlKey && (e.key === 'b' || e.key === 'B'))) {
+        e.preventDefault()
+        noteInputRef.current?.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isRecording])
+
+  const handleToggleLiveTranscription = (enabled) => {
+    setIsLiveTranscriptionEnabled(enabled)
+    try {
+      localStorage.setItem('meeting_live_transcription_enabled', String(enabled))
+    } catch {
+      // Ignorar restricción de localStorage
+    }
+  }
 
   const sseRef = useRef(null)
 
   // Polling de niveles de audio mientras se graba activamente
   useEffect(() => {
     let intervalId
+    let isFetching = false
     if (isRecording && !isPaused && !isBackendOffline) {
       intervalId = setInterval(async () => {
+        if (isFetching) return
+        isFetching = true
         try {
           const res = await getAudioTestLevels()
           const scaleLevel = (val) => Math.min(100, Math.round(Math.sqrt(val) * 160))
@@ -53,8 +128,10 @@ export default function RecordScreen({ onRecordingDone }) {
           setSysLevel(scaleLevel(res.data.sys_level))
         } catch (err) {
           console.error('Error al obtener niveles en tiempo real:', err)
+        } finally {
+          isFetching = false
         }
-      }, 150)
+      }, 250)
     } else {
       setMicLevel(0)
       setSysLevel(0)
@@ -244,6 +321,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setIsPaused(false)
         setSeconds(0)
         setStreamError('')
+        setBookmarks([])
 
         const res = await startRecording()
         audioPathRef.current = res.data.audio_path
@@ -253,7 +331,7 @@ export default function RecordScreen({ onRecordingDone }) {
         if (isLiveTranscriptionEnabled) {
           connectLiveSse(sid)
         }
-        showToast({ type: 'success', message: '🎙️ Grabación iniciada' })
+        showToast({ type: 'success', message: 'Grabación iniciada' })
       } catch (err) {
         setIsRecording(false)
         setIsPaused(false)
@@ -269,7 +347,6 @@ export default function RecordScreen({ onRecordingDone }) {
       try {
         const currentPath = audioPathRef.current
         setStreamStatus('finalizing')
-        setIsRecording(false)
         setIsPaused(false)
 
         if (sseRef.current) {
@@ -277,8 +354,10 @@ export default function RecordScreen({ onRecordingDone }) {
           sseRef.current = null
         }
 
-        const res = await stopRecording()
-        showToast({ type: 'info', message: '✅ Grabación guardada. Procesando...' })
+        const res = await stopRecording(bookmarks)
+        showToast({ type: 'info', message: 'Grabación guardada. Procesando...' })
+        setIsRecording(false)
+        setStreamStatus('idle')
         onRecordingDone(res.data.audio_path || currentPath)
       } catch (err) {
         setIsRecording(false)
@@ -303,6 +382,7 @@ export default function RecordScreen({ onRecordingDone }) {
       setIsPaused(false)
       setLiveSegments([])
       setPartialText('')
+      setBookmarks([])
       setSeconds(0)
       audioPathRef.current = null
       setSessionId(null)
@@ -325,7 +405,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setIsPaused(false)
         await resumeRecording()
         setStreamStatus('listening')
-        showToast({ type: 'success', message: '🎙️ Grabación reanudada' })
+        showToast({ type: 'success', message: 'Grabación reanudada' })
       } catch {
         setIsPaused(true)
         showToast({ type: 'error', message: 'Error al reanudar la grabación' })
@@ -350,10 +430,13 @@ export default function RecordScreen({ onRecordingDone }) {
       0
     ) + (partialText ? partialText.split(/\s+/).filter(Boolean).length : 0)
 
+  const isFinalizing = streamStatus === 'finalizing'
+  const isStudioActive = isRecording || isFinalizing
+
   return (
-    <div className={`record-screen ${isRecording ? 'is-recording' : ''}`}>
+    <div className={`record-screen ${isStudioActive ? 'is-recording' : ''}`}>
       {/* Estado inactivo / Inicial */}
-      {!isRecording && (
+      {!isStudioActive && (
         <div style={{ textAlign: 'center', marginBottom: 12 }}>
           <h1 className="record-title" style={{ fontSize: 36, marginBottom: 12 }}>Listo para grabar</h1>
           <p className="record-subtitle" style={{ margin: '0 auto', fontSize: 16 }}>
@@ -364,7 +447,7 @@ export default function RecordScreen({ onRecordingDone }) {
               <input 
                 type="checkbox" 
                 checked={isLiveTranscriptionEnabled} 
-                onChange={(e) => setIsLiveTranscriptionEnabled(e.target.checked)} 
+                onChange={(e) => handleToggleLiveTranscription(e.target.checked)} 
               />
               Transcripción en tiempo real
             </label>
@@ -372,187 +455,322 @@ export default function RecordScreen({ onRecordingDone }) {
         </div>
       )}
 
-      {/* Monitor de Grabación Activa */}
-      {isRecording && (
-        <div className="glass record-active-card" role="region" aria-label="Monitor de grabación activa">
-          <div style={{ textAlign: 'center' }}>
-            <h1 className="record-title" style={{ fontSize: 22, color: isPaused ? 'var(--text-secondary)' : 'var(--text-primary)', marginBottom: 2 }}>
-              {isPaused ? 'Grabación en pausa' : 'Grabando reunión...'}
-            </h1>
-            <p className="record-subtitle" style={{ margin: '4px auto 0', fontSize: 13 }}>
-              {isPaused 
-                ? 'El audio está detenido. Haz clic en Reanudar para continuar capturando.' 
-                : 'Capturando audio y transcribiendo en vivo con IA.'}
-            </p>
-          </div>
-
-          {/* Banner visual de pausa */}
-          {isPaused && (
-            <div className="recording-paused-banner" role="status">
-              <span>⏸️</span>
-              <span>Grabación pausada — El micrófono no está capturando audio</span>
-            </div>
-          )}
-
-          <div className={`waveform ${isPaused ? 'paused' : ''}`} style={{ marginTop: 2, marginBottom: 2 }} aria-hidden="true">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div
-                key={i}
-                className="wave-bar"
-                style={{ 
-                  animationDelay: `${i * 0.1}s`,
-                  animationPlayState: isPaused ? 'paused' : 'running',
-                  opacity: isPaused ? 0.3 : 1,
-                  background: isPaused ? 'var(--text-muted)' : 'var(--accent-primary)',
-                  height: isPaused ? 12 : undefined
-                }}
-              />
-            ))}
-          </div>
-
-          <div className="timer big-digital" style={{ opacity: isPaused ? 0.6 : 1 }} aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
-            {formatTime(seconds)}
-          </div>
-
-          {/* Indicadores de volumen discretos (solo cuando no está pausado) */}
-          {!isPaused && (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: 16, 
-              padding: '4px 14px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-full)',
-              width: 'fit-content',
-              margin: '0 auto'
-            }} aria-label="Niveles de audio en vivo">
-              {/* Medidor de Micrófono */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
-                <span>🎤 Mic:</span>
-                <div style={{ width: 42, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${micLevel}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-violet))', transition: 'width 80ms ease' }} />
-                </div>
+      {/* ─── Recording Studio Dashboard (Pantalla Completa Activa) ─── */}
+      {isStudioActive && (
+        <div className="record-studio" role="region" aria-label="Estudio de Grabación Activa">
+          {/* Overlay de Finalización Suave */}
+          {isFinalizing && (
+            <div className="studio-finalizing-overlay">
+              <div className="spinner-small" style={{ width: 36, height: 36, borderWidth: 3 }} />
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginTop: 8 }}>
+                Finalizando reunión...
               </div>
-
-              {/* Medidor de Sistema */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
-                <span>🖥️ Sis:</span>
-                <div style={{ width: 42, height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${sysLevel}%`, height: '100%', background: 'linear-gradient(90deg, #10B981, var(--accent-primary))', transition: 'width 80ms ease' }} />
-                </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Guardando audio y preparando el motor de análisis con IA
               </div>
             </div>
           )}
+          {/* Barra Superior del Estudio */}
+          <div className="record-studio-header">
+            <div className="record-studio-status">
+              <span className="live-rec-badge">
+                <span className={`live-rec-dot ${isPaused ? 'paused' : 'pulsing'}`} />
+                <span>{isPaused ? 'PAUSADO' : 'GRABANDO EN VIVO'}</span>
+              </span>
+              <div className="record-audio-meters-pill" aria-label="Niveles de audio">
+                <span className="meter-label">
+                  <Icon name="mic" size={12} /> Mic:
+                </span>
+                <div className="meter-track">
+                  <div className="meter-fill" style={{ width: `${micLevel}%` }} />
+                </div>
+                <span className="meter-label">
+                  <Icon name="volume" size={12} /> Sis:
+                </span>
+                <div className="meter-track">
+                  <div className="meter-fill sys" style={{ width: `${sysLevel}%` }} />
+                </div>
+              </div>
+            </div>
 
-          {/* Toggle de Traducción en Tiempo Real durante grabación */}
-          <div style={{ marginTop: 20, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '6px 14px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
-              <input 
-                type="checkbox" 
-                checked={isLiveTranscriptionEnabled} 
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setIsLiveTranscriptionEnabled(enabled);
-                  if (enabled && sessionIdRef.current) {
-                    connectLiveSse(sessionIdRef.current);
-                  } else if (!enabled && sseRef.current) {
-                    sseRef.current.close();
-                    sseRef.current = null;
-                  }
-                }} 
-              />
-              Transcripción en tiempo real
-            </label>
-          </div>
+            <div className="record-studio-timer" aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
+              <span className={`timer-digits ${isPaused ? 'paused' : ''}`}>{formatTime(seconds)}</span>
+            </div>
 
-          {/* Controles de Grabación Accesibles con Iconos y Texto */}
-          <div className="record-controls-row">
-            {isPaused ? (
-              /* ESTADO PAUSADO: El botón de Reanudar es la acción principal destacada */
-              <>
+            <div className="record-studio-actions">
+              {isPaused ? (
                 <button
                   type="button"
-                  className="record-ctrl-btn btn-resume"
+                  className="btn btn-resume"
                   onClick={handlePauseResume}
                   disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Reanudar grabación"
-                  title="Reanudar captura de audio de la reunión"
+                  title="Reanudar captura de audio"
                 >
-                  <span style={{ fontSize: 15 }}>▶️</span>
-                  <span>Reanudar Grabación</span>
+                  <Icon name="play" size={15} />
+                  <span>Reanudar</span>
                 </button>
-
+              ) : (
                 <button
                   type="button"
-                  className="record-ctrl-btn btn-stop"
-                  onClick={handleStartStop}
-                  disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Finalizar y procesar reunión"
-                  title="Detener y enviar a análisis con IA"
-                >
-                  <span style={{ fontSize: 13 }}>⏹</span>
-                  <span>Finalizar</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="record-ctrl-btn btn-cancel"
-                  onClick={handleCancelRecording}
-                  disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Descartar grabación"
-                  title="Descartar grabación sin guardar"
-                >
-                  <span>✕</span>
-                  <span>Descartar</span>
-                </button>
-              </>
-            ) : (
-              /* ESTADO GRABANDO: Opciones claras para Pausar, Finalizar o Descartar */
-              <>
-                <button
-                  type="button"
-                  className="record-ctrl-btn btn-pause"
+                  className="btn btn-pause"
                   onClick={handlePauseResume}
                   disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Pausar grabación"
                   title="Pausar grabación temporalmente"
                 >
-                  <span style={{ fontSize: 15 }}>⏸️</span>
+                  <Icon name="pause" size={15} />
                   <span>Pausar</span>
                 </button>
+              )}
 
-                <button
-                  type="button"
-                  className="record-ctrl-btn btn-stop"
-                  onClick={handleStartStop}
-                  disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Finalizar y procesar reunión"
-                  title="Detener reunión y generar análisis con IA"
-                >
-                  <span style={{ fontSize: 13 }}>⏹</span>
-                  <span>Finalizar</span>
-                </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-finish"
+                onClick={handleStartStop}
+                disabled={isBackendOffline || isCancelling || isPreparing || isFinalizing}
+                title={isFinalizing ? "Finalizando grabación y preparando análisis..." : "Detener y procesar reunión con IA"}
+              >
+                {isFinalizing ? (
+                  <>
+                    <div className="spinner-small" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    <span>Finalizando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="stop" size={15} />
+                    <span>Finalizar Reunión</span>
+                  </>
+                )}
+              </button>
 
-                <button
-                  type="button"
-                  className="record-ctrl-btn btn-cancel"
-                  onClick={handleCancelRecording}
-                  disabled={isBackendOffline || isCancelling || isPreparing}
-                  aria-label="Descartar grabación"
-                  title="Descartar grabación sin guardar"
-                >
-                  <span>✕</span>
-                  <span>Descartar</span>
-                </button>
-              </>
-            )}
+              <button
+                type="button"
+                className="btn btn-secondary btn-cancel-recording"
+                onClick={handleCancelRecording}
+                disabled={isBackendOffline || isCancelling || isPreparing}
+                title="Descartar grabación sin guardar"
+              >
+                <Icon name="x" size={15} />
+                <span>Descartar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Área Principal de 2 Columnas */}
+          <div className="record-studio-body">
+            {/* Columna Izquierda (65%): Transcripción en Vivo o Estudio Visualizador */}
+            <div className="record-studio-left glass">
+              {isLiveTranscriptionEnabled ? (
+                <LiveTranscriptPanel
+                  liveSegments={liveSegments}
+                  partialText={partialText}
+                  streamStatus={streamStatus}
+                  errorMessage={streamError}
+                  totalWords={totalWords}
+                  isPaused={isPaused}
+                  formatSegmentTime={formatSegmentTime}
+                />
+              ) : (
+                <div className="record-studio-visualizer-panel">
+                  <div className="visualizer-header">
+                    <div className="visualizer-title-group">
+                      <Icon name="mic" size={18} style={{ color: 'var(--accent-primary)' }} />
+                      <h2 className="visualizer-title">Captura de Audio Activa</h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-enable-live-transcription"
+                      onClick={() => {
+                        handleToggleLiveTranscription(true)
+                        if (sessionIdRef.current) {
+                          connectLiveSse(sessionIdRef.current)
+                        }
+                      }}
+                      title="Activar transcripción en tiempo real palabra por palabra"
+                    >
+                      <Icon name="target" size={14} />
+                      <span>Activar Transcripción en Vivo</span>
+                    </button>
+                  </div>
+
+                  <div className="visualizer-body">
+                    <div className={`studio-waveform ${isPaused ? 'paused' : ''}`}>
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="studio-wave-bar"
+                          style={{
+                            animationDelay: `${(i % 8) * 0.12}s`,
+                            animationPlayState: isPaused ? 'paused' : 'running',
+                            height: isPaused ? '8px' : `${Math.max(14, Math.min(76, ((micLevel + sysLevel) / 2) * 0.8 + ((i * 7) % 25)))}px`
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="visualizer-status-text">
+                      {isPaused
+                        ? 'Grabación pausada. El micrófono no está capturando audio.'
+                        : 'Capturando audio del sistema y micrófono con máxima privacidad.'}
+                    </div>
+
+                    <div className="studio-rms-dashboard">
+                      <div className="rms-meter-card">
+                        <div className="rms-card-header">
+                          <span className="rms-card-title">
+                            <Icon name="mic" size={14} /> Micrófono
+                          </span>
+                          <span className="rms-card-val">{micLevel}%</span>
+                        </div>
+                        <div className="rms-large-track">
+                          <div
+                            className="rms-large-fill mic"
+                            style={{ width: `${micLevel}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rms-meter-card">
+                        <div className="rms-card-header">
+                          <span className="rms-card-title">
+                            <Icon name="volume" size={14} /> Audio del Sistema
+                          </span>
+                          <span className="rms-card-val">{sysLevel}%</span>
+                        </div>
+                        <div className="rms-large-track">
+                          <div
+                            className="rms-large-fill sys"
+                            style={{ width: `${sysLevel}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="visualizer-tips-card">
+                      <div className="tip-item">
+                        <Icon name="lock" size={14} style={{ color: 'var(--green-ok)' }} />
+                        <span>Privacidad Total: Todo el procesamiento es local en tu equipo.</span>
+                      </div>
+                      <div className="tip-item">
+                        <Icon name="bookmark" size={14} style={{ color: '#F59E0B' }} />
+                        <span>Presiona la tecla <strong>M</strong> para fijar un momento clave con nota.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Columna Derecha (35%): Estación de Marcadores en Vivo */}
+            <div className="record-studio-right glass">
+              <div className="bookmarks-station-header">
+                <div className="bookmarks-title-row">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon name="bookmark" size={16} style={{ color: '#F59E0B' }} />
+                    <h3 className="bookmarks-title">Momentos Clave</h3>
+                  </div>
+                  <span className="bookmarks-count-badge">
+                    {bookmarks.length} {bookmarks.length === 1 ? 'marcador' : 'marcadores'}
+                  </span>
+                </div>
+                <p className="bookmarks-subtitle">
+                  Fija acuerdos o temas importantes con un clic o atajo.
+                </p>
+              </div>
+
+              {/* Formulario de Marcador */}
+              <div className="bookmark-form-box">
+                <div className="bookmark-input-row">
+                  <span className="bookmark-timestamp-tag">
+                    {formatTime(seconds)}
+                  </span>
+                  <input
+                    ref={noteInputRef}
+                    type="text"
+                    className="bookmark-text-input"
+                    placeholder="Nota rápida (Enter para guardar)..."
+                    value={bookmarkNote}
+                    onChange={(e) => setBookmarkNote(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleLiveBookmark()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-save-bm"
+                    onClick={() => handleLiveBookmark()}
+                    disabled={!isRecording}
+                    title="Guardar marcador"
+                  >
+                    <Icon name="check" size={13} />
+                    <span>Fijar</span>
+                  </button>
+                </div>
+
+                <div className="quick-tags-container">
+                  <span className="quick-tags-hint">Etiquetas rápidas:</span>
+                  <div className="quick-tags-list">
+                    {['Decisión', 'Punto Clave', 'Acuerdo / Tarea', 'Importante', 'Duda'].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="quick-tag-pill"
+                        onClick={() => handleLiveBookmark(tag)}
+                        title={`Agregar marcador con etiqueta "${tag}"`}
+                      >
+                        +{tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Línea de tiempo de marcadores */}
+              <div className="bookmarks-timeline-wrapper">
+                <div className="bookmarks-timeline-header">
+                  <span>Línea de tiempo</span>
+                  <span className="shortcut-hint">Atajo: Tecla [M]</span>
+                </div>
+
+                {bookmarks.length === 0 ? (
+                  <div className="bookmarks-empty-state">
+                    <div className="bm-empty-icon">
+                      <Icon name="bookmark" size={22} />
+                    </div>
+                    <p className="bm-empty-text">Sin marcadores aún</p>
+                    <p className="bm-empty-sub">
+                      Presiona <strong>M</strong> o usa las etiquetas rápidas para resaltar momentos en el audio.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bookmarks-items-list">
+                    {bookmarks.map((bm) => (
+                      <div key={bm.id} className="bookmark-item-row">
+                        <span className="bm-item-time">{formatSegmentTime(bm.time)}</span>
+                        <span className="bm-item-note">{bm.note || 'Momento destacado'}</span>
+                        <button
+                          type="button"
+                          className="bm-item-delete"
+                          onClick={() => handleDeleteBookmark(bm.id)}
+                          title="Eliminar marcador"
+                          aria-label={`Eliminar marcador a los ${formatSegmentTime(bm.time)}`}
+                        >
+                          <Icon name="x" size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Botón Iniciar Grabación (Solo cuando NO está grabando) */}
-      {!isRecording && (
+      {!isStudioActive && (
         <div className={`record-btn-wrapper ${isBackendOffline ? 'offline' : ''}`}>
           <button
             type="button"
@@ -573,29 +791,16 @@ export default function RecordScreen({ onRecordingDone }) {
             {isPreparing ? (
               <div className="spinner-small" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff', width: 24, height: 24, borderWidth: 3 }}></div>
             ) : (
-              <span className="btn-icon">
-                ⏺
+              <span className="btn-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="mic" size={32} />
               </span>
             )}
           </button>
         </div>
       )}
 
-      {/* Panel de Transcripción en Vivo (Visible mientras se graba y está habilitado) */}
-      {isRecording && isLiveTranscriptionEnabled && (
-        <LiveTranscriptPanel
-          liveSegments={liveSegments}
-          partialText={partialText}
-          streamStatus={streamStatus}
-          errorMessage={streamError}
-          totalWords={totalWords}
-          isPaused={isPaused}
-          formatSegmentTime={formatSegmentTime}
-        />
-      )}
-
       {/* Carga de audio (Solo si no está grabando) */}
-      {!isRecording && (
+      {!isStudioActive && (
         <>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 24, textAlign: 'center' }}>
             Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
@@ -631,7 +836,9 @@ export default function RecordScreen({ onRecordingDone }) {
                 </div>
               ) : (
                 <div className="upload-prompt">
-                  <span className="upload-icon">📂</span>
+                  <span className="upload-icon" style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                    <Icon name="upload" size={28} style={{ color: 'var(--accent-primary)' }} />
+                  </span>
                   <span className="upload-text">
                     Arrastra un archivo de audio aquí o <span className="upload-link">selecciónalo</span>
                   </span>

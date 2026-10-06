@@ -13,9 +13,12 @@ import HistoryScreen from './components/HistoryScreen'
 import HistoryChatScreen from './components/HistoryChatScreen'
 import Toast from './components/Toast'
 import { startRecording, stopRecording } from './api'
-import { SystemProvider, useSystem } from './context/SystemContext'
+import { SystemProvider } from './context/SystemContext'
 import { RecordingsProvider } from './context/RecordingsContext'
+import { useSystem } from './hooks/useSystem'
+import { useRecordings } from './hooks/useRecordings'
 import OfflineOverlay from './components/OfflineOverlay'
+import SplashScreen from './components/SplashScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 import logoImg from './assets/icon.jpg'
 import './index.css'
@@ -23,6 +26,12 @@ import './index.css'
 // Componente intermedio para poder usar useSystem() para atajos
 function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavigate }) {
   const { isRecording, setIsRecording, showToast, isBackendOffline } = useSystem()
+  const { loadRecordings } = useRecordings()
+
+  const handleRecordingDoneWrapper = useCallback((path) => {
+    loadRecordings({ silent: true })
+    handleRecordingDone(path)
+  }, [handleRecordingDone, loadRecordings])
 
   // Registrar listener del atajo global de teclado (Ctrl+Shift+R)
   useEffect(() => {
@@ -37,14 +46,14 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
             // Detener grabación
             setIsRecording(false)
             const res = await stopRecording()
-            showToast({ type: 'info', message: '✅ Grabación guardada (Atajo). Procesando...' })
-            handleRecordingDone(res.data.audio_path)
+            showToast({ type: 'info', message: 'Grabación guardada (Atajo). Procesando...' })
+            handleRecordingDoneWrapper(res.data.audio_path)
           } else {
             // Iniciar grabación (el backend usará la fuente configurada)
             setIsRecording(true)
             setView('record') // Forzar navegación a la pantalla de grabación
             await startRecording()
-            showToast({ type: 'success', message: '🎙️ Grabación iniciada (Atajo)' })
+            showToast({ type: 'success', message: 'Grabación iniciada (Atajo)' })
           }
         } catch (err) {
           console.error('Error al accionar atajo de teclado global:', err)
@@ -55,7 +64,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
       })
       return () => unsubscribe()
     }
-  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDone, isBackendOffline])
+  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDoneWrapper, isBackendOffline])
 
   return (
     <div className="app-body">
@@ -69,7 +78,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
       <main className="main-content">
         {view === 'record' && (
           <RecordScreen
-            onRecordingDone={handleRecordingDone}
+            onRecordingDone={handleRecordingDoneWrapper}
           />
         )}
         
@@ -163,6 +172,9 @@ export default function App() {
 
           {/* Overlay de Backend Offline */}
           <OfflineOverlay />
+
+          {/* Pantalla de Inicio / Splash Screen */}
+          <SplashScreen />
         </div>
       </RecordingsProvider>
     </SystemProvider>

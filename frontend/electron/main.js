@@ -19,8 +19,9 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     frame: false,          // Sin barra de título nativa (usamos la nuestra)
-    backgroundColor: '#0F172A',
+    backgroundColor: '#090E17',
     icon: path.join(__dirname, '../public/icon.png'),
+    show: false,           // Prevenir parpadeo o ventana en blanco antes de pintar el splash
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -34,6 +35,27 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer] ${message} (${sourceId}:${line})`)
+  })
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[Renderer Gone]', details)
+  })
+
+  // Mostrar la ventana tan pronto como el splash inicial esté listo para pintarse
+  mainWindow.once('ready-to-show', () => {
+    console.log('[Electron] ready-to-show disparado')
+    mainWindow.show()
+  })
+
+  // Timeout de seguridad en caso de que ready-to-show se retrase
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+  }, 1000)
 
   // Interceptar cierre para ocultar en la bandeja (System Tray)
   mainWindow.on('close', (event) => {

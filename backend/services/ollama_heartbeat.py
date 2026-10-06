@@ -1,16 +1,30 @@
 import asyncio
+import time
 import httpx
 from typing import List
 
 # Estado global del Heartbeat
 ollama_online = False
 active_listeners: List[asyncio.Queue] = []
+cached_models: List[str] = []
+last_models_update: float = 0.0
 
 async def check_ollama_status(url: str = "http://localhost:11434/api/tags") -> bool:
+    global cached_models, last_models_update
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=3.0)
-            return response.status_code == 200
+            response = await client.get(url, timeout=2.0)
+            if response.status_code == 200:
+                try:
+                    data = response.json().get("models", [])
+                    models = [m["name"] for m in data if isinstance(m, dict) and "name" in m]
+                    if models:
+                        cached_models = models
+                        last_models_update = time.time()
+                except Exception:
+                    pass
+                return True
+            return False
     except Exception:
         return False
 

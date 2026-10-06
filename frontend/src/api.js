@@ -66,18 +66,23 @@ api.interceptors.response.use(
 
 export const getStatus = () => api.get('/status')
 export const startRecording = () => api.post('/recording/start', {})
-export const stopRecording = () => api.post('/recording/stop')
+export const stopRecording = (bookmarks = null) => api.post('/recording/stop', bookmarks ? { bookmarks } : {})
 export const cancelRecording = () => api.post('/recording/cancel')
 export const pauseRecording = () => api.post('/recording/pause')
 export const resumeRecording = () => api.post('/recording/resume')
+export const addLiveBookmark = (time, note = '') => api.post('/recording/bookmark', { time, note })
+export const getLiveBookmarks = () => api.get('/recording/bookmarks')
+export const deleteLiveBookmark = (bookmarkId) => api.delete(`/recording/bookmarks/${encodeURIComponent(bookmarkId)}`)
 export const getLiveTranscriptionUrl = (sessionId = null) => 
   `${BASE_URL}/recording/live-transcription${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`
 export const getAudioDevices = () => api.get('/audio/devices')
 export const getOllamaModels = () => api.get('/status/ollama-models')
+export const testAiProvider = (provider, apiKey = null, model = null) =>
+  api.post('/status/test-ai', { provider, api_key: apiKey, model })
 export const transcribeAudio = (audioPath, language = null, diarize = false) =>
   api.post('/transcribe', { audio_path: audioPath, language, diarize })
-export const analyzeTranscript = (transcript, segments = null, audioPath = null) =>
-  api.post('/analyze', { transcript, segments, audio_path: audioPath })
+export const analyzeTranscript = (transcript, segments = null, audioPath = null, bookmarks = null) =>
+  api.post('/analyze', { transcript, segments, audio_path: audioPath, bookmarks })
 export const cancelProcessing = () => api.post('/processing/cancel')
 export const getSession = () => api.get('/session')
 export const getRecordings = () => api.get('/recordings')
@@ -89,6 +94,12 @@ export const renameSpeaker = (filename, oldSpeaker, newSpeaker) =>
     old_speaker: oldSpeaker,
     new_speaker: newSpeaker,
   })
+export const addRecordingBookmark = (filename, time, note = '') =>
+  api.post(`/recordings/${encodeURIComponent(filename)}/bookmarks`, { time, note })
+export const deleteRecordingBookmark = (filename, bookmarkId) =>
+  api.delete(`/recordings/${encodeURIComponent(filename)}/bookmarks/${encodeURIComponent(bookmarkId)}`)
+export const updateRecordingTaskStatus = (filename, taskIndex, completed) =>
+  api.patch(`/recordings/${encodeURIComponent(filename)}/tasks/${taskIndex}`, { completed })
 export const getConfig = () => api.get('/config')
 export const updateConfig = (config) => api.post('/config', config)
 export const chatWithMeeting = (audioPath, messages, question) => api.post('/chat', { audio_path: audioPath, messages, question })

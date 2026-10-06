@@ -18,7 +18,8 @@ export function generateExecutiveMarkdown({
   keyDecisions = [],
   actionItems = [],
   segments = [],
-  transcript = ''
+  transcript = '',
+  bookmarks = []
 }) {
   let md = `# 📋 Minuta Ejecutiva: ${title}\n\n`
   
@@ -41,6 +42,16 @@ export function generateExecutiveMarkdown({
   }
   md += `\n`
 
+  if (bookmarks && bookmarks.length > 0) {
+    md += `## 🔖 Momentos Clave Marcados\n`
+    bookmarks.forEach(bm => {
+      const timeStr = formatTime(bm.time)
+      const noteStr = bm.note ? ` - ${bm.note}` : ''
+      md += `- **[${timeStr}]**${noteStr}\n`
+    })
+    md += `\n`
+  }
+
   md += `## 🎯 Decisiones Clave\n`
   if (keyDecisions && keyDecisions.length > 0) {
     keyDecisions.forEach(d => {
@@ -59,7 +70,9 @@ export function generateExecutiveMarkdown({
       const task = item.task || 'Tarea pendiente'
       const assignee = item.assignee || 'Sin asignar'
       const deadline = item.deadline || 'Sin fecha'
-      md += `| [ ] | ${task} | **${assignee}** | ${deadline} |\n`
+      const statusBox = item.completed ? '[x]' : '[ ]'
+      const taskDisplay = item.completed ? `~~${task}~~` : task
+      md += `| ${statusBox} | ${taskDisplay} | **${assignee}** | ${deadline} |\n`
     })
   } else {
     md += `*No se identificaron tareas pendientes.*\n`
@@ -92,11 +105,23 @@ export function generateExecutiveHtml({
   keyDecisions = [],
   actionItems = [],
   segments = [],
-  transcript = ''
+  transcript = '',
+  bookmarks = []
 }) {
   const summaryList = (summary && summary.length > 0)
     ? summary.map(s => `<li style="margin-bottom: 6px;">${s}</li>`).join('')
     : '<li><em>Sin resumen disponible.</em></li>'
+
+  const bookmarksSection = (bookmarks && bookmarks.length > 0)
+    ? `
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 18px; color: #b45309; border-bottom: 1px solid #fef3c7; padding-bottom: 6px; margin-bottom: 12px;">🔖 Momentos Clave Marcados (${bookmarks.length})</h2>
+        <ul style="padding-left: 20px; color: #1e293b; font-size: 14px;">
+          ${bookmarks.map(bm => `<li style="margin-bottom: 6px;"><strong style="color: #b45309; font-family: monospace;">[${formatTime(bm.time)}]</strong> ${bm.note || 'Momento clave marcado'}</li>`).join('')}
+        </ul>
+      </div>
+    `
+    : ''
 
   const decisionsList = (keyDecisions && keyDecisions.length > 0)
     ? keyDecisions.map(d => `<li style="margin-bottom: 6px;">${d}</li>`).join('')
@@ -104,10 +129,10 @@ export function generateExecutiveHtml({
 
   const taskRows = (actionItems && actionItems.length > 0)
     ? actionItems.map(item => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px; text-align: center;">⬜</td>
-          <td style="padding: 10px; font-weight: 500; color: #1e293b;">${item.task || ''}</td>
-          <td style="padding: 10px;"><span style="background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${item.assignee || 'Sin asignar'}</span></td>
+        <tr style="border-bottom: 1px solid #e2e8f0; ${item.completed ? 'background: #f8fafc;' : ''}">
+          <td style="padding: 10px; text-align: center; font-size: 15px;">${item.completed ? '✅' : '⬜'}</td>
+          <td style="padding: 10px; font-weight: 500; color: ${item.completed ? '#64748b' : '#1e293b'}; ${item.completed ? 'text-decoration: line-through;' : ''}">${item.task || ''}</td>
+          <td style="padding: 10px;"><span style="background: ${item.completed ? '#f1f5f9' : '#e0e7ff'}; color: ${item.completed ? '#64748b' : '#3730a3'}; padding: 3px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600;">${item.assignee || 'Sin asignar'}</span></td>
           <td style="padding: 10px; color: #64748b; font-size: 13px;">${item.deadline || 'Sin fecha'}</td>
         </tr>
       `).join('')
@@ -143,6 +168,8 @@ export function generateExecutiveHtml({
           ${summaryList}
         </ul>
       </div>
+
+      ${bookmarksSection}
 
       <div style="margin-bottom: 24px;">
         <h2 style="font-size: 18px; color: #312e81; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 12px;">🎯 Decisiones Clave</h2>

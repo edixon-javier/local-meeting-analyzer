@@ -30,7 +30,7 @@ SEGMENTOS A DIARIZAR:
 {segments_text}
 """
 
-ANALYZE_PROMPT_TEMPLATE = """Eres un asistente especializado en análisis de reuniones. Analiza la siguiente transcripción y responde EXCLUSIVAMENTE en el formato JSON indicado. No incluyas texto adicional fuera del JSON.{focus_instruction}
+ANALYZE_PROMPT_TEMPLATE = """Eres un asistente especializado en análisis de reuniones. Analiza la siguiente transcripción y responde EXCLUSIVAMENTE en el formato JSON indicado. No incluyas texto adicional fuera del JSON.{focus_instruction}{bookmarks_instruction}
 
 TRANSCRIPCIÓN:
 \"\"\"
@@ -48,6 +48,22 @@ Responde SOLO con este JSON (sin markdown):
   "key_decisions": ["Decisión 1", "Decisión 2"],
   "duration_insight": "Breve observación sobre la densidad"
 }}"""
+
+def format_bookmarks_instruction(bookmarks: Optional[List[Dict[str, Any]]]) -> str:
+    if not bookmarks:
+        return ""
+    lines = ["\nMOMENTOS CLAVE MARCADOS POR EL USUARIO DURANTE LA REUNIÓN (Presta especial atención a estos momentos para incluirlos con prioridad en el resumen y decisiones clave):"]
+    for bm in bookmarks:
+        t = bm.get("time", 0.0)
+        mins = int(t // 60)
+        secs = int(t % 60)
+        time_str = f"{mins:02d}:{secs:02d}"
+        note = bm.get("note", "").strip()
+        if note:
+            lines.append(f"- [{time_str}] {note}")
+        else:
+            lines.append(f"- [{time_str}] Momento relevante marcado")
+    return "\n" + "\n".join(lines) + "\n"
 
 CHAT_TRANSCRIPT_SYSTEM = """Eres un asistente de IA experto que responde preguntas basándose ÚNICAMENTE en la transcripción de una reunión.
 TRANSCRIPCIÓN:
@@ -152,9 +168,14 @@ class LocalOllamaProvider(IAnalyzer):
             })
         return diarized_segments
 
-    def analyze(self, transcript: str) -> Dict[str, Any]:
+    def analyze(self, transcript: str, bookmarks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         focus_instruction = f"\nENFOQUE REQUERIDO: {self.analysis_focus}\n" if self.analysis_focus else ""
-        prompt = ANALYZE_PROMPT_TEMPLATE.format(focus_instruction=focus_instruction, transcript=transcript)
+        bookmarks_instruction = format_bookmarks_instruction(bookmarks)
+        prompt = ANALYZE_PROMPT_TEMPLATE.format(
+            focus_instruction=focus_instruction, 
+            bookmarks_instruction=bookmarks_instruction,
+            transcript=transcript
+        )
         
         raw_response = self._call_ollama(prompt)
         fallback = {
@@ -260,9 +281,14 @@ class CloudOpenAIProvider(IAnalyzer):
             })
         return diarized_segments
 
-    def analyze(self, transcript: str) -> Dict[str, Any]:
+    def analyze(self, transcript: str, bookmarks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         focus_instruction = f"\nENFOQUE REQUERIDO: {self.analysis_focus}\n" if self.analysis_focus else ""
-        prompt = ANALYZE_PROMPT_TEMPLATE.format(focus_instruction=focus_instruction, transcript=transcript)
+        bookmarks_instruction = format_bookmarks_instruction(bookmarks)
+        prompt = ANALYZE_PROMPT_TEMPLATE.format(
+            focus_instruction=focus_instruction, 
+            bookmarks_instruction=bookmarks_instruction,
+            transcript=transcript
+        )
         
         raw_response = self._call_openai(prompt)
         fallback = {
@@ -374,17 +400,17 @@ class AnalysisService(IAnalyzer):
                 "speaker": "Hablante A"
             } for seg in segments]
 
-    def analyze(self, transcript: str) -> Dict[str, Any]:
+    def analyze(self, transcript: str, bookmarks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         provider = self.active_provider
         try:
-            return provider.analyze(transcript)
+            return provider.analyze(transcript, bookmarks=bookmarks)
         except Exception as e:
             print(f"[AnalysisService] Error en análisis con {provider.ai_provider}: {e}")
             # Fallback en caliente
             if provider == self.local_provider and self.cloud_provider.is_running():
                 print("[AnalysisService] Reintentando análisis con Cloud OpenAI...")
                 try:
-                    return self.cloud_provider.analyze(transcript)
+                    return self.cloud_provider.analyze(transcript, bookmarks=bookmarks)
                 except Exception as ex:
                     print(f"[AnalysisService] Falló también análisis cloud: {ex}")
             

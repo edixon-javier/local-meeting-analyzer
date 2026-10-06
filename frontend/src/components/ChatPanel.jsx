@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { chatWithMeeting } from '../api'
+import Icon from './Icon'
 
 export default function ChatPanel({ audioPath }) {
   const [messages, setMessages] = useState([
@@ -37,7 +38,7 @@ export default function ChatPanel({ audioPath }) {
       }
     } catch (err) {
       console.error(err)
-      setMessages([...updatedMessages, { role: 'assistant', content: '❌ Hubo un error al obtener la respuesta. Verifica tu configuración o si el motor de IA está activo.' }])
+      setMessages([...updatedMessages, { role: 'assistant', content: 'Hubo un error al obtener la respuesta. Verifica tu configuración o si el motor de IA está activo.' }])
     } finally {
       setIsLoading(false)
     }
@@ -98,9 +99,11 @@ export default function ChatPanel({ audioPath }) {
             type="submit" 
             disabled={isLoading || !input.trim() || !audioPath}
             className="btn btn-primary"
-            style={{ borderRadius: '50%', width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}
+            style={{ borderRadius: '50%', width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            aria-label="Enviar mensaje"
+            title="Enviar mensaje"
           >
-            ↑
+            <Icon name="send" size={17} />
           </button>
         </form>
       </div>

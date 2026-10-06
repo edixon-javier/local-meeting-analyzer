@@ -3,6 +3,7 @@
 // Soporta auto-scroll inteligente, indicador de nuevo contenido fuera de vista y ARIA para lectores de pantalla.
 
 import React, { useRef, useEffect, useState, memo } from 'react'
+import Icon from '../Icon'
 
 const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
   liveSegments = [],
@@ -65,7 +66,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
       return {
         dotClass: 'error',
         text: 'Error en transcripción',
-        icon: '⚠️',
+        iconName: 'alert-triangle',
         ariaText: 'Error en la transcripción en vivo'
       }
     }
@@ -73,7 +74,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
       return {
         dotClass: 'paused',
         text: 'Transcripción en pausa',
-        icon: '⏸️',
+        iconName: 'pause',
         ariaText: 'Transcripción pausada'
       }
     }
@@ -81,7 +82,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
       return {
         dotClass: 'pulsing',
         text: 'Transcribiendo en vivo',
-        icon: '🎙️',
+        iconName: 'mic',
         ariaText: 'Transcribiendo voz en tiempo real'
       }
     }
@@ -89,7 +90,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
       return {
         dotClass: 'reconnecting',
         text: 'Reconectando stream...',
-        icon: '🔄',
+        iconName: 'refresh',
         ariaText: 'Reconectando el servicio de transcripción'
       }
     }
@@ -97,7 +98,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
       return {
         dotClass: 'finalizing',
         text: 'Finalizando transcripción...',
-        icon: '⏳',
+        iconName: 'refresh',
         ariaText: 'Finalizando y consolidando la transcripción'
       }
     }
@@ -105,7 +106,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
     return {
       dotClass: 'listening',
       text: 'Escuchando audio...',
-      icon: '👂',
+      iconName: 'mic',
       ariaText: 'Escuchando. En espera de voz'
     }
   }
@@ -126,9 +127,9 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
             className={`live-status-dot ${statusConfig.dotClass}`}
             aria-hidden="true"
           />
-          <span className="live-status-label">
-            <span className="live-status-icon" aria-hidden="true">{statusConfig.icon}</span>{' '}
-            {statusConfig.text}
+          <span className="live-status-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name={statusConfig.iconName} size={14} aria-hidden="true" />
+            <span>{statusConfig.text}</span>
           </span>
         </div>
 
@@ -136,8 +137,10 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
           <span
             className="live-transcript-badge"
             aria-label={`${totalWords} palabras transcritas`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
           >
-            📝 {totalWords} {totalWords === 1 ? 'palabra' : 'palabras'}
+            <Icon name="file-text" size={12} />
+            <span>{totalWords} {totalWords === 1 ? 'palabra' : 'palabras'}</span>
           </span>
         </div>
       </header>
@@ -160,7 +163,9 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
           {/* Estado vacío (Sin voz detectada aún) */}
           {!hasContent && (
             <div className="live-transcript-empty" role="note">
-              <span className="empty-icon" aria-hidden="true">🎙️</span>
+              <span className="empty-icon" aria-hidden="true">
+                <Icon name="mic" size={32} />
+              </span>
               <p className="empty-title">En espera de voz...</p>
               <p className="empty-subtitle">
                 Habla con normalidad. Las palabras transcritas aparecerán aquí de forma progresiva.
@@ -209,7 +214,7 @@ const LiveTranscriptPanel = memo(function LiveTranscriptPanel({
             onClick={scrollToBottom}
             aria-label="Desplazarse al texto más reciente"
           >
-            <span>↓</span> Nuevo texto abajo
+            <Icon name="chevron-down" size={14} /> Nuevo texto abajo
           </button>
         )}
       </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './Icon';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -30,7 +31,7 @@ class ErrorBoundary extends React.Component {
             className="btn btn-primary" 
             onClick={() => window.location.reload()}
           >
-            Recargar Aplicación
+            <Icon name="refresh" size={15} /> Recargar Aplicación
           </button>
         </div>
       );

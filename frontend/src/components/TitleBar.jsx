@@ -10,6 +10,7 @@ export default function TitleBar({ currentView }) {
     analysis: 'Análisis',
     history: 'Historial',
     'history-chat': 'Preguntar al Historial',
+    settings: 'Configuración',
   }
 
   const handleMinimize = () => window.electronAPI?.minimize()

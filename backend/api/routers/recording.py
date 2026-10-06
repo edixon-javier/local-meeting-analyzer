@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -99,8 +100,46 @@ def resume_recording(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class AddLiveBookmarkRequest(BaseModel):
+    time: float = Field(..., ge=0.0, description="Tiempo en segundos dentro de la grabación")
+    note: Optional[str] = Field(default="", description="Nota o etiqueta del marcador")
+
+class StopRecordingRequest(BaseModel):
+    bookmarks: Optional[List[dict]] = None
+
+
+@router.post("/bookmark")
+def add_live_bookmark(
+    body: AddLiveBookmarkRequest,
+    session: SessionManager = Depends(get_session_manager),
+    audio: IAudioCapture = Depends(get_audio_service)
+):
+    """Agrega un marcador de momento clave en tiempo real durante la grabación activa."""
+    bm = session.add_bookmark(body.time, body.note or "")
+    return {"status": "ok", "bookmark": bm, "bookmarks": session.get_bookmarks()}
+
+
+@router.get("/bookmarks")
+def get_live_bookmarks(
+    session: SessionManager = Depends(get_session_manager)
+):
+    """Obtiene los marcadores registrados en la sesión actual."""
+    return {"bookmarks": session.get_bookmarks()}
+
+
+@router.delete("/bookmarks/{bookmark_id}")
+def delete_live_bookmark(
+    bookmark_id: str,
+    session: SessionManager = Depends(get_session_manager)
+):
+    """Elimina un marcador de la sesión actual."""
+    session.delete_bookmark(bookmark_id)
+    return {"status": "ok", "bookmarks": session.get_bookmarks()}
+
+
 @router.post("/stop")
 def stop_recording(
+    body: Optional[StopRecordingRequest] = None,
     session: SessionManager = Depends(get_session_manager),
     audio: IAudioCapture = Depends(get_audio_service),
     live_transcriber: LiveTranscriptionService = Depends(get_live_transcriber)
@@ -116,12 +155,33 @@ def stop_recording(
 
         audio_path = audio.stop()
         session.set_recording(False)
+        session.set_processing(False)
         session.set_audio_path(audio_path)
+
+        if body and body.bookmarks is not None:
+            session.set_bookmarks(body.bookmarks)
+
+        session_bookmarks = session.get_bookmarks()
+
+        # Guardar metadatos iniciales persistiendo bookmarks
+        try:
+            from api.routers.history import get_metadata_repo
+            repo = get_metadata_repo()
+            repo.save_meeting_metadata(
+                audio_path=audio_path,
+                transcript=None,
+                analysis=None,
+                bookmarks=session_bookmarks
+            )
+        except Exception as meta_err:
+            print(f"[RecordingRouter] Advertencia guardando metadatos iniciales: {meta_err}")
+
         return {
             "status": "stopped",
             "audio_path": audio_path,
             "session_id": session.get_session_id(),
-            "live_transcript": live_text
+            "live_transcript": live_text,
+            "bookmarks": session_bookmarks
         }
     except Exception as e:
         audio.remove_live_listener(live_transcriber.feed_audio_chunk)

@@ -1,6 +1,7 @@
 import os
 import json
 import shutil
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -16,6 +17,13 @@ class RenameRequest(BaseModel):
 class RenameSpeakerRequest(BaseModel):
     old_speaker: str
     new_speaker: str
+
+class BookmarkRequest(BaseModel):
+    time: float
+    note: Optional[str] = ""
+
+class TaskStatusRequest(BaseModel):
+    completed: bool
 
 SUPPORTED_AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".aac", ".flac")
 
@@ -56,7 +64,7 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
             category = None
             tone = None
             if meta:
-                analysis = meta.get("analysis", {})
+                analysis = meta.get("analysis") or {}
                 category = analysis.get("category")
                 tone = analysis.get("tone")
             
@@ -67,7 +75,8 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
                 "created": os.path.getctime(path),
                 "has_metadata": has_metadata,
                 "category": category,
-                "tone": tone
+                "tone": tone,
+                "bookmarks_count": len(meta.get("bookmarks", [])) if (meta and isinstance(meta.get("bookmarks"), list)) else 0
             })
 
     return {"recordings": files}
@@ -203,6 +212,79 @@ def rename_speaker(
         "old_speaker": old_speaker,
         "new_speaker": new_speaker,
         "metadata": updated_meta
+    }
+
+@router.post("/{filename}/bookmarks")
+def add_recording_bookmark(
+    filename: str,
+    request: BookmarkRequest,
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """Agrega un marcador a los metadatos de una reunión existente."""
+    safe_filename = os.path.basename(filename)
+    recordings_dir = _get_recordings_dir()
+    audio_path = os.path.join(recordings_dir, safe_filename)
+    json_path = _get_json_path(audio_path)
+    target_path = json_path if os.path.exists(json_path) else audio_path
+
+    if not os.path.exists(json_path) and not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Grabación o metadatos no encontrados.")
+
+    updated_meta = repo.add_bookmark(target_path, request.time, request.note or "")
+    if not updated_meta:
+        raise HTTPException(status_code=500, detail="Error al agregar marcador a la grabación.")
+    return {"status": "ok", "metadata": updated_meta, "bookmarks": updated_meta.get("bookmarks", [])}
+
+@router.delete("/{filename}/bookmarks/{bookmark_id}")
+def delete_recording_bookmark(
+    filename: str,
+    bookmark_id: str,
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """Elimina un marcador de los metadatos de una reunión existente."""
+    safe_filename = os.path.basename(filename)
+    recordings_dir = _get_recordings_dir()
+    audio_path = os.path.join(recordings_dir, safe_filename)
+    json_path = _get_json_path(audio_path)
+    target_path = json_path if os.path.exists(json_path) else audio_path
+
+    if not os.path.exists(json_path) and not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Grabación o metadatos no encontrados.")
+
+    updated_meta = repo.delete_bookmark(target_path, bookmark_id)
+    if not updated_meta:
+        raise HTTPException(status_code=500, detail="Error al eliminar marcador de la grabación.")
+    return {"status": "ok", "metadata": updated_meta, "bookmarks": updated_meta.get("bookmarks", [])}
+
+@router.patch("/{filename}/tasks/{task_index}")
+def update_meeting_task(
+    filename: str,
+    task_index: int,
+    request: TaskStatusRequest,
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """Actualiza el estado de completado (completed: True/False) de una tarea específica de la reunión."""
+    safe_filename = os.path.basename(filename)
+    recordings_dir = _get_recordings_dir()
+    audio_path = os.path.join(recordings_dir, safe_filename)
+    json_path = _get_json_path(audio_path)
+    target_path = json_path if os.path.exists(json_path) else audio_path
+
+    if not os.path.exists(json_path) and not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Grabación o metadatos no encontrados.")
+
+    updated_meta = repo.update_action_item_status(target_path, task_index, request.completed)
+    if not updated_meta:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"No se pudo actualizar la tarea en el índice {task_index}. Verifique que el análisis y la tarea existan."
+        )
+
+    action_items = updated_meta.get("analysis", {}).get("action_items", [])
+    return {
+        "status": "ok",
+        "metadata": updated_meta,
+        "action_items": action_items
     }
 
 @router.get("/audio")

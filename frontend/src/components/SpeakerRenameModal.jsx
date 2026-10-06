@@ -2,6 +2,7 @@
 // Modal interactivo para renombrar hablantes en toda la reunión
 
 import { useState, useEffect, useRef } from 'react'
+import Icon from './Icon'
 
 export default function SpeakerRenameModal({
   isOpen,
@@ -84,7 +85,7 @@ export default function SpeakerRenameModal({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 22 }}>👤</span>
+          <Icon name="user" size={22} style={{ color: 'var(--accent-primary)' }} />
           <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
             Renombrar Hablante
           </h3>
@@ -141,7 +142,7 @@ export default function SpeakerRenameModal({
               disabled={isSaving || !newName.trim() || newName.trim() === oldSpeaker}
               style={{ padding: '8px 18px', fontSize: 13 }}
             >
-              {isSaving ? 'Guardando...' : '✓ Guardar Nombre'}
+              <Icon name="check" size={14} /> {isSaving ? 'Guardando...' : 'Guardar Nombre'}
             </button>
           </div>
         </form>

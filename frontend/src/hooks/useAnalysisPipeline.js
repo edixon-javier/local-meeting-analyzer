@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { transcribeAudio, analyzeTranscript, getRecordingMetadata, getConfig, getStatus, cancelProcessing } from '../api'
 
 export function useAnalysisPipeline(audioPath, onToast) {
-  const [step, setStep] = useState('loading') // loading | transcribing | analyzing | done | error | processing_busy
+  const [step, setStep] = useState('checking') // checking | transcribing | analyzing | done | error | processing_busy
   const [transcript, setTranscript] = useState('')
   const [segments, setSegments] = useState([])
   const [analysis, setAnalysis] = useState(null)
+  const [bookmarks, setBookmarks] = useState([])
   const [errorMsg, setErrorMsg] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [progressPercent, setProgressPercent] = useState(0)
@@ -13,6 +14,14 @@ export function useAnalysisPipeline(audioPath, onToast) {
   const isCancelledRef = useRef(false)
   const onToastRef = useRef(onToast)
   onToastRef.current = onToast
+  const bookmarksRef = useRef(bookmarks)
+  bookmarksRef.current = bookmarks
+  const pipelineRanForAudioRef = useRef(null)
+
+  const checkCacheAndRunRef = useRef(null)
+  const runPipelineRef = useRef(null)
+  const progressPercentRef = useRef(progressPercent)
+  progressPercentRef.current = progressPercent
 
   // Timer para medir tiempo transcurrido durante transcripción y análisis
   useEffect(() => {
@@ -54,12 +63,12 @@ export function useAnalysisPipeline(audioPath, onToast) {
     } else if (step === 'done') {
       setProgressPercent(100)
     } else if (step === 'processing_busy') {
-      let simulatedTick = progressPercent || 10
+      let simulatedTick = progressPercentRef.current || 10
       progressInterval = setInterval(async () => {
         try {
           const res = await getStatus()
           if (!res.data.processing) {
-            checkCacheAndRun(audioPath, true)
+            checkCacheAndRunRef.current?.(audioPath, true)
           } else {
             const backendProgress = res.data?.transcription_progress
             if (backendProgress && backendProgress > 0) {
@@ -77,7 +86,7 @@ export function useAnalysisPipeline(audioPath, onToast) {
     return () => {
       if (progressInterval) clearInterval(progressInterval)
     }
-  }, [step, audioPath]) // eliminamos checkCacheAndRun de las dependencias directas para evitar warnings si no está memorizada arriba, o podemos confiar en useCallback.
+  }, [step, audioPath])
 
   const runPipeline = useCallback(async (path, active, cachedMeta = null) => {
     try {
@@ -89,8 +98,20 @@ export function useAnalysisPipeline(audioPath, onToast) {
       let text = ''
       let segs = []
 
-      // Reanudación: Si ya existe un transcript parcial guardado, nos saltamos la transcripción
-      if (cachedMeta && cachedMeta.transcript && cachedMeta.transcript.trim() !== '') {
+      if (cachedMeta && cachedMeta.bookmarks) {
+        setBookmarks(cachedMeta.bookmarks)
+      }
+
+      // Reanudación: solo nos saltamos la transcripción si existen transcript Y segmentos válidos
+      const hasCompletedTranscript = Boolean(
+        cachedMeta &&
+        cachedMeta.transcript &&
+        cachedMeta.transcript.trim() !== '' &&
+        cachedMeta.segments &&
+        cachedMeta.segments.length > 0
+      )
+
+      if (hasCompletedTranscript) {
         text = cachedMeta.transcript
         segs = cachedMeta.segments || []
         setTranscript(text)
@@ -118,11 +139,15 @@ export function useAnalysisPipeline(audioPath, onToast) {
 
       setStep('analyzing')
       try {
-        const analyzeRes = await analyzeTranscript(text, segs, path)
+        const bmList = cachedMeta?.bookmarks || bookmarksRef.current
+        const analyzeRes = await analyzeTranscript(text, segs, path, bmList)
         if (isCancelledRef.current || !active) return
         setAnalysis(analyzeRes.data.analysis)
+        if (analyzeRes.data?.bookmarks) {
+          setBookmarks(analyzeRes.data.bookmarks)
+        }
         setStep('done')
-        onToastRef.current?.({ type: 'success', message: '🧠 Análisis completado y guardado en local' })
+        onToastRef.current?.({ type: 'success', message: 'Análisis completado y guardado en local' })
       } catch (err) {
         if (isCancelledRef.current || !active) return
         if (err.response?.status === 400 && 
@@ -141,12 +166,12 @@ export function useAnalysisPipeline(audioPath, onToast) {
     }
   }, [])
 
+  runPipelineRef.current = runPipeline
+
   const checkCacheAndRun = useCallback(async (path, active, forceFresh = false) => {
-    await new Promise(resolve => setTimeout(resolve, 80))
     if (!active) return
 
     try {
-      setStep('loading')
       let cachedMeta = null
       if (!forceFresh) {
         try {
@@ -154,14 +179,17 @@ export function useAnalysisPipeline(audioPath, onToast) {
           if (!active) return
           if (cacheRes.data && cacheRes.data.exists !== false) {
             cachedMeta = cacheRes.data
+            if (cachedMeta.bookmarks) {
+              setBookmarks(cachedMeta.bookmarks)
+            }
             const isErrorAnalysis = cachedMeta.analysis?.category === 'Error' || (cachedMeta.analysis?.summary && cachedMeta.analysis.summary[0]?.includes('Error durante'))
-            // Si el análisis existe y no es de error, terminamos aquí
+            // Si el análisis existe y no es de error, terminamos aquí de inmediato sin parpadeos
             if (!isErrorAnalysis && cachedMeta.analysis) {
               setTranscript(cachedMeta.transcript || '')
               setSegments(cachedMeta.segments || [])
               setAnalysis(cachedMeta.analysis)
+              setBookmarks(cachedMeta.bookmarks || [])
               setStep('done')
-              onToastRef.current?.({ type: 'success', message: '⚡ Metadatos cargados desde caché local' })
               return
             }
           }
@@ -172,24 +200,37 @@ export function useAnalysisPipeline(audioPath, onToast) {
 
       if (isCancelledRef.current || !active) return
 
-      const statusRes = await getStatus()
+      // Comprobar estado del backend con breve reintento si el proceso previo acaba de cerrarse
+      let statusRes = await getStatus()
       if (!active) return
       if (statusRes.data.processing) {
-        setStep('processing_busy')
-        return
+        await new Promise(resolve => setTimeout(resolve, 350))
+        if (!active) return
+        statusRes = await getStatus()
+        if (!active) return
+        if (statusRes.data.processing) {
+          setStep('processing_busy')
+          return
+        }
       }
 
-      runPipeline(path, active, cachedMeta)
+      runPipelineRef.current?.(path, active, cachedMeta)
     } catch (err) {
       if (isCancelledRef.current || !active) return
       setStep('error')
       setErrorMsg(err.message || 'Error al iniciar análisis')
     }
-  }, [runPipeline])
+  }, [])
+
+  checkCacheAndRunRef.current = checkCacheAndRun
 
   useEffect(() => {
     let active = true
     if (audioPath) {
+      if (pipelineRanForAudioRef.current === audioPath) {
+        return
+      }
+      pipelineRanForAudioRef.current = audioPath
       isCancelledRef.current = false
       checkCacheAndRun(audioPath, active)
     }
@@ -210,6 +251,7 @@ export function useAnalysisPipeline(audioPath, onToast) {
 
   const reprocess = async () => {
     isCancelledRef.current = false
+    pipelineRanForAudioRef.current = null
     try {
       await cancelProcessing()
     } catch {
@@ -247,16 +289,32 @@ export function useAnalysisPipeline(audioPath, onToast) {
     })
   }, [])
 
+  const updateTaskInState = useCallback((taskIndex, completed) => {
+    setAnalysis(prevAnalysis => {
+      if (!prevAnalysis || !prevAnalysis.action_items) return prevAnalysis
+      const updatedActionItems = (prevAnalysis.action_items || []).map((item, idx) =>
+        idx === taskIndex ? { ...item, completed: Boolean(completed) } : item
+      )
+      return {
+        ...prevAnalysis,
+        action_items: updatedActionItems
+      }
+    })
+  }, [])
+
   return { 
     step, 
     transcript, 
     segments, 
     analysis, 
+    bookmarks,
+    setBookmarks,
     errorMsg, 
-    elapsedSeconds,
-    progressPercent,
+    elapsedSeconds, 
+    progressPercent, 
     cancelPipeline, 
     reprocess,
-    updateSpeakerInState
+    updateSpeakerInState,
+    updateTaskInState
   }
 }

@@ -18,6 +18,7 @@ class AnalyzeRequest(BaseModel):
     transcript: str
     segments: Optional[list] = None
     audio_path: Optional[str] = None
+    bookmarks: Optional[list] = None
 
 class ChatRequest(BaseModel):
     audio_path: str
@@ -116,7 +117,7 @@ def chat_history(
         score = 0.0
         filename = meeting.get("filename", "").lower()
         transcript = meeting.get("transcript", "").lower()
-        analysis = meeting.get("analysis", {})
+        analysis = meeting.get("analysis") or {}
         category = analysis.get("category", "").lower()
         tone = analysis.get("tone", "").lower()
         summary = " ".join(analysis.get("summary", [])).lower()
@@ -179,9 +180,10 @@ def chat_history(
         import datetime
         date_str = datetime.datetime.fromtimestamp(created).strftime('%d/%m/%Y %H:%M') if created else "Fecha desconocida"
         
-        category = meet.get("analysis", {}).get("category", "Sin categoría")
-        summary_points = "\n".join([f"- {p}" for p in meet.get("analysis", {}).get("summary", [])])
-        decisions_points = "\n".join([f"- {d}" for d in meet.get("analysis", {}).get("key_decisions", [])])
+        meet_analysis = meet.get("analysis") or {}
+        category = meet_analysis.get("category", "Sin categoría")
+        summary_points = "\n".join([f"- {p}" for p in meet_analysis.get("summary", [])])
+        decisions_points = "\n".join([f"- {d}" for d in meet_analysis.get("key_decisions", [])])
         
         snippets_text = ""
         if entry["snippets"]:
@@ -202,7 +204,7 @@ def chat_history(
             "created": created,
             "path": meet.get("audio_path"),
             "category": category,
-            "tone": meet.get("analysis", {}).get("tone", "Desconocido")
+            "tone": meet_analysis.get("tone", "Desconocido")
         })
         
     context_str = "\n\n".join(context_parts)
@@ -261,7 +263,8 @@ def transcribe_audio(
             transcript=session.get_transcript(),
             analysis=None,
             language=result["language"],
-            segments=segments
+            segments=segments,
+            bookmarks=session.get_bookmarks()
         )
             
         session.set_processing(False)
@@ -290,6 +293,18 @@ def analyze_transcript(
     repo: IMetadataRepository = Depends(get_metadata_repo)
 ):
     """Analiza el texto de la reunión con Ollama (Phi-3 local) u OpenAI."""
+    audio_path = request.audio_path if request.audio_path else session.get_audio_path()
+
+    # Resolver bookmarks: desde el request, o desde la sesión activa, o desde el archivo existente
+    bookmarks = request.bookmarks
+    if bookmarks is None:
+        bookmarks = session.get_bookmarks()
+    if (not bookmarks) and audio_path:
+        json_path = _get_json_path(audio_path)
+        existing_meta = repo.get_metadata(json_path)
+        if existing_meta and existing_meta.get("bookmarks"):
+            bookmarks = existing_meta.get("bookmarks")
+
     if not request.transcript.strip():
         print("[API] Transcripción vacía. Generando análisis 'Dummy'.")
         dummy_analysis = {
@@ -301,13 +316,13 @@ def analyze_transcript(
             "duration_insight": "La grabación no contiene audio analizable."
         }
         
-        audio_path = request.audio_path if request.audio_path else session.get_audio_path()
         repo.save_meeting_metadata(
             audio_path=audio_path,
             transcript=request.transcript,
             analysis=dummy_analysis,
             language=None,
-            segments=request.segments
+            segments=request.segments,
+            bookmarks=bookmarks
         )
         return {"status": "empty", "analysis": dummy_analysis}
 
@@ -327,21 +342,20 @@ def analyze_transcript(
 
     session.set_processing(True)
     try:
-        result = analyzer.analyze(request.transcript)
+        result = analyzer.analyze(request.transcript, bookmarks=bookmarks)
         session.set_analysis(result)
         session.set_processing(False)
-        
-        audio_path = request.audio_path if request.audio_path else session.get_audio_path()
         
         repo.save_meeting_metadata(
             audio_path=audio_path,
             transcript=request.transcript,
             analysis=result,
             language=None,
-            segments=request.segments
+            segments=request.segments,
+            bookmarks=bookmarks
         )
         
-        return {"status": "done", "analysis": result}
+        return {"status": "done", "analysis": result, "bookmarks": bookmarks}
     except Exception as e:
         session.set_processing(False)
         raise HTTPException(status_code=500, detail=str(e))

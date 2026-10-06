@@ -41,10 +41,6 @@ REM ── Iniciar Backend Python en background visible
 echo [START] Iniciando Backend API (Python FastAPI)...
 start "Meeting Analyzer Backend" cmd /c "cd backend && call venv\Scripts\activate.bat && python main.py"
 
-REM ── Esperar que el backend esté listo
-echo [WAIT] Esperando al backend...
-timeout /t 5 /nobreak >nul
-
 REM ── Iniciar Frontend Electron
 echo [START] Iniciando Frontend (Electron)...
 cd frontend

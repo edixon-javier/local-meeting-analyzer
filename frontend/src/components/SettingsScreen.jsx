@@ -2,15 +2,16 @@
 // Pantalla de Configuración: selección de hardware, modelos e IA local.
 
 import { useState, useEffect, useCallback } from 'react'
-import { getConfig, updateConfig, getAudioDevices, getOllamaModels, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
-import { useSystem } from '../context/SystemContext'
+import { getConfig, updateConfig, getAudioDevices, getOllamaModels, testAiProvider, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
+import { useSystem } from '../hooks/useSystem'
+import Icon from './Icon'
 
 export default function SettingsScreen() {
   const { showToast, isBackendOffline } = useSystem()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [devices, setDevices] = useState([])
-  const [ollamaModels, setOllamaModels] = useState([])
+  const [ollamaModels, setOllamaModels] = useState(['phi3', 'llama3', 'gemma', 'mistral'])
   
   // Estados de configuración
   const [recordMode, setRecordMode] = useState('both')
@@ -23,6 +24,10 @@ export default function SettingsScreen() {
   const [analysisFocus, setAnalysisFocus] = useState('')
   const [diarize, setDiarize] = useState(false)
 
+  // Estados de prueba de proveedor de IA (OpenAI / Ollama)
+  const [testingAi, setTestingAi] = useState(false)
+  const [aiTestResult, setAiTestResult] = useState(null)
+
   // Estados de prueba de audio
   const [testing, setTesting] = useState(false)
   const [sysLevel, setSysLevel] = useState(0)
@@ -33,8 +38,11 @@ export default function SettingsScreen() {
   const loadSettingsAndHardware = useCallback(async () => {
     setLoading(true)
     try {
-      // 1. Cargar Configuración del backend
-      const configRes = await getConfig()
+      // 1. Cargar Configuración del backend y Dispositivos de Audio en paralelo (~35ms)
+      const [configRes, devicesRes] = await Promise.all([
+        getConfig(),
+        getAudioDevices()
+      ])
       const cfg = configRes.data
       setWhisperModel(cfg.whisper_model || 'small')
       setAiProvider(cfg.ai_provider || 'local')
@@ -46,24 +54,24 @@ export default function SettingsScreen() {
       setMicDeviceId(cfg.mic_device_id || 'default')
       setDiarize(cfg.diarize || false)
 
-      // 2. Cargar Dispositivos de Audio
-      const devicesRes = await getAudioDevices()
       setDevices(devicesRes.data.devices || [])
-
-      // 3. Cargar Modelos de Ollama Localmente (vía backend)
-      try {
-        const ollamaRes = await getOllamaModels()
-        const models = ollamaRes.data.models || []
-        setOllamaModels(models)
-      } catch (err) {
-        console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
-        setOllamaModels(['phi3', 'llama3', 'gemma', 'mistral'])
-      }
-
     } catch {
       showToast({ type: 'error', message: 'Error al cargar la configuración.' })
     } finally {
+      // Liberar la pantalla de inmediato sin esperar el timeout de Ollama
       setLoading(false)
+    }
+
+    // 2. Cargar Modelos de Ollama de forma asíncrona en segundo plano
+    try {
+      const ollamaRes = await getOllamaModels()
+      const models = ollamaRes.data?.models || []
+      if (models.length > 0) {
+        setOllamaModels(models)
+      }
+    } catch (err) {
+      console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
+      setOllamaModels(['phi3', 'llama3', 'gemma', 'mistral'])
     }
   }, [showToast])
 
@@ -76,8 +84,11 @@ export default function SettingsScreen() {
   // Polling de niveles durante la prueba
   useEffect(() => {
     let intervalId
+    let isFetching = false
     if (testing) {
       intervalId = setInterval(async () => {
+        if (isFetching) return
+        isFetching = true
         try {
           const res = await getAudioTestLevels()
           const scaleLevel = (val) => Math.min(100, Math.round(Math.sqrt(val) * 160))
@@ -85,8 +96,10 @@ export default function SettingsScreen() {
           setSysLevel(scaleLevel(res.data.sys_level))
         } catch (err) {
           console.error('Error al obtener niveles de prueba:', err)
+        } finally {
+          isFetching = false
         }
-      }, 100)
+      }, 200)
     } else {
       setMicLevel(0)
       setSysLevel(0)
@@ -121,7 +134,7 @@ export default function SettingsScreen() {
         mic_device_id: micDeviceId,
         diarize: diarize
       })
-      showToast({ type: 'success', message: '⚙️ Configuración guardada correctamente' })
+      showToast({ type: 'success', message: 'Configuración guardada correctamente' })
     } catch {
       showToast({ type: 'error', message: 'Error al guardar la configuración' })
     } finally {
@@ -147,7 +160,7 @@ export default function SettingsScreen() {
         diarize: diarize
       })
       await startAudioTest()
-      showToast({ type: 'success', message: '🎙️ Prueba iniciada. Habla o reproduce algún sonido.' })
+      showToast({ type: 'success', message: 'Prueba iniciada. Habla o reproduce algún sonido.' })
     } catch {
       showToast({ type: 'error', message: 'Error al iniciar la prueba de audio' })
       setTesting(false)
@@ -161,7 +174,7 @@ export default function SettingsScreen() {
       if (res.data.audio_path) {
         setTestAudioPath(res.data.audio_path)
         setTestAudioTimestamp(Date.now())
-        showToast({ type: 'success', message: '✅ Prueba finalizada. Reproduce para escuchar.' })
+        showToast({ type: 'success', message: 'Prueba finalizada. Reproduce para escuchar.' })
       }
     } catch {
       showToast({ type: 'error', message: 'Error al detener la prueba de audio' })
@@ -169,11 +182,43 @@ export default function SettingsScreen() {
     }
   }
 
+  const handleTestAiConnection = async () => {
+    if (isBackendOffline || testingAi) return
+    setTestingAi(true)
+    setAiTestResult(null)
+    try {
+      const activeModel = aiProvider === 'openai' ? openaiModel : ollamaModel
+      const activeKey = aiProvider === 'openai' ? openaiApiKey : null
+      const res = await testAiProvider(aiProvider, activeKey, activeModel)
+      const data = res.data
+      setAiTestResult({
+        success: true,
+        provider: aiProvider,
+        message: data.message || 'Conexión verificada exitosamente.',
+        latency_ms: data.latency_ms,
+        model: data.model
+      })
+      showToast({ type: 'success', message: data.message || `Conexión exitosa (${data.latency_ms} ms)` })
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || err.message || 'Error al conectar con el motor de IA.'
+      setAiTestResult({
+        success: false,
+        provider: aiProvider,
+        message: errorMsg
+      })
+      showToast({ type: 'error', message: errorMsg })
+    } finally {
+      setTestingAi(false)
+    }
+  }
+
   if (isBackendOffline) {
     return (
       <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450 }}>
-          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div className="empty-state-icon" style={{ marginBottom: 16 }}>
+            <Icon name="alert-triangle" size={48} style={{ color: 'var(--red-record)' }} />
+          </div>
           <div className="empty-state-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Servidor Desconectado</div>
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             La configuración no está disponible porque el motor local de la aplicación no está respondiendo.
@@ -203,8 +248,8 @@ export default function SettingsScreen() {
         
         {/* Modo de Grabación */}
         <div className="form-group">
-          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-            🎙️ Modo de Grabación de Audio
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            <Icon name="mic" size={16} /> Modo de Grabación de Audio
           </label>
           <select 
             value={recordMode} 
@@ -212,9 +257,9 @@ export default function SettingsScreen() {
             className="input-select"
             style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
           >
-            <option value="both">👥 Sistema + Micrófono (Recomendado para reuniones)</option>
-            <option value="system">🖥️ Solo Audio del Sistema (Loopback)</option>
-            <option value="mic">🎙️ Solo Micrófono (Físico)</option>
+            <option value="both">Sistema + Micrófono (Recomendado para reuniones)</option>
+            <option value="system">Solo Audio del Sistema (Loopback)</option>
+            <option value="mic">Solo Micrófono (Físico)</option>
           </select>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
             {recordMode === 'both' ? 'Graba lo que escuchas y lo que dices al mismo tiempo. Se mezclará automáticamente.' : ''}
@@ -226,8 +271,8 @@ export default function SettingsScreen() {
         {/* Micrófono Físico (Solo visible si el modo usa micrófono) */}
         {(recordMode === 'both' || recordMode === 'mic') && (
           <div className="form-group">
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-              🎤 Selección de Micrófono
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+              <Icon name="mic" size={16} /> Selección de Micrófono
             </label>
             <select 
               value={micDeviceId} 
@@ -252,7 +297,7 @@ export default function SettingsScreen() {
           marginTop: 12
         }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-            🎙️ Probar Micrófono y Sonido
+            <Icon name="volume" size={17} /> Probar Micrófono y Sonido
           </h3>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
             Valida los niveles de audio en tiempo real y asegúrate de que la grabación de voz y del sistema funcionen correctamente.
@@ -308,20 +353,14 @@ export default function SettingsScreen() {
                 type="button"
                 onClick={handleStartTest}
                 disabled={isBackendOffline}
-                className="btn"
+                className="btn btn-secondary"
                 style={{ 
-                  background: 'var(--bg-elevated)', 
-                  border: '1px solid var(--border-subtle)', 
-                  color: 'var(--text-primary)',
                   padding: '8px 16px',
                   fontSize: 13,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
+                  fontWeight: 600
                 }}
               >
-                <span>🎤</span> Iniciar Prueba
+                <Icon name="play" size={15} /> Iniciar Prueba
               </button>
             ) : (
               <button
@@ -334,19 +373,10 @@ export default function SettingsScreen() {
                   boxShadow: '0 0 12px var(--red-glow)',
                   padding: '8px 16px',
                   fontSize: 13,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
+                  fontWeight: 600
                 }}
               >
-                <span style={{ 
-                  width: 8, 
-                  height: 8, 
-                  background: '#fff', 
-                  borderRadius: '50%',
-                  display: 'inline-block'
-                }} /> Detener Prueba
+                <Icon name="stop" size={15} /> Detener Prueba
               </button>
             )}
 
@@ -363,7 +393,9 @@ export default function SettingsScreen() {
                 flex: 1,
                 minWidth: 260
               }}>
-                <span style={{ fontSize: 12, color: 'var(--text-accent)', whiteSpace: 'nowrap', fontWeight: 600 }}>🔊 Escuchar:</span>
+                <span style={{ fontSize: 12, color: 'var(--text-accent)', whiteSpace: 'nowrap', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name="volume" size={14} /> Escuchar:
+                </span>
                 <audio 
                   src={`${getAudioUrl(testAudioPath)}&t=${testAudioTimestamp}`} 
                   controls  
@@ -380,15 +412,15 @@ export default function SettingsScreen() {
           </div>
           {testing && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 12 }}>
-              ⚠️ Habla o haz algún ruido y luego detén para escuchar la mezcla.
+              Habla o haz algún ruido y luego detén para escuchar la mezcla.
             </span>
           )}
         </div>
 
         {/* Modelo Whisper */}
         <div className="form-group" style={{ opacity: aiProvider === 'openai' ? 0.5 : 1, pointerEvents: aiProvider === 'openai' ? 'none' : 'auto' }}>
-          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-            📝 Modelo de Transcripción (Local)
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            <Icon name="file-text" size={16} /> Modelo de Transcripción (Local)
           </label>
           <select 
             value={whisperModel} 
@@ -411,12 +443,15 @@ export default function SettingsScreen() {
 
         {/* Proveedor de IA */}
         <div className="form-group">
-          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-            🌐 Proveedor de Inteligencia Artificial (Transcripción y Análisis)
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            <Icon name="cloud" size={16} /> Proveedor de Inteligencia Artificial (Transcripción y Análisis)
           </label>
           <select 
             value={aiProvider} 
-            onChange={(e) => setAiProvider(e.target.value)}
+            onChange={(e) => {
+              setAiProvider(e.target.value)
+              setAiTestResult(null)
+            }}
             className="input-select"
             style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
           >
@@ -430,48 +465,115 @@ export default function SettingsScreen() {
 
         {/* Configuraciones Específicas del Proveedor */}
         {aiProvider === 'local' ? (
-          <div className="form-group">
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-              🧠 Modelo de Análisis (Ollama LLM)
-            </label>
-            <select 
-              value={ollamaModel} 
-              onChange={(e) => setOllamaModel(e.target.value)}
-              className="input-select"
-              style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
-            >
-              {ollamaModels.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-              {!ollamaModels.includes(ollamaModel) && (
-                <option value={ollamaModel}>{ollamaModel} (Personalizado)</option>
+          <div className="form-group" style={{ padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                <Icon name="lock" size={16} /> Modelo de Análisis (Ollama LLM)
+              </label>
+              <select 
+                value={ollamaModel} 
+                onChange={(e) => {
+                  setOllamaModel(e.target.value)
+                  setAiTestResult(null)
+                }}
+                className="input-select"
+                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+              >
+                {ollamaModels.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+                {!ollamaModels.includes(ollamaModel) && (
+                  <option value={ollamaModel}>{ollamaModel} (Personalizado)</option>
+                )}
+              </select>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+                Detectados desde tu servidor local de Ollama. Asegúrate de haber ejecutado 'ollama run &lt;modelo&gt;' en tu terminal previamente.
+              </span>
+            </div>
+
+            {/* Acciones de Prueba de Conexión Ollama */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleTestAiConnection}
+                  disabled={testingAi || isBackendOffline}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+                >
+                  <Icon 
+                    name={testingAi ? 'refresh' : 'zap'} 
+                    size={14} 
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--yellow-warn)' }} 
+                  />
+                  {testingAi ? 'Comprobando Ollama...' : 'Probar Conexión Ollama'}
+                </button>
+
+                {aiTestResult && aiTestResult.provider === 'local' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      background: aiTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: aiTestResult.success ? '#10B981' : '#EF4444',
+                      border: `1px solid ${aiTestResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                    }}
+                  >
+                    <Icon name={aiTestResult.success ? 'check-circle' : 'alert-triangle'} size={14} />
+                    {aiTestResult.success ? `Respuesta en ${aiTestResult.latency_ms} ms` : 'Fallo de Conexión'}
+                  </span>
+                )}
+              </div>
+
+              {aiTestResult && aiTestResult.provider === 'local' && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 12,
+                    background: aiTestResult.success ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    color: aiTestResult.success ? 'var(--text-primary)' : '#FCA5A5',
+                    borderLeft: `3px solid ${aiTestResult.success ? '#10B981' : '#EF4444'}`,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {aiTestResult.message}
+                </div>
               )}
-            </select>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
-              Detectados desde tu servidor local de Ollama. Asegúrate de haber ejecutado 'ollama run &lt;modelo&gt;' en tu terminal previamente.
-            </span>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             <div className="form-group">
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-                🔑 OpenAI API Key
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                <Icon name="lock" size={16} /> OpenAI API Key
               </label>
               <input 
                 type="password"
                 value={openaiApiKey}
-                onChange={(e) => setOpenaiApiKey(e.target.value)}
+                onChange={(e) => {
+                  setOpenaiApiKey(e.target.value)
+                  setAiTestResult(null)
+                }}
                 placeholder="sk-..."
                 style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
               />
             </div>
             <div className="form-group">
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-                🧠 Modelo OpenAI
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                <Icon name="cloud" size={16} /> Modelo OpenAI
               </label>
               <select 
                 value={openaiModel} 
-                onChange={(e) => setOpenaiModel(e.target.value)}
+                onChange={(e) => {
+                  setOpenaiModel(e.target.value)
+                  setAiTestResult(null)
+                }}
                 className="input-select"
                 style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
               >
@@ -479,6 +581,62 @@ export default function SettingsScreen() {
                 <option value="gpt-4o">GPT-4o (Máxima Precisión)</option>
                 <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
               </select>
+            </div>
+
+            {/* Acciones de Prueba de Conexión OpenAI */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleTestAiConnection}
+                  disabled={testingAi || isBackendOffline}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+                >
+                  <Icon 
+                    name={testingAi ? 'refresh' : 'zap'} 
+                    size={14} 
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--accent-primary)' }} 
+                  />
+                  {testingAi ? 'Verificando OpenAI...' : 'Probar Conexión OpenAI'}
+                </button>
+
+                {aiTestResult && aiTestResult.provider === 'openai' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      background: aiTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: aiTestResult.success ? '#10B981' : '#EF4444',
+                      border: `1px solid ${aiTestResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                    }}
+                  >
+                    <Icon name={aiTestResult.success ? 'check-circle' : 'alert-triangle'} size={14} />
+                    {aiTestResult.success ? `Latencia: ${aiTestResult.latency_ms} ms` : 'Fallo de Verificación'}
+                  </span>
+                )}
+              </div>
+
+              {aiTestResult && aiTestResult.provider === 'openai' && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 12,
+                    background: aiTestResult.success ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    color: aiTestResult.success ? 'var(--text-primary)' : '#FCA5A5',
+                    borderLeft: `3px solid ${aiTestResult.success ? '#10B981' : '#EF4444'}`,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {aiTestResult.message}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -493,8 +651,8 @@ export default function SettingsScreen() {
             style={{ width: 18, height: 18, cursor: 'pointer' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label htmlFor="diarize-chk" style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              👥 Habilitar Diarización de Hablantes (Speaker Separation)
+            <label htmlFor="diarize-chk" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <Icon name="user" size={15} /> Habilitar Diarización de Hablantes (Speaker Separation)
             </label>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
               Separa automáticamente los diálogos en "Hablante A", "Hablante B", o por nombres si se mencionan en la reunión.
@@ -504,8 +662,8 @@ export default function SettingsScreen() {
 
         {/* Prompts Personalizados (Enfoque de Análisis) */}
         <div className="form-group">
-          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-            🎯 Enfoque de Análisis Personalizado (Prompt)
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            <Icon name="target" size={16} /> Enfoque de Análisis Personalizado (Prompt)
           </label>
           <textarea
             value={analysisFocus}
@@ -527,7 +685,7 @@ export default function SettingsScreen() {
             className="btn btn-primary"
             style={{ padding: '10px 20px', minWidth: 150 }}
           >
-            {saving ? 'Guardando...' : 'Guardar Ajustes'}
+            <Icon name="save" size={16} /> {saving ? 'Guardando...' : 'Guardar Ajustes'}
           </button>
         </div>
       </form>

@@ -1,7 +1,8 @@
 // src/components/StatusBar.jsx
 // Barra de estado inferior con información del sistema y modelo activo.
 
-import { useSystem } from '../context/SystemContext'
+import { useSystem } from '../hooks/useSystem'
+import Icon from './Icon'
 
 export default function StatusBar() {
   const { systemStatus, isRecording, isBackendOffline } = useSystem()
@@ -16,7 +17,9 @@ export default function StatusBar() {
       {isOpenAIMode ? (
         <div className="status-indicator">
           <span className="status-dot online" style={{ background: 'var(--accent-primary)' }} />
-          <span>☁️ Proveedor: OpenAI (Nube)</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Icon name="cloud" size={13} /> Proveedor: OpenAI (Nube)
+          </span>
         </div>
       ) : (
         <div className="status-indicator">
@@ -43,9 +46,19 @@ export default function StatusBar() {
       )}
 
       <div style={{ marginLeft: isRecording ? 0 : 'auto', fontSize: 11, color: isOpenAIMode ? 'var(--text-accent)' : 'var(--text-muted)', fontWeight: isOpenAIMode ? 600 : 400 }}>
-        {isBackendOffline 
-          ? '⚠️ Conexión perdida con el Servidor' 
-          : (isOpenAIMode ? '☁️ Modo Nube Activo (OpenAI)' : '🔒 Procesamiento 100% local')}
+        {isBackendOffline ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--red-record)' }}>
+            <Icon name="alert-triangle" size={13} /> Conexión perdida con el Servidor
+          </span>
+        ) : isOpenAIMode ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Icon name="cloud" size={13} /> Modo Nube Activo (OpenAI)
+          </span>
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Icon name="lock" size={13} /> Procesamiento 100% local
+          </span>
+        )}
       </div>
     </div>
   )
