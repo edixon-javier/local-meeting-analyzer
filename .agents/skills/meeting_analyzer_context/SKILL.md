@@ -19,7 +19,7 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
 ## Entorno del Usuario (Instalado y Validado)
 - ✅ Python 3.14.6
 - ✅ Ollama 0.11.4 con modelo **Phi-3**
-- ✅ FFmpeg en `C:\ffmpeg\bin` (en PATH)
+- ✅ FFmpeg disponible en el PATH (o el binario incluido en `bin/` del repositorio)
 - ✅ Node.js v22 + npm v9.6.3
 - ✅ Librerías Python adicionales: `openai`, `fastapi`, `whisper`, `soundcard`, `pydantic`
 
@@ -48,7 +48,7 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `analysis.py` — Transcripción, análisis estructurado dual, chat individual y consulta RAG con historial global.
   - `history.py` — Listado, borrado, renombrado y subida externa de archivos en el historial.
 
-*Nota sobre archivos legados:* Los archivos en la raíz del backend (`audio_capture.py`, `transcriber.py`, `analyzer.py`, `config_manager.py`, `state.py`) corresponden al pipeline inicial monolítico y se mantienen temporalmente por retrocompatibilidad.
+*Nota sobre archivos legados:* Los antiguos archivos de la raíz del backend (`audio_capture.py`, `transcriber.py`, `analyzer.py`, `config_manager.py`, `state.py`) correspondían al pipeline inicial monolítico y fueron eliminados por no tener ningún importador activo.
 
 **Endpoints disponibles:**
 - **Sistema & Configuración (`/api/routers/system.py`):**
@@ -134,7 +134,7 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
 
 ## Estructura de Carpetas
 ```
-f:\Proyectos\Extension-reuniones\
+<raíz-del-repositorio>/
 ├── .agents/
 │   └── skills/
 │       └── meeting_analyzer_context/
@@ -156,8 +156,7 @@ f:\Proyectos\Extension-reuniones\
 │   ├── recordings/                # WAVs generados y archivos de metadatos .json
 │   ├── main.py                    # Punto de entrada FastAPI
 │   ├── config.json                # Preferencias del usuario persistidas
-│   ├── requirements.txt
-│   └── (archivos legados: audio_capture.py, transcriber.py, analyzer.py, config_manager.py, state.py)
+│   └── requirements.txt
 ├── frontend/
 │   ├── electron/
 │   │   ├── main.js
