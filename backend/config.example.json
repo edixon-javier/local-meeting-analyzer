@@ -1,5 +1,5 @@
 {
-  "ollama_model": "phi3",
+  "ollama_model": "qwen3:4b",
   "ai_provider": "local",
   "openai_api_key": "",
   "openai_model": "gpt-4o-mini",

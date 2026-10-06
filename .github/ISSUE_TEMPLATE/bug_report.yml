@@ -1,0 +1,80 @@
+name: Reportar un error
+description: Algo no funciona como esperabas en Local Meeting Analyzer
+title: "[Error] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por avisar. Para poder ayudarte rápido, completa lo que puedas.
+        **No pegues transcripciones, audios ni claves de API.** Revisa el diagnóstico antes de publicarlo: este texto es público.
+        Puedes generar el diagnóstico en la aplicación: **Ajustes > Ayuda y soporte > Copiar diagnóstico**.
+  - type: input
+    id: version
+    attributes:
+      label: Versión de la aplicación
+      description: La ves en Ajustes > Ayuda y soporte.
+      placeholder: "1.6.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Cómo la instalaste
+      options:
+        - Instalador .exe (GitHub Releases)
+        - Microsoft Store
+        - Desde el código fuente (desarrollo)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Sistema operativo
+      placeholder: "Windows 11 (10.0.26100), x64"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasó
+      description: Describe el problema y cualquier mensaje de error que veas.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducirlo
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Qué esperabas que pasara
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Motor de IA que usabas
+      options:
+        - Local (Ollama + Whisper)
+        - OpenAI
+        - No lo sé
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnóstico
+      description: Pega aquí el resultado de "Copiar diagnóstico" (sin datos privados).
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Revisé que no incluyo transcripciones, audios, claves de API ni datos personales.
+          required: true
+        - label: Busqué antes si ya existe un reporte igual.
+          required: false

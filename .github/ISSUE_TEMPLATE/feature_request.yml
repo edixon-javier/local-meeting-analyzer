@@ -1,0 +1,44 @@
+name: Sugerir una mejora
+description: Propón una idea o una función nueva
+title: "[Sugerencia] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por tu idea. Recuerda que el proyecto prioriza el **procesamiento local y privado**: las propuestas que
+        envíen datos a servicios externos deben ser opcionales y estar desactivadas por defecto.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qué problema quieres resolver
+      description: Cuéntanos la situación, no solo la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Qué propones
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas que consideraste
+  - type: dropdown
+    id: privacy
+    attributes:
+      label: ¿Implica enviar datos fuera del equipo?
+      options:
+        - No, todo seguiría siendo local
+        - Sí, de forma opcional
+        - No lo sé
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Busqué antes si ya existe una sugerencia igual.
+          required: true

@@ -16,9 +16,9 @@ class TranscriptionService(ITranscriber):
         self.openai_client = None
         self._model_name = config.get("whisper_model", "small")
         self._setup_openai()
-        # Defer loading: only load if ai_provider is local
-        if self.ai_provider == "local":
-            self._ensure_model_loaded()
+        # Carga diferida: el modelo Whisper se carga en la primera transcripción local
+        # (transcribe -> _ensure_model_loaded). Cargarlo al importar el backend obligaba a
+        # descargar ~460 MB antes de abrir el puerto en una instalación nueva (proveedor local).
 
     @property
     def model_name(self) -> str:
@@ -28,23 +28,22 @@ class TranscriptionService(ITranscriber):
         self.ai_provider = config.get("ai_provider", self.ai_provider)
         self.openai_api_key = config.get("openai_api_key", self.openai_api_key)
         self._setup_openai()
-        # If switched to local, make sure it gets loaded
-        if self.ai_provider == "local":
-            self._ensure_model_loaded()
 
     def set_model(self, model_name: str):
-        if self._model_name != model_name:
-            self._model_name = model_name
-            if self.ai_provider == "local":
-                self._ensure_model_loaded()
+        # Se recargará de forma diferida en la próxima transcripción (ver _ensure_model_loaded)
+        self._model_name = model_name
 
     def _setup_openai(self):
-        if self.ai_provider == "openai" and self.openai_api_key:
-            try:
-                import openai
-                self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
-            except ImportError:
-                print("[TranscriptionService] Error: módulo openai no está instalado.")
+        # Privacidad: el cliente de OpenAI solo existe si el usuario eligió explícitamente
+        # el proveedor "openai". En modo local el audio nunca sale del equipo.
+        if self.ai_provider != "openai" or not self.openai_api_key:
+            self.openai_client = None
+            return
+        try:
+            import openai
+            self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
+        except ImportError:
+            print("[TranscriptionService] Error: módulo openai no está instalado.")
 
     def _ensure_model_loaded(self):
         if self.ai_provider == "openai":
@@ -75,6 +74,9 @@ class TranscriptionService(ITranscriber):
             return self._transcribe_local(audio_path, language)
 
     def _transcribe_openai(self, audio_path: str, language: Optional[str]) -> Dict[str, Any]:
+        # Guarda de privacidad: nunca enviar audio a la nube si el proveedor no es "openai"
+        if self.ai_provider != "openai":
+            raise RuntimeError("La transcripción en la nube solo está permitida con el proveedor OpenAI.")
         if not self.openai_client:
             raise RuntimeError("El cliente de OpenAI no está configurado (API Key faltante).")
         

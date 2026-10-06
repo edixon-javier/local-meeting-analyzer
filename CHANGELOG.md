@@ -1,19 +1,178 @@
-# Changelog: Auditoría y Preparación Open Source
+# Registro de cambios
 
-Este archivo mantiene un registro de todas las decisiones, refactorizaciones y mejoras realizadas durante la fase de auditoría y preparación del proyecto **Meeting Analyzer** para su liberación como Open Source de alta calidad.
+Todos los cambios relevantes de **Local Meeting Analyzer** se documentan en este archivo.
 
-## [En Progreso] Fase de Auditoría y Open Source Readiness
+El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa
+[Versionado Semántico](https://semver.org/lang/es/) (SemVer: `MAYOR.MENOR.PARCHE`).
 
-### Pilar 1: Auditoría y Excelencia Técnica
-- **Estados de Carga (Loading):** ✅ **Completado.** Se agregó un spinner de carga y feedback visual al botón de `Iniciar Grabación` en `RecordScreen.jsx` mientras el backend prepara el stream.
-- **Velocidad y Rendimiento:** ✅ **Completado.** El backend usa streaming a disco (prevención OOM) y el frontend optimiza los renders del EventSource y de la forma de onda.
-- **Interactividad:** ✅ **Completado.** UI Premium con soporte de hover, focus, Drag & Drop nativo y deshabilitación segura de botones según el estado de la red o del proceso.
-- **Funcionalidad:** ✅ **Completado.** Se introdujo un `ErrorBoundary` global en React (`App.jsx`) para atrapar cuellos de botella no controlados o errores en la capa de UI. El backend posee fallback a OpenAI cuando Ollama falla.
-- **Accesibilidad (a11y):** ✅ **Completado.** Componentes principales como `RecordScreen` ya incluyen atributos semánticos (`aria-label`, `aria-hidden`, roles) y navegación manejable.
+> **Versionado: SemVer.** `MAYOR` cambia cuando hay incompatibilidades (p. ej. formato de `config.json` o de los
+> metadatos de reuniones), `MENOR` cuando se añade funcionalidad compatible y `PARCHE` para correcciones.
+> La versión se mantiene sincronizada en `frontend/package.json` (la que usan electron-builder y la tienda),
+> `package.json` (raíz) y `backend/core/version.py` (API y `/status`), y debe coincidir con la etiqueta `vX.Y.Z`
+> que dispara la publicación (el CI comprueba que la etiqueta coincida con `frontend/package.json`).
 
-### Pilar 2: Preparación para GitHub
-- **Legibilidad del Código (Clean Code):** ✅ **Completado.** Backend fuertemente tipado en Python, arquitectura por capas (Domain/Services/API), React Context para gestión de estado limpio sin prop drilling.
-- **Documentación (README, Instalación, etc.):** ✅ **Completado.** Se escribió un `README.md` impecable en la raíz del proyecto detallando arquitectura, instalación híbrida (Windows/.bat y manual), variables de entorno y features. Se reemplazó el README genérico de Vite.
+El historial anterior al 1.6.0 se reconstruyó a partir de las etiquetas y de los commits del repositorio.
 
----
-*Gestor del Proyecto: Antigravity*
+## [1.6.0] - Sin publicar
+
+Primera versión preparada para su distribución pública en Windows x64.
+
+### Añadido
+
+- **Empaquetado e instalación.** El backend se congela con PyInstaller (el usuario no necesita Python ni Node) y
+  se incluye `ffmpeg` (build LGPL). Se generan un instalador NSIS (`.exe`) y un paquete MSIX/AppX para Microsoft
+  Store. Los datos del usuario (configuración, grabaciones y registros) viven en la carpeta de datos de la
+  aplicación y no en la carpeta de instalación.
+- **Actualizaciones automáticas.** El instalador `.exe` se actualiza desde GitHub Releases (`electron-updater`) sin
+  interrumpir grabaciones ni transcripciones en curso; la versión de Microsoft Store la actualiza la propia Store.
+- **Integración continua (GitHub Actions).** Pruebas del backend y de la interfaz, lint, empaquetado y borrador de
+  GitHub Release al publicar una etiqueta `v*`.
+- **Documentos legales.** Política de privacidad, contrato de licencia (EULA), aviso de consentimiento de grabación
+  y avisos de software de terceros. Se pueden abrir desde Ajustes > Acerca de / Legal.
+- **Asistente de bienvenida (primer arranque).** Presentación, comprobación de hardware, guía de Ollama
+  (instalación, inicio y descarga del modelo), descarga del modelo de voz y aviso de consentimiento antes de
+  grabar. Se puede volver a abrir desde Ajustes > Ayuda y soporte.
+- **Registros locales y soporte.** `backend.log` y `main.log` con rotación (1 MB), registro de errores no
+  controlados y enmascarado de claves de API. En Ajustes > Ayuda y soporte: **Reportar problema** (abre un
+  formulario con versión y sistema ya completados), **Copiar diagnóstico** y **Abrir carpeta de registros**. No hay
+  telemetría: nada se envía automáticamente.
+- **Interfaz de errores.** El `ErrorBoundary` ofrece "Copiar detalles" y "Reportar problema" además de recargar.
+- Plantillas de incidencias de GitHub (error y sugerencia) y guía de soporte en `docs/SOPORTE.md`.
+- Pruebas de interfaz con Vitest y Testing Library (`npm test`).
+- La versión de la aplicación se expone en `GET /status` (`version`) y en Ajustes.
+
+### Cambiado
+
+- **Licencia.** El proyecto pasa a ser software libre bajo **AGPL-3.0-or-later** (`LICENSE`). El antiguo EULA
+  se convierte en "Licencia y términos de uso", compatible con la AGPL.
+- **Privacidad por defecto.** El proveedor de IA predeterminado es **local** (Ollama + Whisper). Se eliminó el
+  respaldo silencioso a OpenAI cuando Ollama no responde: ahora solo ocurre si el usuario activa
+  "Usar la nube (OpenAI) si el modelo local no está disponible" en Ajustes > Privacidad (`allow_cloud_fallback`,
+  desactivado por defecto) y hay una clave de API. En caso contrario se muestra: "El modelo local no está
+  disponible. Inicia Ollama o activa el uso de la nube en Ajustes." El audio nunca se envía a OpenAI con el
+  proveedor local.
+- **Clave de API protegida.** `GET /config` ya no devuelve la clave en claro (valor enmascarado y `has_api_key`).
+  Ajustes muestra "Clave guardada (••••1234)"; dejar el campo vacío conserva la clave, escribir otra la reemplaza y
+  hay un botón para borrarla. Los valores enmascarados nunca sobrescriben la clave guardada.
+- **Modelo de lenguaje por defecto: `qwen3:4b`** (Apache-2.0, buen español, ~2.5 GB). Se envía `think: false` a
+  Ollama y se elimina cualquier bloque `<think>…</think>` antes de interpretar el JSON. Las instalaciones
+  existentes conservan el modelo que ya tenían configurado; la lista de respaldo pasa a `qwen3:4b`, `qwen3:1.7b`,
+  `phi3`, `mistral` y `llama3.2`.
+- **Fuentes autoalojadas** (Inter, Outfit y JetBrains Mono con `@fontsource`): ya no se consulta Google Fonts y la
+  política de seguridad de contenido (CSP) es más estricta.
+- El modelo Whisper se carga en la primera transcripción local, no al arrancar el backend (el arranque deja de
+  depender de una descarga).
+- Versiones unificadas en 1.6.0 (antes: 1.0.0, 1.2.0 y la etiqueta v1.5.0 no coincidían).
+- El antiguo `CHANGELOG.md` (checklist de auditoría Open Source) pasa a `docs/AUDITORIA-OPEN-SOURCE.md`.
+
+### Corregido
+
+- Los errores internos del backend devuelven una respuesta JSON 500 con un mensaje claro (y cabeceras CORS) en lugar
+  de hacer creer a la interfaz que el servidor está caído; el detalle técnico queda solo en el registro.
+- El toast al perder la conexión con Ollama ya no promete un respaldo en la nube que no esté activado.
+
+### Eliminado
+
+- Limpieza del repositorio: módulos heredados del backend (`analyzer.py`, `audio_capture.py`,
+  `config_manager.py`, `state.py`, `transcriber.py`) y recursos de plantilla sin uso del frontend.
+- La dependencia `soundfile` (ningún módulo la usaba).
+
+### Seguridad
+
+- Las claves de API (`sk-…`) se enmascaran en todos los registros y diagnósticos; el diagnóstico oculta además el
+  nombre de usuario de Windows en las rutas.
+- `mailto:` se admite únicamente para "Reportar problema"; el resto de esquemas distintos de `http(s)` se siguen
+  bloqueando al abrir enlaces externos.
+
+## [1.5.0] - 2026-09-24
+
+### Añadido
+
+- **Minutas ejecutivas.** Exportación de reportes ejecutivos en PDF formal, Markdown estructurado y portapapeles
+  (HTML/Markdown).
+- **Renombrado interactivo de hablantes.** Modal para cambiar "Hablante A" por el nombre real, con persistencia en
+  el JSON de la reunión y sincronización con el chat sobre el historial.
+- `ErrorBoundary` global en React para atrapar errores de la interfaz.
+- Estados de carga en el botón de iniciar grabación y retroalimentación visual mientras el backend prepara el audio.
+- Auditoría de preparación Open Source (README, arquitectura por capas, accesibilidad básica).
+- Primeras acciones de CI/CD y pruebas de interfaz; protección de `config.json` (con claves) fuera del control de
+  versiones y archivo `config.example.json`.
+
+### Cambiado
+
+- Rediseño del flujo de controles de grabación (pausa, reanudar, finalizar, cancelar y marcadores) y del panel de
+  transcripción en vivo (diseño, accesibilidad y disposición).
+- Nueva identidad visual: icono de la aplicación.
+
+### Corregido
+
+- Los pulsos de la animación de grabación bloqueaban clics; se corrigió el desbordamiento del área visible.
+
+## [1.4.0] - 2026-09-18
+
+### Añadido
+
+- **Transcripción en vivo (SSE).** Streaming palabra por palabra con Faster-Whisper, segmentación por VAD,
+  reconexión inteligente, vista en la pantalla de grabación con auto-scroll no intrusivo y cancelación limpia de
+  recursos.
+
+## [1.3.2] - 2026-09-18
+
+### Añadido
+
+- Suite de 22 pruebas automatizadas del backend.
+- Circuit breaker robusto en la capa de red del frontend.
+
+### Corregido
+
+- Protección frente a *path traversal* en el acceso a archivos de audio.
+- Pérdida de datos al guardar metadatos de reuniones en distintos formatos de audio (uso de `splitext`).
+- Cancelación efectiva de la transcripción con Whisper.
+- Fugas de conexiones SSE.
+- Desplazamiento de la ventana y recorte de la barra de título causados por `scrollIntoView`; solapamientos de
+  diseño; progreso en vivo de la transcripción.
+- Se fuerza el proveedor OpenAI cuando así se selecciona.
+
+## [1.3.1] - 2026-07-02
+
+### Cambiado
+
+- El audio se escribe a disco en streaming mientras se graba (evita agotar la memoria en reuniones largas).
+
+### Corregido
+
+- Compatibilidad con micrófonos Bluetooth e híbridos en Windows (`cbSize` / `SubFormat`).
+
+## [1.3.0] - 2026-07-02
+
+### Añadido
+
+- **Probador de audio en tiempo real:** medidores de nivel RMS en Configuración y Grabación, grabación de prueba
+  temporal y reproductor integrado.
+
+### Corregido
+
+- Parámetro de invalidación de caché del reproductor de audio en Configuración.
+
+## [1.2.0] - 2026-07-02
+
+### Añadido
+
+- **Chat global sobre el historial (RAG):** búsqueda semántica y por palabras clave, fragmentos automáticos y
+  pantalla `HistoryChatScreen` con insignias interactivas y navegación directa a la reunión.
+- Carga de audio existente por arrastrar y soltar para analizarlo.
+
+## [1.1.0] - 2026-06-26
+
+### Añadido
+
+- **Análisis híbrido:** integración con la API de OpenAI como alternativa al análisis local.
+- Diarización textual de hablantes.
+- Pantalla de Configuración (`SettingsScreen`) y gestión de `config.json`.
+
+## [1.0.0] - 2026-06-25
+
+### Añadido
+
+- Versión inicial: grabación de audio del sistema (loopback) y micrófono, transcripción local con Whisper, análisis
+  con Phi-3 mediante Ollama e interfaz de escritorio con Electron (modo oscuro premium).

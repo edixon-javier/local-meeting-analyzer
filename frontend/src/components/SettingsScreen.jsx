@@ -4,23 +4,60 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getConfig, updateConfig, getAudioDevices, getOllamaModels, testAiProvider, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
 import { useSystem } from '../hooks/useSystem'
+import { PRIVACY_URL, isPlaceholder } from '../appInfo'
+import { canReportProblem, describeOs, loadAppInfo, openExternalUrl, reportProblem } from '../utils/support'
 import Icon from './Icon'
+
+// Modelo local por defecto (Apache-2.0, buen español, ~2.5 GB) y lista usada si Ollama no responde
+const DEFAULT_OLLAMA_MODEL = 'qwen3:4b'
+const FALLBACK_OLLAMA_MODELS = ['qwen3:4b', 'qwen3:1.7b', 'phi3', 'mistral', 'llama3.2']
+
+// Clave de localStorage que reinicia el asistente de bienvenida (ver components/onboarding)
+const ONBOARDING_STORAGE_KEY = 'onboarding_completed_v1'
+
+const SECTION_STYLE = {
+  padding: 20,
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-lg)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 14,
+}
+const SECTION_TITLE_STYLE = { fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }
+const LABEL_STYLE = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }
+const HINT_STYLE = { fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }
+const TEXT_INPUT_STYLE = { width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }
+
+const LEGAL_DOCS = [
+  { id: 'privacy', label: 'Política de privacidad' },
+  { id: 'eula', label: 'Licencia y términos de uso' },
+  { id: 'consent', label: 'Aviso de consentimiento de grabación' },
+  { id: 'third_party', label: 'Avisos de software de terceros' },
+  { id: 'changelog', label: 'Registro de cambios' },
+]
 
 export default function SettingsScreen() {
   const { showToast, isBackendOffline } = useSystem()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [devices, setDevices] = useState([])
-  const [ollamaModels, setOllamaModels] = useState(['phi3', 'llama3', 'gemma', 'mistral'])
+  const [ollamaModels, setOllamaModels] = useState(FALLBACK_OLLAMA_MODELS)
   
   // Estados de configuración
   const [recordMode, setRecordMode] = useState('both')
   const [micDeviceId, setMicDeviceId] = useState('default')
   const [whisperModel, setWhisperModel] = useState('small')
   const [aiProvider, setAiProvider] = useState('local')
+  // Clave de API: el backend nunca la devuelve en claro. `openaiApiKey` es solo lo que el usuario
+  // escribe ahora (vacío = conservar la guardada); `maskedApiKey` es el enmascarado (••••1234).
   const [openaiApiKey, setOpenaiApiKey] = useState('')
+  const [hasApiKey, setHasApiKey] = useState(false)
+  const [maskedApiKey, setMaskedApiKey] = useState('')
+  const [deletingKey, setDeletingKey] = useState(false)
+  const [allowCloudFallback, setAllowCloudFallback] = useState(false)
   const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini')
-  const [ollamaModel, setOllamaModel] = useState('phi3')
+  const [ollamaModel, setOllamaModel] = useState(DEFAULT_OLLAMA_MODEL)
   const [analysisFocus, setAnalysisFocus] = useState('')
   const [diarize, setDiarize] = useState(false)
 
@@ -46,9 +83,12 @@ export default function SettingsScreen() {
       const cfg = configRes.data
       setWhisperModel(cfg.whisper_model || 'small')
       setAiProvider(cfg.ai_provider || 'local')
-      setOpenaiApiKey(cfg.openai_api_key || '')
+      setOpenaiApiKey('')
+      setHasApiKey(Boolean(cfg.has_api_key))
+      setMaskedApiKey(cfg.openai_api_key || '')
+      setAllowCloudFallback(Boolean(cfg.allow_cloud_fallback))
       setOpenaiModel(cfg.openai_model || 'gpt-4o-mini')
-      setOllamaModel(cfg.ollama_model || 'phi3')
+      setOllamaModel(cfg.ollama_model || DEFAULT_OLLAMA_MODEL)
       setAnalysisFocus(cfg.analysis_focus || '')
       setRecordMode(cfg.record_mode || 'both')
       setMicDeviceId(cfg.mic_device_id || 'default')
@@ -71,7 +111,7 @@ export default function SettingsScreen() {
       }
     } catch (err) {
       console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
-      setOllamaModels(['phi3', 'llama3', 'gemma', 'mistral'])
+      setOllamaModels(FALLBACK_OLLAMA_MODELS)
     }
   }, [showToast])
 
@@ -118,22 +158,55 @@ export default function SettingsScreen() {
     }
   }, [testing])
 
+  // Payload de configuración. La clave solo se envía si el usuario escribió una nueva:
+  // un campo vacío (o el enmascarado) deja intacta la clave guardada.
+  const buildConfigPayload = () => {
+    const payload = {
+      whisper_model: whisperModel,
+      ai_provider: aiProvider,
+      openai_model: openaiModel,
+      ollama_model: ollamaModel,
+      allow_cloud_fallback: allowCloudFallback,
+      analysis_focus: analysisFocus,
+      record_mode: recordMode,
+      mic_device_id: micDeviceId,
+      diarize: diarize
+    }
+    const typedKey = openaiApiKey.trim()
+    if (typedKey) payload.openai_api_key = typedKey
+    return payload
+  }
+
+  // Refleja en pantalla el estado de la clave que devolvió el backend (siempre enmascarada)
+  const applySavedKeyState = (savedConfig) => {
+    if (!savedConfig) return
+    setOpenaiApiKey('')
+    setHasApiKey(Boolean(savedConfig.has_api_key))
+    setMaskedApiKey(savedConfig.openai_api_key || '')
+  }
+
+  const handleDeleteKey = async () => {
+    if (isBackendOffline || deletingKey) return
+    setDeletingKey(true)
+    try {
+      const res = await updateConfig({ openai_api_key: '' })
+      applySavedKeyState(res.data?.config)
+      setAiTestResult(null)
+      showToast({ type: 'success', message: 'Clave de API borrada de este equipo.' })
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo borrar la clave de API.' })
+    } finally {
+      setDeletingKey(false)
+    }
+  }
+
   const handleSave = async (e) => {
     e.preventDefault()
     if (isBackendOffline) return
     setSaving(true)
     try {
-      await updateConfig({
-        whisper_model: whisperModel,
-        ai_provider: aiProvider,
-        openai_api_key: openaiApiKey,
-        openai_model: openaiModel,
-        ollama_model: ollamaModel,
-        analysis_focus: analysisFocus,
-        record_mode: recordMode,
-        mic_device_id: micDeviceId,
-        diarize: diarize
-      })
+      const res = await updateConfig(buildConfigPayload())
+      applySavedKeyState(res.data?.config)
       showToast({ type: 'success', message: 'Configuración guardada correctamente' })
     } catch {
       showToast({ type: 'error', message: 'Error al guardar la configuración' })
@@ -148,17 +221,8 @@ export default function SettingsScreen() {
     setTestAudioPath(null)
     try {
       // Guardar selección actual en el backend antes de testear
-      await updateConfig({
-        whisper_model: whisperModel,
-        ai_provider: aiProvider,
-        openai_api_key: openaiApiKey,
-        openai_model: openaiModel,
-        ollama_model: ollamaModel,
-        analysis_focus: analysisFocus,
-        record_mode: recordMode,
-        mic_device_id: micDeviceId,
-        diarize: diarize
-      })
+      const res = await updateConfig(buildConfigPayload())
+      applySavedKeyState(res.data?.config)
       await startAudioTest()
       showToast({ type: 'success', message: 'Prueba iniciada. Habla o reproduce algún sonido.' })
     } catch {
@@ -188,7 +252,8 @@ export default function SettingsScreen() {
     setAiTestResult(null)
     try {
       const activeModel = aiProvider === 'openai' ? openaiModel : ollamaModel
-      const activeKey = aiProvider === 'openai' ? openaiApiKey : null
+      // Sin clave escrita, el backend usa la guardada
+      const activeKey = aiProvider === 'openai' ? (openaiApiKey.trim() || null) : null
       const res = await testAiProvider(aiProvider, activeKey, activeModel)
       const data = res.data
       setAiTestResult({
@@ -214,8 +279,8 @@ export default function SettingsScreen() {
 
   if (isBackendOffline) {
     return (
-      <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450 }}>
+      <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+        <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450, marginTop: 'auto' }}>
           <div className="empty-state-icon" style={{ marginBottom: 16 }}>
             <Icon name="alert-triangle" size={48} style={{ color: 'var(--red-record)' }} />
           </div>
@@ -223,6 +288,9 @@ export default function SettingsScreen() {
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             La configuración no está disponible porque el motor local de la aplicación no está respondiendo.
           </div>
+        </div>
+        <div style={{ width: '100%', maxWidth: 650, marginBottom: 'auto' }}>
+          <HelpAndLegal />
         </div>
       </div>
     )
@@ -236,6 +304,47 @@ export default function SettingsScreen() {
       </div>
     )
   }
+
+  // Se muestra dentro del bloque de OpenAI o, si el proveedor es local, en la sección Privacidad
+  const apiKeyField = (
+    <div className="form-group">
+      <label htmlFor="openai-key-input" style={LABEL_STYLE}>
+        <Icon name="lock" size={16} /> OpenAI API Key
+      </label>
+      {hasApiKey && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8, padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="check-circle" size={14} style={{ color: 'var(--green-ok)' }} />
+            Clave guardada ({maskedApiKey})
+          </span>
+          <button
+            type="button"
+            onClick={handleDeleteKey}
+            disabled={deletingKey || isBackendOffline}
+            className="btn btn-secondary"
+            style={{ padding: '5px 12px', fontSize: 12 }}
+          >
+            <Icon name="trash" size={13} /> {deletingKey ? 'Borrando...' : 'Borrar clave'}
+          </button>
+        </div>
+      )}
+      <input
+        id="openai-key-input"
+        type="password"
+        autoComplete="off"
+        value={openaiApiKey}
+        onChange={(e) => {
+          setOpenaiApiKey(e.target.value)
+          setAiTestResult(null)
+        }}
+        placeholder={hasApiKey ? 'Escribe una nueva clave para reemplazar la guardada' : 'sk-...'}
+        style={TEXT_INPUT_STYLE}
+      />
+      <span style={HINT_STYLE}>
+        La clave se guarda solo en este equipo y nunca se vuelve a mostrar completa. Si dejas el campo vacío se conserva la guardada.
+      </span>
+    </div>
+  )
 
   return (
     <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
@@ -549,21 +658,7 @@ export default function SettingsScreen() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-            <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-                <Icon name="lock" size={16} /> OpenAI API Key
-              </label>
-              <input 
-                type="password"
-                value={openaiApiKey}
-                onChange={(e) => {
-                  setOpenaiApiKey(e.target.value)
-                  setAiTestResult(null)
-                }}
-                placeholder="sk-..."
-                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
-              />
-            </div>
+            {apiKeyField}
             <div className="form-group">
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
                 <Icon name="cloud" size={16} /> Modelo OpenAI
@@ -677,6 +772,55 @@ export default function SettingsScreen() {
           </span>
         </div>
 
+        {/* Privacidad */}
+        <section aria-labelledby="privacy-section-title" style={SECTION_STYLE}>
+          <h2 id="privacy-section-title" style={SECTION_TITLE_STYLE}>
+            <Icon name="lock" size={17} /> Privacidad
+          </h2>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+            Por defecto todo se procesa en tu equipo. Nada se envía a la nube sin que tú lo actives.
+          </p>
+
+          <div
+            className="form-group"
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12, padding: 12,
+              borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+              opacity: aiProvider === 'openai' ? 0.5 : 1,
+            }}
+          >
+            <input
+              type="checkbox"
+              id="cloud-fallback-chk"
+              checked={allowCloudFallback}
+              disabled={aiProvider === 'openai'}
+              onChange={(e) => setAllowCloudFallback(e.target.checked)}
+              style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2 }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label htmlFor="cloud-fallback-chk" style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                Usar la nube (OpenAI) si el modelo local no está disponible
+              </label>
+              <span style={{ fontSize: 11, color: 'var(--yellow-warn)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                <Icon name="alert-triangle" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  Si Ollama no responde, el texto de tus reuniones (transcripción y preguntas) se enviará a OpenAI para analizarlo,
+                  y se aplicarán sus condiciones. Requiere una clave de API. Está desactivado por defecto.
+                </span>
+              </span>
+              {aiProvider === 'openai' && (
+                <span style={HINT_STYLE}>No aplica: ya usas OpenAI como proveedor principal.</span>
+              )}
+              {aiProvider !== 'openai' && allowCloudFallback && !hasApiKey && !openaiApiKey.trim() && (
+                <span style={HINT_STYLE}>Añade una clave de API abajo para que el respaldo funcione.</span>
+              )}
+            </div>
+          </div>
+
+          {/* Con proveedor OpenAI la clave se gestiona en su propio bloque (arriba) */}
+          {aiProvider !== 'openai' && apiKeyField}
+        </section>
+
         {/* Acciones */}
         <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
           <button 
@@ -689,6 +833,189 @@ export default function SettingsScreen() {
           </button>
         </div>
       </form>
+
+      <div style={{ maxWidth: 650, marginTop: 32 }}>
+        <HelpAndLegal />
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// Ayuda y soporte + Acerca de / Legal
+// Todo es local: el diagnóstico se copia al portapapeles y el usuario decide si lo comparte.
+// ─────────────────────────────────────────
+function HelpAndLegal() {
+  const { showToast } = useSystem()
+  const [info, setInfo] = useState(null)
+  const [busy, setBusy] = useState('')
+  const electron = typeof window !== 'undefined' ? window.electronAPI : undefined
+  const reportAvailable = canReportProblem()
+
+  useEffect(() => {
+    let alive = true
+    loadAppInfo().then((loaded) => {
+      if (alive) setInfo(loaded)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const desktopOnly = () => showToast({ type: 'info', message: 'Esta función solo está disponible en la aplicación de escritorio.' })
+
+  const handleReport = async () => {
+    const channel = await reportProblem({ info: info || undefined })
+    if (!channel) {
+      showToast({ type: 'error', message: 'El canal de soporte aún no está configurado.' })
+      return
+    }
+    showToast({
+      type: 'info',
+      message: channel === 'github'
+        ? 'Se abrió GitHub con el reporte listo. Puedes pegar el diagnóstico copiado.'
+        : 'Se abrió tu correo con el reporte listo. Puedes pegar el diagnóstico copiado.',
+    })
+  }
+
+  const handleCopyDiagnostics = async () => {
+    if (!electron?.copyDiagnostics) return desktopOnly()
+    setBusy('diagnostics')
+    try {
+      const report = await electron.copyDiagnostics()
+      if (report) {
+        showToast({ type: 'success', message: 'Diagnóstico copiado. Revísalo antes de compartirlo: no incluye transcripciones ni claves.' })
+      } else {
+        showToast({ type: 'error', message: 'No se pudo generar el diagnóstico.' })
+      }
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo generar el diagnóstico.' })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const handleOpenLogs = async () => {
+    if (!electron?.openLogsFolder) return desktopOnly()
+    try {
+      const ok = await electron.openLogsFolder()
+      if (!ok) showToast({ type: 'error', message: 'No se pudo abrir la carpeta de registros.' })
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo abrir la carpeta de registros.' })
+    }
+  }
+
+  const handleShowWelcome = () => {
+    try {
+      localStorage.removeItem(ONBOARDING_STORAGE_KEY)
+    } catch {
+      // Sin almacenamiento disponible: el asistente se abre igualmente
+    }
+    window.dispatchEvent(new Event('onboarding:open'))
+  }
+
+  const handleOpenDoc = async (id) => {
+    if (!electron?.openLegalDoc) return desktopOnly()
+    try {
+      const ok = await electron.openLegalDoc(id)
+      if (!ok) showToast({ type: 'error', message: 'No se pudo abrir el documento.' })
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo abrir el documento.' })
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Ayuda y soporte */}
+      <section aria-labelledby="support-section-title" style={SECTION_STYLE}>
+        <h2 id="support-section-title" style={SECTION_TITLE_STYLE}>
+          <Icon name="info" size={17} /> Ayuda y soporte
+        </h2>
+
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            Versión {info ? info.version : '…'}
+          </div>
+          {info && info.electron && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              Electron {info.electron} · Chrome {info.chrome} · {describeOs(info)}
+            </div>
+          )}
+        </div>
+
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+          Si algo falla, copia el diagnóstico y pégalo en tu reporte. Nada se envía automáticamente: la aplicación
+          no recopila telemetría y los registros se guardan solo en este equipo.
+        </p>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleReport}
+            disabled={!reportAvailable}
+            title={reportAvailable ? 'Abre un reporte con la versión y el sistema ya completados' : 'El canal de soporte aún no está configurado'}
+            style={{ padding: '8px 14px', fontSize: 13 }}
+          >
+            <Icon name="flag" size={15} /> Reportar problema
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleCopyDiagnostics}
+            disabled={busy === 'diagnostics'}
+            style={{ padding: '8px 14px', fontSize: 13 }}
+          >
+            <Icon name="copy" size={15} /> {busy === 'diagnostics' ? 'Generando...' : 'Copiar diagnóstico'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleOpenLogs}
+            style={{ padding: '8px 14px', fontSize: 13 }}
+          >
+            <Icon name="folder" size={15} /> Abrir carpeta de registros
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleShowWelcome}
+            style={{ padding: '8px 14px', fontSize: 13 }}
+          >
+            <Icon name="lightbulb" size={15} /> Ver bienvenida de nuevo
+          </button>
+        </div>
+      </section>
+
+      {/* Acerca de / Legal */}
+      <section aria-labelledby="legal-section-title" style={SECTION_STYLE}>
+        <h2 id="legal-section-title" style={SECTION_TITLE_STYLE}>
+          <Icon name="file-text" size={17} /> Acerca de / Legal
+        </h2>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {LEGAL_DOCS.map((doc) => (
+            <button
+              key={doc.id}
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => handleOpenDoc(doc.id)}
+              style={{ padding: '7px 12px', fontSize: 12 }}
+            >
+              <Icon name="file-text" size={14} /> {doc.label}
+            </button>
+          ))}
+          {!isPlaceholder(PRIVACY_URL) && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => openExternalUrl(PRIVACY_URL)}
+              style={{ padding: '7px 12px', fontSize: 12 }}
+            >
+              <Icon name="external-link" size={14} /> Política de privacidad en línea
+            </button>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

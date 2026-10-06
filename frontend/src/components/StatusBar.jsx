@@ -35,7 +35,7 @@ export default function StatusBar() {
 
       <div className="status-indicator">
         <span className={`status-dot ${isLLMOnline ? 'online' : 'offline'}`} />
-        <span>LLM: {isLLMOnline ? (isOpenAIMode ? (systemStatus?.llm_model || 'gpt-4o') : (systemStatus?.llm_model || 'phi3')) : 'desconectado'}</span>
+        <span>LLM: {isLLMOnline ? (isOpenAIMode ? (systemStatus?.llm_model || 'gpt-4o') : (systemStatus?.llm_model || 'qwen3:4b')) : 'desconectado'}</span>
       </div>
 
       {isRecording && (

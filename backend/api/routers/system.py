@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
-from core.config import Config, system_config
+from core.config import Config, system_config, DEFAULT_OLLAMA_MODEL, is_masked_api_key
+from core.version import APP_VERSION
 from services.session_manager import SessionManager, session_manager
 from domain.interfaces import IAudioCapture, IAnalyzer, ITranscriber
 from services.audio_service import audio_service
@@ -16,6 +17,7 @@ class ConfigUpdateRequest(BaseModel):
     ai_provider: Optional[str] = None
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
+    allow_cloud_fallback: Optional[bool] = None
     analysis_focus: Optional[str] = None
     record_mode: Optional[str] = None
     mic_device_id: Optional[str] = None
@@ -61,11 +63,13 @@ def get_status(
         "whisper_model": transcriber.model_name,
         "llm_model": analyzer.model,
         "transcription_progress": transcriber.get_progress(),
-        "ai_provider": config.get("ai_provider", "local")
+        "ai_provider": config.get("ai_provider", "local"),
+        "allow_cloud_fallback": bool(config.get("allow_cloud_fallback", False)),
+        "version": APP_VERSION
     }
 
 _models_cache = {
-    "models": ["phi3", "llama3", "gemma", "mistral"],
+    "models": ["qwen3:4b", "qwen3:1.7b", "phi3", "mistral", "llama3.2"],
     "timestamp": 0.0,
     "ttl": 30.0  # 30 segundos
 }
@@ -158,7 +162,10 @@ def test_ai_connection(
     provider = request.provider.lower().strip()
     
     if provider == "openai":
-        api_key = (request.api_key or "").strip() or config.get("openai_api_key", "").strip()
+        typed_key = (request.api_key or "").strip()
+        if is_masked_api_key(typed_key):
+            typed_key = ""  # El enmascarado de GET /config nunca es una clave real
+        api_key = typed_key or config.get("openai_api_key", "").strip()
         if not api_key:
             raise HTTPException(status_code=400, detail="Debes ingresar o tener guardada una clave API de OpenAI.")
         
@@ -193,7 +200,7 @@ def test_ai_connection(
                 raise HTTPException(status_code=500, detail=f"Error al conectar con OpenAI: {str(e)}")
 
     elif provider == "local":
-        model = (request.model or "").strip() or config.get("ollama_model", "phi3")
+        model = (request.model or "").strip() or config.get("ollama_model", DEFAULT_OLLAMA_MODEL)
         import requests
         t0 = time.time()
         try:
@@ -232,8 +239,8 @@ def test_ai_connection(
 
 @router.get("/config")
 def get_current_config(config: Config = Depends(get_config)):
-    """Retorna la configuración actual del sistema."""
-    return config.settings
+    """Retorna la configuración actual. La clave de API nunca sale en claro (solo enmascarada)."""
+    return config.public_settings()
 
 @router.post("/config")
 def update_config(
@@ -244,6 +251,13 @@ def update_config(
 ):
     """Actualiza la configuración del sistema."""
     updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    if "openai_api_key" in updates:
+        # Un valor enmascarado (el que devuelve GET /config) no es una clave: se ignora y se
+        # conserva la guardada. Una cadena vacía es un borrado explícito de la clave.
+        if is_masked_api_key(updates["openai_api_key"]):
+            del updates["openai_api_key"]
+        else:
+            updates["openai_api_key"] = updates["openai_api_key"].strip()
     config.update(updates)
     config.save()
     
@@ -253,7 +267,7 @@ def update_config(
     analyzer.set_config(config)
     transcriber.set_config(config)
     
-    return {"status": "success", "config": config.settings}
+    return {"status": "success", "config": config.public_settings()}
 
 @router.get("/events")
 async def sse_events():

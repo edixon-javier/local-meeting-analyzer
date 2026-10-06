@@ -6,6 +6,7 @@ import json
 
 # Agregar backend al path para importar módulos limpios
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
 
 from core.config import Config
 from services.session_manager import SessionManager
@@ -25,7 +26,7 @@ class TestConfig(unittest.TestCase):
 
     def test_default_values(self):
         self.assertEqual(self.config.get("whisper_model"), "small")
-        self.assertEqual(self.config.get("ai_provider"), "openai")
+        self.assertEqual(self.config.get("ai_provider"), "local")
         self.assertEqual(self.config.get("record_mode"), "both")
 
     def test_update_and_save(self):

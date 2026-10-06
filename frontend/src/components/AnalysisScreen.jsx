@@ -298,7 +298,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           <h2 className="unified-processing-title">
             {isTranscribing
               ? (isCloud ? 'Transcribiendo con OpenAI Whisper...' : `Transcribiendo con Whisper Local (${systemStatus?.whisper_model || 'small'})...`)
-              : (isCloud ? 'Analizando con OpenAI (GPT-4o)...' : 'Analizando con Phi-3 Local (Ollama)...')}
+              : (isCloud ? 'Analizando con OpenAI (GPT-4o)...' : 'Analizando con IA local (Ollama)...')}
           </h2>
 
           {/* Subtítulo descriptivo */}

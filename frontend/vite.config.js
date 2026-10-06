@@ -13,5 +13,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-  }
+  },
+  // Pruebas de interfaz (npm test -> vitest run)
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test-setup.js'],
+    include: ['src/**/*.test.{js,jsx}'],
+    css: false,
+  },
 })

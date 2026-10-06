@@ -292,7 +292,7 @@ def analyze_transcript(
     session: SessionManager = Depends(get_session_manager),
     repo: IMetadataRepository = Depends(get_metadata_repo)
 ):
-    """Analiza el texto de la reunión con Ollama (Phi-3 local) u OpenAI."""
+    """Analiza el texto de la reunión con Ollama (modelo local) u OpenAI."""
     audio_path = request.audio_path if request.audio_path else session.get_audio_path()
 
     # Resolver bookmarks: desde el request, o desde la sesión activa, o desde el archivo existente

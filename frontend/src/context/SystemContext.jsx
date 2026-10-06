@@ -153,12 +153,15 @@ export function SystemProvider({ children, onToast }) {
           if (isOnline && !wasOnline) {
             onToast?.({
               type: 'success',
-              message: 'Ollama detectado en línea. Precalentando modelo Phi-3...',
+              message: 'Ollama detectado en línea. Precalentando el modelo local...',
             })
           } else if (!isOnline && wasOnline) {
             onToast?.({
               type: 'warning',
-              message: 'Ollama se ha desconectado. Usando fallback en la nube si está configurado.',
+              // La nube solo se usa si el usuario lo activó en Ajustes > Privacidad (allow_cloud_fallback)
+              message: systemStatusRef.current?.allow_cloud_fallback
+                ? 'Ollama se ha desconectado. Se usará la nube (OpenAI) porque lo activaste en Ajustes.'
+                : 'Ollama se ha desconectado. Nada se envía a la nube: inicia Ollama para analizar tus reuniones.',
             })
           }
         }
