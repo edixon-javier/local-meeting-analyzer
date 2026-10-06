@@ -20,13 +20,25 @@ import { useRecordings } from './hooks/useRecordings'
 import OfflineOverlay from './components/OfflineOverlay'
 import SplashScreen from './components/SplashScreen'
 import ErrorBoundary from './components/ErrorBoundary'
+import WelcomeScreen from './components/onboarding/WelcomeScreen'
+import ConsentProvider from './components/onboarding/ConsentProvider'
+import { useConsent } from './components/onboarding/useConsent'
+import { isOnboardingCompleted } from './components/onboarding/onboardingStorage'
 import logoImg from './assets/icon.jpg'
 import './index.css'
 
+// Muestra el asistente de bienvenida una vez terminado el splash (y no mientras el backend arranca)
+function OnboardingGate({ open, onClose }) {
+  const { isStartupComplete } = useSystem()
+  if (!open || !isStartupComplete) return null
+  return <WelcomeScreen onClose={onClose} />
+}
+
 // Componente intermedio para poder usar useSystem() para atajos
-function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavigate }) {
+function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavigate, onboardingOpen }) {
   const { isRecording, setIsRecording, showToast, isBackendOffline } = useSystem()
   const { loadRecordings } = useRecordings()
+  const { ensureConsent, isConsentPending } = useConsent()
 
   const handleRecordingDoneWrapper = useCallback((path) => {
     loadRecordings({ silent: true })
@@ -41,6 +53,12 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
           showToast({ type: 'error', message: 'No se puede cambiar grabación: Servidor desconectado' })
           return
         }
+        // Mientras el asistente de bienvenida o el aviso de consentimiento están abiertos no se graba
+        if (!isRecording && onboardingOpen) {
+          showToast({ type: 'info', message: 'Termina la configuración inicial para poder grabar.' })
+          return
+        }
+        if (!isRecording && isConsentPending()) return
         try {
           if (isRecording) {
             // Detener grabación
@@ -49,9 +67,12 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
             showToast({ type: 'info', message: 'Grabación guardada (Atajo). Procesando...' })
             handleRecordingDoneWrapper(res.data.audio_path)
           } else {
+            // El aviso de consentimiento va antes de capturar audio (atajo y menú de la bandeja)
+            setView('record')
+            const consented = await ensureConsent()
+            if (!consented) return
             // Iniciar grabación (el backend usará la fuente configurada)
             setIsRecording(true)
-            setView('record') // Forzar navegación a la pantalla de grabación
             await startRecording()
             showToast({ type: 'success', message: 'Grabación iniciada (Atajo)' })
           }
@@ -64,7 +85,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
       })
       return () => unsubscribe()
     }
-  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDoneWrapper, isBackendOffline])
+  }, [isRecording, setIsRecording, showToast, setView, handleRecordingDoneWrapper, isBackendOffline, onboardingOpen, ensureConsent, isConsentPending])
 
   return (
     <div className="app-body">
@@ -124,6 +145,14 @@ export default function App() {
   const [view, setView] = useState('record')          // 'record' | 'analysis' | 'history' | 'history-chat' | 'settings'
   const [audioPath, setAudioPath] = useState(null)   // Ruta del WAV grabado
   const [toast, setToast] = useState(null)
+  // Asistente de bienvenida: se abre en el primer arranque y cuando Ajustes dispara `onboarding:open`
+  const [onboardingOpen, setOnboardingOpen] = useState(() => !isOnboardingCompleted())
+
+  useEffect(() => {
+    const openOnboarding = () => setOnboardingOpen(true)
+    window.addEventListener('onboarding:open', openOnboarding)
+    return () => window.removeEventListener('onboarding:open', openOnboarding)
+  }, [])
 
   const showToast = useCallback((t) => {
     setToast(t)
@@ -154,14 +183,17 @@ export default function App() {
           <TitleBar currentView={view} />
 
           <ErrorBoundary>
-            <AppContent 
-              view={view} 
-              setView={setView}
-              audioPath={audioPath}
-              setAudioPath={setAudioPath}
-              handleRecordingDone={handleRecordingDone}
-              handleNavigate={handleNavigate}
-            />
+            <ConsentProvider>
+              <AppContent
+                view={view}
+                setView={setView}
+                audioPath={audioPath}
+                setAudioPath={setAudioPath}
+                handleRecordingDone={handleRecordingDone}
+                handleNavigate={handleNavigate}
+                onboardingOpen={onboardingOpen}
+              />
+            </ConsentProvider>
           </ErrorBoundary>
 
           {/* Barra de estado inferior */}
@@ -169,6 +201,9 @@ export default function App() {
 
           {/* Notificaciones */}
           <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+          {/* Asistente de bienvenida (primer arranque / reabierto desde Ajustes) */}
+          <OnboardingGate open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
 
           {/* Overlay de Backend Offline */}
           <OfflineOverlay />

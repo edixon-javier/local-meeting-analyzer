@@ -14,14 +14,37 @@ import {
   getAudioTestLevels,
   getLiveTranscriptionUrl,
   addLiveBookmark,
-  deleteLiveBookmark
+  deleteLiveBookmark,
+  getConfig
 } from '../api'
 import { useSystem } from '../hooks/useSystem'
+import { useConsent } from './onboarding/useConsent'
+import { t as consentText } from './onboarding/consentText'
 import Icon from './Icon'
 import LiveTranscriptPanel from './recording/LiveTranscriptPanel'
 
+// Línea de privacidad veraz según dónde se procesa el audio (proveedor de IA configurado)
+function getPrivacyNotice(provider, cloudFallback) {
+  if (provider === 'openai') {
+    return { icon: 'cloud', color: 'var(--yellow-warn)', text: 'Modo nube: el audio y el texto se envían a OpenAI.' }
+  }
+  if (provider === 'local') {
+    if (cloudFallback) {
+      return {
+        icon: 'cloud',
+        color: 'var(--yellow-warn)',
+        text: 'Procesamiento local. Si Ollama no responde, el texto se enviará a OpenAI (lo activaste en Ajustes).'
+      }
+    }
+    return { icon: 'lock', color: 'var(--green-ok)', text: 'Procesamiento local: el audio y el texto no salen de este equipo.' }
+  }
+  return null
+}
+
 export default function RecordScreen({ onRecordingDone }) {
-  const { showToast, isBackendOffline, isRecording, setIsRecording, isPaused, setIsPaused } = useSystem()
+  const { showToast, isBackendOffline, isRecording, setIsRecording, isPaused, setIsPaused, systemStatus } = useSystem()
+  const { ensureConsent } = useConsent()
+  const consentPendingRef = useRef(false)
   const [seconds, setSeconds] = useState(0)
   const timerRef = useRef(null)
   const audioPathRef = useRef(null)
@@ -112,6 +135,30 @@ export default function RecordScreen({ onRecordingDone }) {
   }
 
   const sseRef = useRef(null)
+
+  // Proveedor de IA configurado (para que la línea de privacidad sea veraz)
+  const [privacyConfig, setPrivacyConfig] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    getConfig()
+      .then((res) => {
+        if (cancelled) return
+        setPrivacyConfig({
+          provider: res.data?.ai_provider,
+          cloudFallback: Boolean(res.data?.allow_cloud_fallback)
+        })
+      })
+      .catch(() => {
+        // Sin configuración disponible: se usa el proveedor que reporta /status (si lo hay)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const privacyNotice = getPrivacyNotice(
+    privacyConfig?.provider || systemStatus?.ai_provider,
+    privacyConfig?.cloudFallback
+  )
 
   // Polling de niveles de audio mientras se graba activamente
   useEffect(() => {
@@ -314,6 +361,17 @@ export default function RecordScreen({ onRecordingDone }) {
   const handleStartStop = async () => {
     if (isBackendOffline || isPreparing || isCancelling) return
     if (!isRecording) {
+      // CONSENTIMIENTO: antes de capturar audio hay que haber aceptado el aviso (una sola vez)
+      if (consentPendingRef.current) return
+      consentPendingRef.current = true
+      let consented = false
+      try {
+        consented = await ensureConsent()
+      } finally {
+        consentPendingRef.current = false
+      }
+      if (!consented) return
+
       // INICIAR GRABACIÓN
       try {
         setIsPreparing(true)
@@ -610,7 +668,7 @@ export default function RecordScreen({ onRecordingDone }) {
                     <div className="visualizer-status-text">
                       {isPaused
                         ? 'Grabación pausada. El micrófono no está capturando audio.'
-                        : 'Capturando audio del sistema y micrófono con máxima privacidad.'}
+                        : 'Capturando el audio del sistema y del micrófono.'}
                     </div>
 
                     <div className="studio-rms-dashboard">
@@ -646,10 +704,12 @@ export default function RecordScreen({ onRecordingDone }) {
                     </div>
 
                     <div className="visualizer-tips-card">
-                      <div className="tip-item">
-                        <Icon name="lock" size={14} style={{ color: 'var(--green-ok)' }} />
-                        <span>Privacidad Total: Todo el procesamiento es local en tu equipo.</span>
-                      </div>
+                      {privacyNotice && (
+                        <div className="tip-item">
+                          <Icon name={privacyNotice.icon} size={14} style={{ color: privacyNotice.color }} />
+                          <span>{privacyNotice.text}</span>
+                        </div>
+                      )}
                       <div className="tip-item">
                         <Icon name="bookmark" size={14} style={{ color: '#F59E0B' }} />
                         <span>Presiona la tecla <strong>M</strong> para fijar un momento clave con nota.</span>
@@ -799,10 +859,19 @@ export default function RecordScreen({ onRecordingDone }) {
         </div>
       )}
 
+      {/* Recordatorio de consentimiento, siempre visible junto al botón de grabar */}
+      {!isStudioActive && (
+        <p className="consent-reminder" title={consentText('consent.reminder.tooltip')}>
+          <Icon name="alert-triangle" size={13} />
+          <span>{consentText('consent.reminder.text')}</span>
+          <span className="sr-only"> {consentText('consent.reminder.tooltip')}</span>
+        </p>
+      )}
+
       {/* Carga de audio (Solo si no está grabando) */}
       {!isStudioActive && (
         <>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 24, textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
             Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
           </p>
 

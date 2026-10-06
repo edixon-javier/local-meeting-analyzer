@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { getStatus } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import Icon from './Icon'
+import { useFocusTrap } from './onboarding/useFocusTrap'
 
 export default function OfflineOverlay() {
   const { isBackendOffline, isStartupComplete, showToast } = useSystem()
   const [retrying, setRetrying] = useState(false)
+  const dialogRef = useRef(null)
+
+  // Diálogo obligatorio: foco atrapado y sin cierre con Esc
+  useFocusTrap(dialogRef, isStartupComplete && isBackendOffline)
 
   if (!isStartupComplete || !isBackendOffline) return null
 
@@ -36,15 +41,26 @@ export default function OfflineOverlay() {
       zIndex: 9999,
       animation: 'fadeIn 0.3s ease-out'
     }}>
-      <div className="glass" style={{
-        padding: '40px 32px',
-        borderRadius: 'var(--radius-lg)',
-        width: '100%',
-        maxWidth: 460,
-        border: '1px solid var(--border-subtle)',
-        textAlign: 'center',
-        boxShadow: 'var(--shadow-lg)'
-      }}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="glass"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="offline-overlay-title"
+        aria-describedby="offline-overlay-desc"
+        style={{
+          padding: '40px 32px',
+          borderRadius: 'var(--radius-lg)',
+          width: '100%',
+          maxWidth: 460,
+          maxHeight: 'calc(100vh - 32px)',
+          overflowY: 'auto',
+          border: '1px solid var(--border-subtle)',
+          textAlign: 'center',
+          boxShadow: 'var(--shadow-lg)'
+        }}
+      >
         <div style={{
           marginBottom: 16,
           display: 'inline-flex',
@@ -53,11 +69,16 @@ export default function OfflineOverlay() {
         }}>
           <Icon name="alert-triangle" size={52} style={{ color: 'var(--red-record)' }} />
         </div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
+        <h2 id="offline-overlay-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
           Conexión del Backend Perdida
         </h2>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 28 }}>
-          No es posible comunicarse con el motor local de procesamiento. Asegúrate de que el backend de Python esté ejecutándose (ejecuta <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>start.bat</code>).
+        <p id="offline-overlay-desc" style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 28 }}>
+          No es posible comunicarse con el motor local de procesamiento. Reinicia la aplicación.
+          {import.meta.env.DEV && (
+            <>
+              {' '}En desarrollo, asegúrate de que el backend de Python esté ejecutándose (ejecuta <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>start.bat</code>).
+            </>
+          )}
         </p>
         <button
           onClick={handleRetry}

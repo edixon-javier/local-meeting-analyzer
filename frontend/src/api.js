@@ -118,5 +118,75 @@ export const startAudioTest = () => api.post('/recording/test/start')
 export const stopAudioTest = () => api.post('/recording/test/stop')
 export const getAudioTestLevels = () => api.get('/recording/test/levels')
 
+// ─── Primer arranque (onboarding): requisitos, Ollama y modelos de voz ───
+export const getSetupRequirements = () => api.get('/setup/requirements')
+export const getSetupOllama = () => api.get('/setup/ollama')
+export const startSetupOllama = () => api.post('/setup/ollama/start')
+export const downloadWhisperModel = (model) => api.post('/setup/whisper/download', { model })
+export const getWhisperModelStatus = (model) => api.get(`/setup/whisper/status/${encodeURIComponent(model)}`)
+
+// Descarga un modelo de Ollama leyendo el stream NDJSON del backend.
+// onProgress recibe { status, total, completed, percent, digest } por cada línea.
+// Resuelve al recibir "success"; rechaza con Error(message) ante cualquier fallo.
+// Se puede cancelar con un AbortController (signal): rechaza con name === 'AbortError'.
+export const pullOllamaModel = async (model, onProgress, signal) => {
+  const response = await fetch(`${BASE_URL}/setup/ollama/pull`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+    signal,
+  })
+
+  if (!response.ok) {
+    let detail = `No se pudo iniciar la descarga (error ${response.status}).`
+    try {
+      const body = await response.json()
+      if (body?.detail) detail = String(body.detail)
+    } catch {
+      // Cuerpo no JSON: se usa el mensaje genérico
+    }
+    throw new Error(detail)
+  }
+  if (!response.body) {
+    throw new Error('El navegador no permite leer el progreso de la descarga.')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let succeeded = false
+
+  const handleLine = (line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    let event
+    try {
+      event = JSON.parse(trimmed)
+    } catch {
+      return
+    }
+    if (event.status === 'error') {
+      throw new Error(event.error || 'La descarga del modelo falló.')
+    }
+    if (event.status === 'success') succeeded = true
+    onProgress?.(event)
+  }
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    lines.forEach(handleLine)
+  }
+  buffer += decoder.decode()
+  handleLine(buffer)
+
+  if (!succeeded) {
+    throw new Error('La descarga se interrumpió antes de terminar. Inténtalo de nuevo.')
+  }
+}
+
 export default api
 
