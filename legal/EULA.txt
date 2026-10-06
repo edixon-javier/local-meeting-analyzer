@@ -1,0 +1,202 @@
+﻿[NOTA PARA EL DESARROLLADOR - ELIMINAR ESTE BLOQUE ANTES DE PUBLICAR: borrador de buena fe, no es
+asesoria legal; debe ser revisado por un abogado antes de cualquier uso comercial. Reemplaza los
+marcadores [NOMBRE DEL TITULAR], [CORREO DE CONTACTO], [URL DEL REPOSITORIO], [PAÍS/JURISDICCIÓN]
+y [FECHA DE ENTRADA EN VIGOR]. Este archivo debe guardarse como UTF-8 con BOM para que el
+instalador NSIS muestre bien las tildes. Lineas de 100 caracteres como maximo, sin Markdown.]
+
+LICENCIA Y TÉRMINOS DE USO
+LOCAL MEETING ANALYZER
+
+Fecha de entrada en vigor: [FECHA DE ENTRADA EN VIGOR]
+
+LEA ESTE DOCUMENTO CON ATENCIÓN. Local Meeting Analyzer es software libre distribuido bajo la
+GNU Affero General Public License, versión 3 o posterior (AGPL-3.0-or-later). Este documento le
+informa de esa licencia y añade avisos sobre el uso responsable del Software, la privacidad y
+la exactitud de la IA. Nada de lo que aquí se dice restringe los derechos que la AGPL le otorga;
+en caso de conflicto, prevalece la AGPL.
+
+1. DEFINICIONES
+
+a) "Software": la aplicación Local Meeting Analyzer, sus actualizaciones y la documentación que
+   la acompaña, en forma de instalador o paquete ejecutable.
+b) "Titular": [NOMBRE DEL TITULAR], titular de los derechos del Software. Contacto:
+   [CORREO DE CONTACTO].
+c) "Usted": la persona física o jurídica que instala o usa el Software.
+d) "Componentes de Terceros": software de código abierto o de terceros incluido en el Software
+   o utilizado por este, y los modelos de inteligencia artificial que se descargan para usarlo.
+e) "Contenido del Usuario": las grabaciones de audio, transcripciones, análisis, nombres de
+   participantes, ajustes y cualquier otro dato que Usted genere o almacene con el Software.
+f) "Resultados de IA": transcripciones, resúmenes, tareas, decisiones, atribuciones de
+   hablantes, respuestas de chat y cualquier otro contenido generado por modelos de IA.
+
+2. LICENCIA
+
+Copyright (C) 2026 [NOMBRE DEL TITULAR].
+
+Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los términos de la
+GNU Affero General Public License publicada por la Free Software Foundation, ya sea la versión 3
+de la licencia o (a su elección) cualquier versión posterior. El texto completo de la licencia se
+incluye en el archivo LICENSE y está disponible en https://www.gnu.org/licenses/agpl-3.0.html.
+
+El código fuente completo y correspondiente de cada versión está disponible en el repositorio del
+proyecto: [URL DEL REPOSITORIO]. Si modifica el Software y permite que otras personas interactúen
+con él a través de una red, la AGPL le obliga a ofrecerles el código fuente de su versión.
+
+3. USO RESPONSABLE
+
+Este apartado no es una restricción adicional de la licencia: le recuerda obligaciones que ya le
+impone la ley. Usted no debe usar el Software para fines ilícitos, incluida la grabación de
+personas sin el consentimiento o los avisos que la ley exija (véase la cláusula 5), ni para
+vigilancia encubierta.
+
+4. COMPONENTES DE TERCEROS, MODELOS DE IA Y SERVICIOS EXTERNOS
+
+a) El Software incluye o utiliza Componentes de Terceros (por ejemplo, Electron, React, Python,
+   FastAPI, faster-whisper y FFmpeg). Cada uno se rige por su propia licencia, que Usted acepta
+   respecto de ese componente. El detalle de componentes y licencias figura en el archivo
+   THIRD_PARTY_NOTICES.md que acompaña al Software y a su repositorio. Si una licencia de un
+   Componente de Terceros entra en conflicto con este documento, prevalece esa licencia para ese
+   componente.
+b) Los modelos de reconocimiento de voz (por ejemplo, Whisper) y los modelos de lenguaje (por
+   ejemplo, los que se ejecutan mediante Ollama) se descargan de sus fuentes originales y tienen
+   licencias y condiciones de uso propias y diferentes entre sí. Usted debe revisarlas y
+   cumplirlas. El Titular no es el autor de esos modelos.
+c) Ollama es un programa independiente de terceros. No forma parte del Software y se rige por
+   sus propios términos.
+d) Si Usted decide usar OpenAI introduciendo su propia clave API, lo hace bajo su propia cuenta y
+   bajo los términos y la política de privacidad de OpenAI. El Titular no es parte de esa
+   relación. Los costes, límites y consecuencias de ese uso son de su exclusiva cuenta.
+e) El Software no está afiliado, patrocinado ni respaldado por Microsoft, OpenAI, Ollama,
+   Hugging Face, GitHub ni por ninguna plataforma de reuniones o videollamadas. Todos los
+   nombres y marcas pertenecen a sus respectivos propietarios.
+
+5. SU RESPONSABILIDAD SOBRE LAS GRABACIONES Y EL CONSENTIMIENTO
+
+Este Software graba audio del micrófono y del sistema de su equipo. Usted es el ÚNICO
+RESPONSABLE de:
+
+a) informar a todos los participantes de que la reunión se graba, se transcribe y se analiza con
+   IA, y de obtener su consentimiento cuando la ley, su empleador, un contrato o la plataforma de
+   videollamadas que utilice lo exijan;
+b) cumplir las leyes aplicables sobre grabación e interceptación de comunicaciones, protección
+   de datos personales, relaciones laborales, secreto profesional, confidencialidad y propiedad
+   intelectual en cada lugar en que se encuentren los participantes y en el suyo;
+c) decidir si el contenido de una reunión puede grabarse, procesarse con IA o enviarse a un
+   servicio externo, en particular a OpenAI;
+d) custodiar, compartir y eliminar las grabaciones y transcripciones de forma lícita y segura.
+
+El Software puede mostrar recordatorios o avisos orientativos (por ejemplo, el aviso que se
+muestra antes de la primera grabación), pero no verifica que Usted cumpla estas obligaciones, no
+sustituye el asesoramiento jurídico y no traslada al Titular responsabilidad alguna por su uso.
+Las plataformas de videollamada pueden no avisar a los participantes de que un programa externo
+está capturando el audio del equipo.
+
+6. CONTENIDO DEL USUARIO Y PRIVACIDAD
+
+a) El Contenido del Usuario es suyo. Se almacena localmente en su equipo. El Titular no lo recibe,
+   no accede a él y no adquiere ningún derecho sobre él.
+b) El tratamiento de datos que realiza el Software se describe en la Política de Privacidad
+   publicada por el Titular (archivo legal/PRIVACY.md del repositorio del proyecto y su versión
+   web), que forma parte de este documento en lo que sea aplicable.
+c) El Software no cifra el Contenido del Usuario ni su clave API de OpenAI, que se guardan en su
+   equipo. Usted es responsable de proteger su equipo y sus copias de seguridad (por ejemplo,
+   activando BitLocker) y de revocar su clave API si se expone.
+
+7. AVISO SOBRE LOS RESULTADOS DE IA
+
+Los Resultados de IA son generados automáticamente y pueden contener errores, omisiones,
+palabras mal transcritas, atribuciones incorrectas de hablantes, resúmenes inexactos, tareas o
+decisiones inventadas o mal interpretadas ("alucinaciones") y cifras, nombres o fechas
+incorrectos. Su calidad depende del audio, del idioma, del modelo elegido y de las
+características de su equipo.
+
+Usted debe revisar y verificar los Resultados de IA, contrastándolos con el audio original, antes
+de confiar en ellos. Los Resultados de IA NO deben ser la única base para decisiones legales,
+médicas, financieras, laborales, de seguridad ni de cualquier otra naturaleza con consecuencias
+importantes, ni constituyen asesoramiento profesional. Usted asume el riesgo de su uso.
+
+8. ACTUALIZACIONES, CAMBIOS Y FUNCIONES DE PAGO
+
+a) El Titular puede publicar actualizaciones, correcciones o nuevas versiones, que pueden
+   distribuirse a través de Microsoft Store o de GitHub Releases. Las actualizaciones se regirán
+   por la AGPL y este documento, salvo que vengan con otros. El Titular no está obligado a ofrecer
+   actualizaciones, mantenimiento ni soporte técnico.
+b) El Titular puede modificar, suspender o descontinuar el Software o cualquiera de sus
+   funciones en cualquier momento, sin responsabilidad frente a Usted.
+c) El Titular podrá ofrecer en el futuro funciones o versiones de pago opcionales, que se
+   regirán por condiciones adicionales que se le presentarán antes de que decida adquirirlas.
+d) Si obtiene el Software a través de Microsoft Store, Microsoft no es parte de este documento ni
+   responsable del Software, de su mantenimiento ni de su soporte.
+
+9. EXCLUSIÓN DE GARANTÍAS
+
+EN LA MEDIDA MÁXIMA PERMITIDA POR LA LEY APLICABLE, EL SOFTWARE SE ENTREGA "TAL CUAL" Y "SEGÚN
+DISPONIBILIDAD", GRATUITAMENTE Y SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUIDAS,
+SIN LIMITACIÓN, LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN FIN DETERMINADO, EXACTITUD,
+DISPONIBILIDAD, FUNCIONAMIENTO ININTERRUMPIDO O LIBRE DE ERRORES, Y NO INFRACCIÓN. EL TITULAR NO
+GARANTIZA QUE LOS RESULTADOS DE IA SEAN EXACTOS, COMPLETOS O ADECUADOS PARA SUS FINES, NI QUE EL
+SOFTWARE FUNCIONE EN TODOS LOS EQUIPOS O SEA COMPATIBLE CON OTROS PROGRAMAS.
+
+10. LIMITACIÓN DE RESPONSABILIDAD
+
+EN LA MEDIDA MÁXIMA PERMITIDA POR LA LEY APLICABLE, EL TITULAR NO SERÁ RESPONSABLE DE NINGÚN
+DAÑO INDIRECTO, INCIDENTAL, ESPECIAL, CONSECUENCIAL, PUNITIVO NI EJEMPLAR, NI DE LA PÉRDIDA DE
+DATOS, GRABACIONES, BENEFICIOS, INGRESOS U OPORTUNIDADES DE NEGOCIO, NI DE RECLAMACIONES,
+SANCIONES O PERJUICIOS DERIVADOS DE: (I) GRABAR O PROCESAR A PERSONAS SIN LOS AVISOS O
+CONSENTIMIENTOS EXIGIDOS; (II) ERRORES EN LOS RESULTADOS DE IA; (III) EL USO DE SERVICIOS O
+MODELOS DE TERCEROS, INCLUIDO OPENAI; O (IV) EL ACCESO NO AUTORIZADO A SU EQUIPO O A SUS ARCHIVOS,
+INCLUSO SI SE HUBIERA ADVERTIDO DE LA POSIBILIDAD DE ESOS DAÑOS.
+
+LA RESPONSABILIDAD TOTAL DEL TITULAR POR TODOS LOS CONCEPTOS DERIVADOS DE ESTE DOCUMENTO NO
+EXCEDERÁ DEL IMPORTE QUE USTED HAYA PAGADO POR EL SOFTWARE, QUE EN LA VERSIÓN GRATUITA ES CERO.
+
+Nada en este documento excluye ni limita la responsabilidad que no pueda excluirse ni limitarse
+por ley, ni los derechos irrenunciables que la legislación de protección al consumidor de su
+lugar de residencia le reconozca.
+
+11. NOMBRE, MARCAS Y COMENTARIOS
+
+Conforme a la sección 7 de la AGPL, la licencia no concede derechos sobre el nombre "Local
+Meeting Analyzer" ni sobre sus logotipos. Si distribuye una versión modificada, use otro nombre
+y otro logotipo para que nadie la confunda con la versión oficial. Si Usted envía comentarios,
+sugerencias o informes de errores, el Titular puede usarlos libremente, sin incluir su Contenido
+del Usuario, que solo se comparte si Usted decide adjuntarlo.
+
+12. DURACIÓN Y TERMINACIÓN
+
+Sus derechos sobre el Software y su posible terminación se rigen por la sección 8 de la AGPL.
+Usted puede dejar de usar el Software en cualquier momento desinstalándolo. Su Contenido del
+Usuario permanece en su equipo y Usted puede conservarlo o eliminarlo (véase la Política de
+Privacidad).
+
+13. DISPOSICIONES GENERALES
+
+a) Acuerdo completo: la AGPL, este documento, la Política de Privacidad y las licencias de los
+   Componentes de Terceros constituyen el acuerdo íntegro entre Usted y el Titular sobre el
+   Software.
+b) Divisibilidad: si alguna disposición se declara nula o inaplicable, el resto seguirá vigente y
+   la disposición afectada se aplicará en la medida máxima permitida.
+c) No renuncia: la falta de ejercicio de un derecho por el Titular no implica renunciar a él.
+d) Cambios: el Titular puede publicar una nueva versión de este documento junto con nuevas
+   versiones del Software. Los cambios nunca reducen los derechos que la AGPL le concede sobre
+   las versiones que ya recibió.
+e) Idioma: este documento se redacta en español. Cualquier traducción se ofrece solo por
+   comodidad y, en caso de discrepancia, prevalece la versión en español. El texto oficial de
+   la AGPL es el original en inglés.
+
+14. LEY APLICABLE Y JURISDICCIÓN
+
+Este documento se rige por las leyes de [PAÍS/JURISDICCIÓN], sin tener en cuenta sus normas sobre
+conflicto de leyes. Las partes se someten a los tribunales competentes de [PAÍS/JURISDICCIÓN] para
+resolver cualquier controversia derivada de este documento, sin perjuicio de los derechos
+irrenunciables que, como consumidor, Usted pueda tener de acudir a los tribunales de su lugar de
+residencia o de que se aplique la legislación imperativa de protección al consumidor que
+corresponda.
+
+15. CONTACTO
+
+Para cualquier consulta sobre este documento: [CORREO DE CONTACTO]
+Repositorio del proyecto: [URL DEL REPOSITORIO]
+
+AL HACER CLIC EN "ACEPTO" O AL INSTALAR EL SOFTWARE, USTED RECONOCE QUE HA LEÍDO ESTE DOCUMENTO
+Y LOS AVISOS SOBRE CONSENTIMIENTO, PRIVACIDAD Y EXACTITUD DE LA IA.

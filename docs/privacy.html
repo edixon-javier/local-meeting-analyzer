@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<!--
+NOTA PARA EL DESARROLLADOR (eliminar antes de publicar):
+Este documento es un borrador redactado de buena fe. NO constituye asesoría legal.
+Debe ser revisado por un abogado antes de cualquier uso comercial o de su publicación definitiva.
+Reemplaza TODOS los marcadores entre corchetes: [NOMBRE DEL TITULAR], [CORREO DE CONTACTO],
+[URL DEL REPOSITORIO], [PAÍS/JURISDICCIÓN], [FECHA DE ENTRADA EN VIGOR].
+Esta página es la versión web de legal/PRIVACY.md: mantenlas sincronizadas.
+Pensada para GitHub Pages y como URL de política de privacidad en Microsoft Store.
+No carga recursos externos (CSS y tipografías del sistema, todo en línea).
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Política de Privacidad de Local Meeting Analyzer: tus datos se guardan en tu equipo, el procesamiento es local por defecto y no hay telemetría, cuentas ni anuncios.">
+<title>Política de Privacidad · Local Meeting Analyzer</title>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --surface: #ffffff;
+    --text: #1c2233;
+    --muted: #5a6478;
+    --border: #dfe3ec;
+    --accent: #4f46e5;
+    --accent-soft: #eef0ff;
+    --code-bg: #eef0f6;
+    --note-bg: #fff8e6;
+    --note-border: #f0d58a;
+    --shadow: 0 1px 2px rgba(20, 27, 45, .06), 0 4px 16px rgba(20, 27, 45, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1320;
+      --surface: #171c2e;
+      --text: #e7eaf4;
+      --muted: #a2abc2;
+      --border: #2a3150;
+      --accent: #8b93ff;
+      --accent-soft: #1e2447;
+      --code-bg: #20263f;
+      --note-bg: #2a2412;
+      --note-border: #5c4d1c;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; }
+  header.hero { padding: 40px 0 8px; }
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: .8rem; font-weight: 600; letter-spacing: .02em;
+  }
+  h1 { font-size: clamp(1.7rem, 5vw, 2.4rem); line-height: 1.2; margin: 14px 0 6px; }
+  .meta { color: var(--muted); margin: 0; font-size: .95rem; }
+  main { margin-top: 24px; }
+  section.card, nav.toc, .summary {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    padding: 22px clamp(16px, 4vw, 28px); margin: 0 0 18px;
+  }
+  .summary { border-left: 4px solid var(--accent); }
+  h2 { font-size: 1.3rem; line-height: 1.3; margin: 0 0 12px; scroll-margin-top: 16px; }
+  h3 { font-size: 1.05rem; margin: 18px 0 6px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 1.3em; }
+  li { margin: 0 0 6px; }
+  a { color: var(--accent); text-underline-offset: 2px; word-break: break-word; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  code, pre {
+    font-family: ui-monospace, "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+    background: var(--code-bg); border-radius: 6px;
+  }
+  code { padding: 1px 6px; font-size: .88em; word-break: break-word; }
+  pre { padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; font-size: .9rem; }
+  pre code { background: none; padding: 0; }
+  nav.toc h2 { font-size: 1rem; }
+  nav.toc ol { columns: 2 260px; column-gap: 28px; margin: 0; }
+  nav.toc li { break-inside: avoid; }
+  .note {
+    background: var(--note-bg); border: 1px solid var(--note-border);
+    border-radius: 10px; padding: 12px 14px; margin: 0 0 14px;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: .95rem; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  td.k { font-weight: 700; color: var(--accent); width: 2.2em; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin: 0 0 14px; }
+  .table-wrap table { margin: 0; min-width: 560px; }
+  @media (max-width: 640px) {
+    /* Tablas en formato tarjeta para pantallas estrechas */
+    .table-wrap { border: 0; overflow: visible; }
+    .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; min-width: 0; width: 100%; }
+    .table-wrap thead { position: absolute; left: -9999px; }
+    .table-wrap tr { border: 1px solid var(--border); border-radius: 10px; margin: 0 0 12px; overflow: hidden; }
+    .table-wrap td { border-bottom: 1px solid var(--border); padding: 8px 12px; }
+    .table-wrap td:last-child { border-bottom: 0; }
+    .table-wrap td[data-label]::before {
+      content: attr(data-label); display: block; font-size: .75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px;
+    }
+    td.k { width: auto; }
+  }
+  footer { color: var(--muted); font-size: .88rem; text-align: center; margin-top: 28px; }
+  @media print {
+    body { background: #fff; color: #000; }
+    section.card, nav.toc, .summary { box-shadow: none; break-inside: avoid; }
+    nav.toc { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="badge">Documento legal</span>
+  <h1>Política de Privacidad de Local Meeting Analyzer</h1>
+  <p class="meta">Entrada en vigor y última actualización: <strong>[FECHA DE ENTRADA EN VIGOR]</strong></p>
+</header>
+
+<main>
+
+<aside class="summary" aria-labelledby="resumen">
+  <h2 id="resumen">Resumen en pocas líneas</h2>
+  <ul>
+    <li><strong>Tus datos se quedan en tu equipo.</strong> Las grabaciones, transcripciones, análisis y ajustes se guardan en tu perfil de Windows. El Titular no los recibe ni puede verlos.</li>
+    <li><strong>Procesamiento local por defecto.</strong> La transcripción (faster-whisper) y el análisis con IA (Ollama) se ejecutan en tu equipo.</li>
+    <li><strong>Sin cuentas, telemetría, analítica, anuncios ni venta de datos.</strong></li>
+    <li><strong>Solo salen datos de tu equipo si tú lo decides:</strong> si introduces tu propia clave de OpenAI y eliges OpenAI como proveedor (o activas expresamente el respaldo en la nube), el audio y/o el texto de la reunión se envían a OpenAI.</li>
+    <li><strong>Hay descargas puntuales</strong> de modelos de IA (Hugging Face y Ollama) y comprobaciones de actualización. No incluyen tu contenido.</li>
+    <li><strong>Los datos no están cifrados por la App.</strong> Te recomendamos activar BitLocker.</li>
+    <li><strong>Tú eres responsable de informar a las personas a las que grabas</strong> y de obtener su consentimiento cuando la ley lo exija.</li>
+  </ul>
+</aside>
+
+<nav class="toc" aria-labelledby="indice">
+  <h2 id="indice">Contenido</h2>
+  <ol>
+    <li><a href="#responsable">Quién es el responsable</a></li>
+    <li><a href="#datos">Qué datos trata la App y dónde se guardan</a></li>
+    <li><a href="#procesamiento">Cómo se procesan tus datos</a></li>
+    <li><a href="#red">Conexiones de red</a></li>
+    <li><a href="#no-recopilamos">Qué no recopilamos</a></li>
+    <li><a href="#terceros">Terceros</a></li>
+    <li><a href="#conservacion">Conservación y eliminación</a></li>
+    <li><a href="#seguridad">Seguridad</a></li>
+    <li><a href="#responsabilidad">Tu responsabilidad al grabar a otras personas</a></li>
+    <li><a href="#menores">Menores de edad</a></li>
+    <li><a href="#derechos">Tus derechos</a></li>
+    <li><a href="#cambios">Cambios en esta política</a></li>
+    <li><a href="#contacto">Contacto</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="responsable">
+  <h2>1. Quién es el responsable</h2>
+  <p>Local Meeting Analyzer (la «App») es publicada por <strong>[NOMBRE DEL TITULAR]</strong> (el «Titular», «nosotros»). Contacto: <strong>[CORREO DE CONTACTO]</strong>. Jurisdicción de referencia: <strong>[PAÍS/JURISDICCIÓN]</strong>.</p>
+  <p>La App funciona <strong>en tu equipo</strong>. El Titular <strong>no recibe, no almacena y no tiene acceso</strong> a tus grabaciones, transcripciones, análisis, nombres de participantes ni ajustes. En la práctica, respecto del contenido de tus reuniones, quien decide qué se graba, con qué finalidad y durante cuánto tiempo eres <strong>tú</strong>.</p>
+</section>
+
+<section class="card" id="datos">
+  <h2>2. Qué datos trata la App y dónde se guardan</h2>
+  <p>Todos los datos se guardan <strong>localmente</strong>, en la carpeta de tu perfil de usuario:</p>
+  <pre><code>%APPDATA%\Local Meeting Analyzer\</code></pre>
+  <p>En la versión de Microsoft Store (MSIX), Windows redirige esa ubicación a la carpeta privada del paquete de la App. El contenido es el mismo.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ubicación</th><th>Qué contiene</th></tr></thead>
+      <tbody>
+        <tr>
+          <td data-label="Ubicación"><code>recordings\</code></td>
+          <td data-label="Qué contiene">El audio de cada grabación en formato MP3 y un archivo JSON por grabación con: la <strong>transcripción</strong>, el <strong>análisis de IA</strong> (resumen, tareas, decisiones), los segmentos con marcas de tiempo, los <strong>marcadores</strong> que añadas y el <strong>mapa de hablantes</strong>, con los nombres reales de los participantes que tú escribas.</td>
+        </tr>
+        <tr>
+          <td data-label="Ubicación"><code>config.json</code></td>
+          <td data-label="Qué contiene">Tus ajustes. Si la configuras, incluye tu <strong>clave API de OpenAI, guardada localmente en texto plano</strong>.</td>
+        </tr>
+        <tr>
+          <td data-label="Ubicación"><code>logs\</code></td>
+          <td data-label="Qué contiene">Registros de diagnóstico locales para ayudarte a resolver problemas.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p><strong>Datos personales de terceros.</strong> El audio contiene la voz de las personas que participan en la reunión, y la transcripción y el mapa de hablantes pueden contener sus nombres y lo que dijeron. Son datos personales de esas personas. La asignación de hablantes («Hablante A», «Hablante B»…) se basa en el contexto de la conversación y en los nombres que tú mismo escribes; la App no pretende identificar a nadie por su voz.</p>
+  <p><strong>Sin cifrado.</strong> La App no cifra estos archivos en disco. Consulta la sección <a href="#seguridad">Seguridad</a>.</p>
+</section>
+
+<section class="card" id="procesamiento">
+  <h2>3. Cómo se procesan tus datos</h2>
+  <p><strong>Por defecto, todo el procesamiento es local:</strong></p>
+  <ul>
+    <li><strong>Transcripción:</strong> se realiza con faster-whisper, en la CPU de tu equipo.</li>
+    <li><strong>Análisis, resumen, chat y búsqueda:</strong> se realizan con un modelo de lenguaje que ejecuta <strong>Ollama</strong> en tu equipo (<code>localhost:11434</code>). Ollama es un programa independiente de terceros que tú instalas; la App solo se comunica con él dentro de tu propio equipo.</li>
+    <li>La interfaz de la App y su servicio interno se comunican entre sí mediante conexiones locales (<code>localhost</code>).</li>
+  </ul>
+  <p><strong>Opcional: OpenAI (nube).</strong> La App solo usa OpenAI si se cumple <strong>alguna</strong> de estas condiciones, que dependen de ti:</p>
+  <ol>
+    <li>Introduces tu <strong>propia clave API de OpenAI</strong> <strong>y</strong> seleccionas OpenAI como proveedor de IA; o</li>
+    <li>Activas expresamente la opción «usar la nube si el modelo local no está disponible».</li>
+  </ol>
+  <div class="note">
+    En ese caso, el <strong>audio</strong> y/o el <strong>texto de la transcripción</strong> (y, según la función, el contexto necesario para el resumen o el chat) se envían a OpenAI a través de tu cuenta. OpenAI los trata según <strong>sus propios términos y su política de privacidad</strong>, sobre los que el Titular no tiene control. Si no configuras una clave de OpenAI o no activas esas opciones, la App no envía tu contenido a OpenAI.
+  </div>
+</section>
+
+<section class="card" id="red">
+  <h2>4. Conexiones de red</h2>
+  <p>Estas son <strong>todas</strong> las conexiones a Internet que la App puede iniciar:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Conexión</th><th>Cuándo</th><th>Qué se envía</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">a</td>
+          <td data-label="Conexión"><strong>Descarga de modelos:</strong> modelos de voz Whisper desde <strong>Hugging Face</strong>; modelos de lenguaje desde <strong>ollama.com</strong> (los descarga Ollama)</td>
+          <td data-label="Cuándo">La primera vez que usas un modelo, o cuando pides descargarlo</td>
+          <td data-label="Qué se envía">Ningún dato tuyo. Solo los metadatos habituales de cualquier petición web (por ejemplo, tu dirección IP).</td>
+        </tr>
+        <tr>
+          <td class="k">b</td>
+          <td data-label="Conexión"><strong>OpenAI</strong></td>
+          <td data-label="Cuándo">Solo si introduces tu clave API <strong>y</strong> eliges OpenAI como proveedor, o activas el respaldo en la nube</td>
+          <td data-label="Qué se envía">Audio y/o texto de la reunión, bajo los términos y la política de privacidad de OpenAI</td>
+        </tr>
+        <tr>
+          <td class="k">c</td>
+          <td data-label="Conexión"><strong>Comprobación de actualizaciones</strong></td>
+          <td data-label="Cuándo">Versión de GitHub: la App consulta GitHub Releases. Versión de Microsoft Store: actualiza Microsoft Store, no la App</td>
+          <td data-label="Qué se envía">Metadatos habituales de la petición (por ejemplo, tu IP y la versión instalada). Con Microsoft Store, aplican las políticas de Microsoft.</td>
+        </tr>
+        <tr>
+          <td class="k">d</td>
+          <td data-label="Conexión"><strong>«Reportar problema»</strong></td>
+          <td data-label="Cuándo">Solo cuando pulsas ese botón</td>
+          <td data-label="Qué se envía"><strong>La App no envía nada automáticamente.</strong> Abre tu navegador o tu cliente de correo con un informe prellenado, y tú decides si lo envías y si adjuntas registros (logs).</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Cualquier otra comunicación de la App ocurre dentro de tu propio equipo (<code>localhost</code>).</p>
+</section>
+
+<section class="card" id="no-recopilamos">
+  <h2>5. Qué no recopilamos</h2>
+  <ul>
+    <li><strong>No hay telemetría ni analítica</strong> de uso, ni informes de fallos automáticos.</li>
+    <li><strong>No hay cuentas de usuario</strong> ni registro.</li>
+    <li><strong>No hay publicidad</strong> ni rastreadores.</li>
+    <li><strong>No vendemos ni compartimos datos</strong>, porque no los recibimos.</li>
+    <li>Las tipografías están incluidas en la App; no se consultan servicios externos de fuentes (por ejemplo, Google Fonts).</li>
+  </ul>
+</section>
+
+<section class="card" id="terceros">
+  <h2>6. Terceros</h2>
+  <p>La App puede interactuar con los siguientes terceros, cada uno con sus propias condiciones y políticas de privacidad:</p>
+  <ul>
+    <li><strong>OpenAI</strong> (opcional, solo con tu clave API): <a href="https://openai.com/policies/" rel="noopener">openai.com/policies</a></li>
+    <li><strong>Hugging Face</strong> (descarga de modelos de voz): <a href="https://huggingface.co/privacy" rel="noopener">huggingface.co/privacy</a></li>
+    <li><strong>Ollama</strong> (programa local de IA y descarga de modelos de lenguaje desde ollama.com): <a href="https://ollama.com" rel="noopener">ollama.com</a></li>
+    <li><strong>GitHub</strong> (versión descargada de GitHub Releases y comprobación de actualizaciones): <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">declaración de privacidad de GitHub</a></li>
+    <li><strong>Microsoft</strong> (distribución y actualización a través de Microsoft Store): <a href="https://privacy.microsoft.com/privacystatement" rel="noopener">declaración de privacidad de Microsoft</a></li>
+  </ul>
+  <p>El Titular no controla las prácticas de estos terceros. Los modelos de IA que descargas tienen además sus propias licencias; consulta <code>THIRD_PARTY_NOTICES.md</code>.</p>
+</section>
+
+<section class="card" id="conservacion">
+  <h2>7. Conservación y eliminación</h2>
+  <p>La App conserva tus datos <strong>hasta que tú los elimines</strong>. No hay borrado automático ni copia en servidores del Titular.</p>
+  <ul>
+    <li><strong>Eliminar una grabación:</strong> desde la pantalla <strong>Historial</strong>, borra la grabación. Se eliminan su audio y su archivo JSON (es un borrado normal de archivos de Windows, no un borrado seguro).</li>
+    <li><strong>Eliminar tu clave de OpenAI:</strong> quítala en Ajustes o borra <code>config.json</code>.</li>
+    <li><strong>Eliminar todo:</strong> desinstala la App y borra la carpeta <code>%APPDATA%\Local Meeting Analyzer\</code>. En la versión de Microsoft Store, Windows suele eliminar también los datos privados del paquete al desinstalar; si quieres asegurarte, borra antes tus grabaciones desde el Historial y comprueba que la carpeta ya no exista.</li>
+    <li><strong>Datos enviados a OpenAI:</strong> borrarlos en tu equipo no los elimina de OpenAI. Su conservación se rige por los términos de OpenAI; consúltalos o contacta con OpenAI.</li>
+    <li><strong>Copias de seguridad:</strong> si copiaste archivos a otros lugares (nube, discos externos, correo), debes eliminarlos allí por tu cuenta.</li>
+  </ul>
+</section>
+
+<section class="card" id="seguridad">
+  <h2>8. Seguridad</h2>
+  <ul>
+    <li>Los datos se guardan <strong>solo en tu equipo y sin cifrar</strong> por la App. Cualquier persona o programa con acceso a tu cuenta de Windows o a tu disco podría leerlos.</li>
+    <li><strong>Recomendamos activar BitLocker</strong> (o el cifrado de dispositivo de Windows), usar una contraseña de Windows robusta y bloquear la sesión cuando te ausentes.</li>
+    <li>Tu clave de OpenAI se guarda en texto plano en <code>config.json</code>. No compartas esa carpeta ni subas ese archivo a repositorios, correos o servicios en la nube. Si crees que se expuso, revócala desde tu cuenta de OpenAI.</li>
+    <li>Antes de adjuntar registros (<code>logs\</code>) a un reporte, revísalos: pueden contener información técnica de tu equipo, como rutas o nombres de archivo.</li>
+    <li>Comparte las grabaciones y transcripciones solo con quienes corresponda.</li>
+  </ul>
+</section>
+
+<section class="card" id="responsabilidad">
+  <h2>9. Tu responsabilidad al grabar a otras personas</h2>
+  <p>Grabar audio y tratar los datos de otras personas puede estar regulado por leyes sobre grabación de comunicaciones, protección de datos, relaciones laborales y confidencialidad. <strong>Eres el único responsable de informar a los participantes y de obtener su consentimiento cuando la ley lo exija</strong>, y de cumplir las normas de tu país, de tu empleador y de la plataforma de videollamadas que uses. La App te muestra un recordatorio, pero no verifica que hayas cumplido esas obligaciones. Consulta <code>legal/CONSENT_NOTICE.md</code> para ver un aviso orientativo y un guion de ejemplo.</p>
+  <p>Si usas la App con fines profesionales o empresariales, es posible que tú (o tu organización) seas el responsable del tratamiento de los datos de los participantes y tengas obligaciones propias de transparencia, base legal, conservación y seguridad.</p>
+</section>
+
+<section class="card" id="menores">
+  <h2>10. Menores de edad</h2>
+  <p>La App no está dirigida a menores de 13 años (o a la edad mínima aplicable en tu país), no tiene cuentas y no recopila datos de menores de forma intencionada. Si grabas a menores, por ejemplo en un contexto educativo, necesitas la autorización de sus padres o tutores cuando la ley lo exija.</p>
+</section>
+
+<section class="card" id="derechos">
+  <h2>11. Tus derechos</h2>
+  <p>Como los datos <strong>nunca llegan al Titular</strong>, los controlas tú directamente y en todo momento:</p>
+  <ul>
+    <li><strong>Acceso:</strong> puedes abrir la carpeta <code>%APPDATA%\Local Meeting Analyzer\</code> y ver todo lo que la App guarda. Los archivos usan formatos abiertos (MP3 y JSON).</li>
+    <li><strong>Rectificación:</strong> puedes corregir los nombres de los hablantes y editar el contenido desde la App.</li>
+    <li><strong>Eliminación:</strong> puedes borrar grabaciones desde el Historial o borrar toda la carpeta (véase la sección <a href="#conservacion">7</a>).</li>
+    <li><strong>Portabilidad:</strong> puedes copiar tus archivos o exportar el acta de una reunión.</li>
+    <li><strong>Oposición y limitación:</strong> puedes dejar de usar la App, desactivar OpenAI o desinstalarla en cualquier momento.</li>
+  </ul>
+  <p><strong>Si eres un participante grabado por otra persona</strong> y quieres ejercer tus derechos sobre tu voz o tus datos, debes dirigirte a <strong>quien realizó la grabación</strong>, que es quien la tiene y la controla. El Titular no tiene acceso a esos datos y no puede localizarlos, modificarlos ni borrarlos.</p>
+  <p><strong>Marco normativo.</strong> Esta política busca ser compatible con los principios generales del <strong>Reglamento General de Protección de Datos de la UE (RGPD)</strong> (licitud, transparencia, minimización, limitación de la finalidad y del plazo de conservación, e integridad y confidencialidad) y con leyes de protección de datos de Latinoamérica, como la <strong>Ley 1581 de 2012 de Colombia</strong> y la <strong>Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP) de México</strong>. Esto es una declaración de intención y no una certificación ni una garantía de cumplimiento en todas las jurisdicciones.</p>
+</section>
+
+<section class="card" id="cambios">
+  <h2>12. Cambios en esta política</h2>
+  <p>Podemos actualizar esta política, por ejemplo si cambian las funciones de la App. Publicaremos la nueva versión con su fecha de entrada en vigor en el repositorio del proyecto y, cuando el cambio sea relevante, en las notas de la versión. Te recomendamos revisarla de vez en cuando. Si continúas usando la App después de la fecha de entrada en vigor, se entenderá que conoces la nueva versión.</p>
+</section>
+
+<section class="card" id="contacto">
+  <h2>13. Contacto</h2>
+  <p>Para preguntas sobre esta política: <strong>[CORREO DE CONTACTO]</strong>.<br>
+  Repositorio del proyecto: <strong>[URL DEL REPOSITORIO]</strong>.</p>
+</section>
+
+</main>
+
+<footer>
+  <p>Local Meeting Analyzer · Política de Privacidad · Vigente desde [FECHA DE ENTRADA EN VIGOR]</p>
+</footer>
+
+</div>
+</body>
+</html>

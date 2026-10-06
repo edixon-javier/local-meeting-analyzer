@@ -1,0 +1,148 @@
+<!--
+NOTA PARA EL DESARROLLADOR (eliminar antes de publicar):
+Este documento es un borrador redactado de buena fe. NO constituye asesoría legal.
+Debe ser revisado por un abogado antes de cualquier uso comercial o de su publicación definitiva.
+Reemplaza TODOS los marcadores entre corchetes: [NOMBRE DEL TITULAR], [CORREO DE CONTACTO],
+[URL DEL REPOSITORIO], [PAÍS/JURISDICCIÓN], [FECHA DE ENTRADA EN VIGOR].
+Mantén sincronizado este archivo con docs/privacy.html (versión web que se publica en GitHub Pages
+y se usa como URL de privacidad en Microsoft Store).
+-->
+
+# Política de Privacidad de Local Meeting Analyzer
+
+**Entrada en vigor y última actualización:** [FECHA DE ENTRADA EN VIGOR]
+
+## Resumen en pocas líneas
+
+- **Tus datos se quedan en tu equipo.** Las grabaciones, transcripciones, análisis y ajustes se guardan en tu perfil de Windows. El Titular no los recibe ni puede verlos.
+- **Procesamiento local por defecto.** La transcripción (faster-whisper) y el análisis con IA (Ollama) se ejecutan en tu equipo.
+- **Sin cuentas, telemetría, analítica, anuncios ni venta de datos.**
+- **Solo salen datos de tu equipo si tú lo decides:** si introduces tu propia clave de OpenAI y eliges OpenAI como proveedor (o activas expresamente el respaldo en la nube), el audio y/o el texto de la reunión se envían a OpenAI.
+- **Hay descargas puntuales** de modelos de IA (Hugging Face y Ollama) y comprobaciones de actualización. No incluyen tu contenido.
+- **Los datos no están cifrados por la App.** Te recomendamos activar BitLocker.
+- **Tú eres responsable de informar a las personas a las que grabas** y de obtener su consentimiento cuando la ley lo exija.
+
+## 1. Quién es el responsable
+
+Local Meeting Analyzer (la «App») es publicada por **[NOMBRE DEL TITULAR]** (el «Titular», «nosotros»). Contacto: **[CORREO DE CONTACTO]**. Jurisdicción de referencia: **[PAÍS/JURISDICCIÓN]**.
+
+La App funciona **en tu equipo**. El Titular **no recibe, no almacena y no tiene acceso** a tus grabaciones, transcripciones, análisis, nombres de participantes ni ajustes. En la práctica, respecto del contenido de tus reuniones, quien decide qué se graba, con qué finalidad y durante cuánto tiempo eres **tú**.
+
+## 2. Qué datos trata la App y dónde se guardan
+
+Todos los datos se guardan **localmente**, en la carpeta de tu perfil de usuario:
+
+```
+%APPDATA%\Local Meeting Analyzer\
+```
+
+En la versión de Microsoft Store (MSIX), Windows redirige esa ubicación a la carpeta privada del paquete de la App. El contenido es el mismo.
+
+| Ubicación | Qué contiene |
+|---|---|
+| `recordings\` | El audio de cada grabación en formato MP3 y un archivo JSON por grabación con: la **transcripción**, el **análisis de IA** (resumen, tareas, decisiones), los segmentos con marcas de tiempo, los **marcadores** que añadas y el **mapa de hablantes**, con los nombres reales de los participantes que tú escribas. |
+| `config.json` | Tus ajustes. Si la configuras, incluye tu **clave API de OpenAI, guardada localmente en texto plano**. |
+| `logs\` | Registros de diagnóstico locales para ayudarte a resolver problemas. |
+
+**Datos personales de terceros.** El audio contiene la voz de las personas que participan en la reunión, y la transcripción y el mapa de hablantes pueden contener sus nombres y lo que dijeron. Son datos personales de esas personas. La asignación de hablantes («Hablante A», «Hablante B»…) se basa en el contexto de la conversación y en los nombres que tú mismo escribes; la App no pretende identificar a nadie por su voz.
+
+**Sin cifrado.** La App no cifra estos archivos en disco. Consulta la sección «Seguridad».
+
+## 3. Cómo se procesan tus datos
+
+**Por defecto, todo el procesamiento es local:**
+
+- **Transcripción:** se realiza con faster-whisper, en la CPU de tu equipo.
+- **Análisis, resumen, chat y búsqueda:** se realizan con un modelo de lenguaje que ejecuta **Ollama** en tu equipo (`localhost:11434`). Ollama es un programa independiente de terceros que tú instalas; la App solo se comunica con él dentro de tu propio equipo.
+- La interfaz de la App y su servicio interno se comunican entre sí mediante conexiones locales (`localhost`).
+
+**Opcional: OpenAI (nube).** La App solo usa OpenAI si se cumple **alguna** de estas condiciones, que dependen de ti:
+
+1. Introduces tu **propia clave API de OpenAI** **y** seleccionas OpenAI como proveedor de IA; o
+2. Activas expresamente la opción «usar la nube si el modelo local no está disponible».
+
+En ese caso, el **audio** y/o el **texto de la transcripción** (y, según la función, el contexto necesario para el resumen o el chat) se envían a OpenAI a través de tu cuenta. OpenAI los trata según **sus propios términos y su política de privacidad**, sobre los que el Titular no tiene control. Si no configuras una clave de OpenAI o no activas esas opciones, la App no envía tu contenido a OpenAI.
+
+## 4. Conexiones de red
+
+Estas son **todas** las conexiones a Internet que la App puede iniciar:
+
+| | Conexión | Cuándo | Qué se envía |
+|---|---|---|---|
+| a | **Descarga de modelos:** modelos de voz Whisper desde **Hugging Face**; modelos de lenguaje desde **ollama.com** (los descarga Ollama) | La primera vez que usas un modelo, o cuando pides descargarlo | Ningún dato tuyo. Solo los metadatos habituales de cualquier petición web (por ejemplo, tu dirección IP). |
+| b | **OpenAI** | Solo si introduces tu clave API **y** eliges OpenAI como proveedor, o activas el respaldo en la nube | Audio y/o texto de la reunión, bajo los términos y la política de privacidad de OpenAI |
+| c | **Comprobación de actualizaciones** | Versión de GitHub: la App consulta GitHub Releases. Versión de Microsoft Store: actualiza Microsoft Store, no la App | Metadatos habituales de la petición (por ejemplo, tu IP y la versión instalada). Con Microsoft Store, aplican las políticas de Microsoft. |
+| d | **«Reportar problema»** | Solo cuando pulsas ese botón | **La App no envía nada automáticamente.** Abre tu navegador o tu cliente de correo con un informe prellenado, y tú decides si lo envías y si adjuntas registros (logs). |
+
+Cualquier otra comunicación de la App ocurre dentro de tu propio equipo (`localhost`).
+
+## 5. Qué no recopilamos
+
+- **No hay telemetría ni analítica** de uso, ni informes de fallos automáticos.
+- **No hay cuentas de usuario** ni registro.
+- **No hay publicidad** ni rastreadores.
+- **No vendemos ni compartimos datos**, porque no los recibimos.
+- Las tipografías están incluidas en la App; no se consultan servicios externos de fuentes (por ejemplo, Google Fonts).
+
+## 6. Terceros
+
+La App puede interactuar con los siguientes terceros, cada uno con sus propias condiciones y políticas de privacidad:
+
+- **OpenAI** (opcional, solo con tu clave API): <https://openai.com/policies/>
+- **Hugging Face** (descarga de modelos de voz): <https://huggingface.co/privacy>
+- **Ollama** (programa local de IA y descarga de modelos de lenguaje desde ollama.com): <https://ollama.com>
+- **GitHub** (versión descargada de GitHub Releases y comprobación de actualizaciones): <https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement>
+- **Microsoft** (distribución y actualización a través de Microsoft Store): <https://privacy.microsoft.com/privacystatement>
+
+El Titular no controla las prácticas de estos terceros. Los modelos de IA que descargas tienen además sus propias licencias; consulta `THIRD_PARTY_NOTICES.md`.
+
+## 7. Conservación y eliminación
+
+La App conserva tus datos **hasta que tú los elimines**. No hay borrado automático ni copia en servidores del Titular.
+
+- **Eliminar una grabación:** desde la pantalla **Historial**, borra la grabación. Se eliminan su audio y su archivo JSON (es un borrado normal de archivos de Windows, no un borrado seguro).
+- **Eliminar tu clave de OpenAI:** quítala en Ajustes o borra `config.json`.
+- **Eliminar todo:** desinstala la App y borra la carpeta `%APPDATA%\Local Meeting Analyzer\`. En la versión de Microsoft Store, Windows suele eliminar también los datos privados del paquete al desinstalar; si quieres asegurarte, borra antes tus grabaciones desde el Historial y comprueba que la carpeta ya no exista.
+- **Datos enviados a OpenAI:** borrarlos en tu equipo no los elimina de OpenAI. Su conservación se rige por los términos de OpenAI; consúltalos o contacta con OpenAI.
+- **Copias de seguridad:** si copiaste archivos a otros lugares (nube, discos externos, correo), debes eliminarlos allí por tu cuenta.
+
+## 8. Seguridad
+
+- Los datos se guardan **solo en tu equipo y sin cifrar** por la App. Cualquier persona o programa con acceso a tu cuenta de Windows o a tu disco podría leerlos.
+- **Recomendamos activar BitLocker** (o el cifrado de dispositivo de Windows), usar una contraseña de Windows robusta y bloquear la sesión cuando te ausentes.
+- Tu clave de OpenAI se guarda en texto plano en `config.json`. No compartas esa carpeta ni subas ese archivo a repositorios, correos o servicios en la nube. Si crees que se expuso, revócala desde tu cuenta de OpenAI.
+- Antes de adjuntar registros (`logs\`) a un reporte, revísalos: pueden contener información técnica de tu equipo, como rutas o nombres de archivo.
+- Comparte las grabaciones y transcripciones solo con quienes corresponda.
+
+## 9. Tu responsabilidad al grabar a otras personas
+
+Grabar audio y tratar los datos de otras personas puede estar regulado por leyes sobre grabación de comunicaciones, protección de datos, relaciones laborales y confidencialidad. **Eres el único responsable de informar a los participantes y de obtener su consentimiento cuando la ley lo exija**, y de cumplir las normas de tu país, de tu empleador y de la plataforma de videollamadas que uses. La App te muestra un recordatorio, pero no verifica que hayas cumplido esas obligaciones. Consulta `legal/CONSENT_NOTICE.md` para ver un aviso orientativo y un guion de ejemplo.
+
+Si usas la App con fines profesionales o empresariales, es posible que tú (o tu organización) seas el responsable del tratamiento de los datos de los participantes y tengas obligaciones propias de transparencia, base legal, conservación y seguridad.
+
+## 10. Menores de edad
+
+La App no está dirigida a menores de 13 años (o a la edad mínima aplicable en tu país), no tiene cuentas y no recopila datos de menores de forma intencionada. Si grabas a menores, por ejemplo en un contexto educativo, necesitas la autorización de sus padres o tutores cuando la ley lo exija.
+
+## 11. Tus derechos
+
+Como los datos **nunca llegan al Titular**, los controlas tú directamente y en todo momento:
+
+- **Acceso:** puedes abrir la carpeta `%APPDATA%\Local Meeting Analyzer\` y ver todo lo que la App guarda. Los archivos usan formatos abiertos (MP3 y JSON).
+- **Rectificación:** puedes corregir los nombres de los hablantes y editar el contenido desde la App.
+- **Eliminación:** puedes borrar grabaciones desde el Historial o borrar toda la carpeta (véase la sección 7).
+- **Portabilidad:** puedes copiar tus archivos o exportar el acta de una reunión.
+- **Oposición y limitación:** puedes dejar de usar la App, desactivar OpenAI o desinstalarla en cualquier momento.
+
+**Si eres un participante grabado por otra persona** y quieres ejercer tus derechos sobre tu voz o tus datos, debes dirigirte a **quien realizó la grabación**, que es quien la tiene y la controla. El Titular no tiene acceso a esos datos y no puede localizarlos, modificarlos ni borrarlos.
+
+**Marco normativo.** Esta política busca ser compatible con los principios generales del **Reglamento General de Protección de Datos de la UE (RGPD)** (licitud, transparencia, minimización, limitación de la finalidad y del plazo de conservación, e integridad y confidencialidad) y con leyes de protección de datos de Latinoamérica, como la **Ley 1581 de 2012 de Colombia** y la **Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP) de México**. Esto es una declaración de intención y no una certificación ni una garantía de cumplimiento en todas las jurisdicciones.
+
+## 12. Cambios en esta política
+
+Podemos actualizar esta política, por ejemplo si cambian las funciones de la App. Publicaremos la nueva versión con su fecha de entrada en vigor en el repositorio del proyecto y, cuando el cambio sea relevante, en las notas de la versión. Te recomendamos revisarla de vez en cuando. Si continúas usando la App después de la fecha de entrada en vigor, se entenderá que conoces la nueva versión.
+
+## 13. Contacto
+
+Para preguntas sobre esta política: **[CORREO DE CONTACTO]**.
+Repositorio del proyecto: **[URL DEL REPOSITORIO]**.
