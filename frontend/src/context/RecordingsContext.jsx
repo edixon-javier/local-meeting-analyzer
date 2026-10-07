@@ -4,6 +4,7 @@ import { useSystem } from '../hooks/useSystem'
 import { RecordingsContext } from './recordingsContextDef'
 import Modal from '../components/Modal'
 import Icon from '../components/Icon'
+import { getRecordingTitle, hasDefaultName } from '../utils/recordingName'
 
 export function RecordingsProvider({ children }) {
   const { showToast, isBackendOffline, isStartupComplete } = useSystem()
@@ -132,7 +133,7 @@ export function RecordingsProvider({ children }) {
             ¿Eliminar grabación?
           </h3>
           <p id="delete-recording-desc" className="modal-text">
-            Esta acción eliminará de forma permanente <strong>{deletingFile}</strong> y su análisis. No se puede deshacer.
+            Esta acción eliminará de forma permanente <strong>{getRecordingTitle(deletingFile)}</strong> y su análisis. No se puede deshacer.
           </p>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setDeletingFile(null)} disabled={modalBusy}>
@@ -175,12 +176,16 @@ export function RecordingsProvider({ children }) {
                 value={newNameInput}
                 onChange={(e) => setNewNameInput(e.target.value)}
                 onFocus={(e) => e.target.select()}
-                placeholder="Ej: Reunion_Diaria"
+                placeholder="Ej: Revisión semanal de producto"
                 autoFocus
                 disabled={modalBusy}
                 style={{ marginTop: 12 }}
               />
-              <span className="form-hint">Pulsa Enter para guardar o Esc para cancelar.</span>
+              <span className="form-hint">
+                {hasDefaultName(renamingFile.filename) && trimmed
+                  ? 'Sugerido a partir del tema de la reunión. Pulsa Enter para guardar o Esc para cancelar.'
+                  : 'Pulsa Enter para guardar o Esc para cancelar.'}
+              </span>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setRenamingFile(null)} disabled={modalBusy}>
                   Cancelar

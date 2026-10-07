@@ -1,12 +1,17 @@
 // src/components/Sidebar.jsx
-// Navegación lateral con estado del sistema y historial de reuniones.
+// Navegación lateral y grabaciones recientes. El estado del motor vive en la barra inferior;
+// aquí solo aparece un aviso cuando algo requiere atención.
 
 import { useState, useEffect, useRef } from 'react'
-import { updateConfig } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import { useRecordings } from '../hooks/useRecordings'
+import { getEngineStatus } from '../utils/engineStatus'
+import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName } from '../utils/recordingName'
+import { APP_NAME } from '../appInfo'
 import Icon from './Icon'
 import logoImg from '../assets/icon.jpg'
+
+const MAX_RECENTS = 15
 
 // Compara rutas sin depender de mayúsculas ni del separador (\ o /) que devuelva el backend
 function samePath(a, b) {
@@ -16,13 +21,14 @@ function samePath(a, b) {
 }
 
 export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
-  const { systemStatus, showToast, isBackendOffline } = useSystem()
-  const { 
-    recordings, 
-    setDeletingFile, 
-    setRenamingFile, 
-    setNewNameInput, 
-    formatDate 
+  const { systemStatus, isBackendOffline } = useSystem()
+  const engine = getEngineStatus(systemStatus, isBackendOffline)
+  const {
+    recordings,
+    setDeletingFile,
+    setRenamingFile,
+    setNewNameInput,
+    formatDate
   } = useRecordings()
   const [filterQuery, setFilterQuery] = useState('')
   const meetingsListRef = useRef(null)
@@ -34,21 +40,13 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
     active?.scrollIntoView({ block: 'nearest' })
   }, [currentView, currentAudioPath, recordings])
 
-  const handleToggleProvider = async () => {
-    if (isBackendOffline) return
-    const newProvider = systemStatus?.ai_provider === 'local' ? 'openai' : 'local'
-    try {
-      await updateConfig({ ai_provider: newProvider })
-      showToast({ type: 'success', message: `Procesamiento cambiado a: ${newProvider === 'local' ? 'Local' : 'Nube (OpenAI)'}` })
-    } catch {
-      showToast({ type: 'error', message: 'Error al cambiar de proveedor' })
-    }
-  }
-
-  // Filtrar grabaciones locales en la barra lateral
-  const filteredRecs = recordings.filter(rec => 
-    rec.filename.toLowerCase().includes(filterQuery.toLowerCase())
-  )
+  // Busca en el nombre de archivo, el título legible y el tema detectado por el análisis
+  const query = filterQuery.trim().toLowerCase()
+  const filteredRecs = query
+    ? recordings.filter((rec) =>
+        [rec.filename, getRecordingTitle(rec.filename), rec.summary_preview]
+          .some((text) => (text || '').toLowerCase().includes(query)))
+    : recordings
 
   const openRecording = (rec) => {
     if (isBackendOffline) return
@@ -73,62 +71,19 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
-    const cleanName = rec.filename.replace(/\.[^/.]+$/, '')
     setRenamingFile(rec)
-    setNewNameInput(cleanName)
+    setNewNameInput(suggestRecordingName(rec))
   }
 
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        {/* Logo */}
+        {/* Marca */}
         <div className="sidebar-logo">
           <img src={logoImg} alt="" className="sidebar-logo-icon" style={{ objectFit: 'cover' }} />
-          <div>
-            <div className="sidebar-logo-text">MeetingAI</div>
-            <div className="sidebar-logo-sub">
-              <Icon name={systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock'} size={12} style={{ marginRight: 4 }} />
-              {systemStatus?.ai_provider === 'openai' ? 'OpenAI Cloud' : '100% Local'}
-            </div>
-          </div>
+          <div className="sidebar-logo-text">{APP_NAME}</div>
         </div>
 
-        {/* Estado del sistema */}
-        <div style={{ marginBottom: 16 }}>
-          <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Estado del sistema</span>
-            <button
-              type="button"
-              onClick={handleToggleProvider}
-              disabled={isBackendOffline}
-              className={`provider-chip ${!isBackendOffline && systemStatus?.ai_provider === 'openai' ? 'is-cloud' : ''}`}
-              title={isBackendOffline ? 'Sin conexión al backend' : 'Cambiar entre 100% Local y Procesamiento en la Nube (OpenAI)'}
-              aria-label={isBackendOffline
-                ? 'Proveedor de IA no disponible: sin conexión'
-                : `Proveedor de IA: ${systemStatus?.ai_provider === 'openai' ? 'Nube (OpenAI)' : 'Local'}. Pulsa para cambiar`}
-            >
-              <Icon name={isBackendOffline ? 'alert-triangle' : (systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock')} size={11} />
-              {isBackendOffline ? 'Offline' : (systemStatus?.ai_provider === 'openai' ? 'Nube' : 'Local')}
-            </button>
-          </div>
-          <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', marginTop: 6 }}>
-            <div className="status-indicator" style={{ marginBottom: 6 }}>
-              <span className={`status-dot ${(!isBackendOffline && systemStatus?.ollama_running) ? 'online' : 'offline'}`} />
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Ollama {(!isBackendOffline && systemStatus?.ollama_running) ? 'Activo' : 'Inactivo'}
-              </span>
-            </div>
-            <div className="status-indicator">
-              <span className={`status-dot ${!isBackendOffline ? 'online' : 'offline'}`} />
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Whisper {!isBackendOffline ? `(${systemStatus?.whisper_model || 'small'})` : 'desconectado'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav principal */}
-        <div className="sidebar-section-label">Navegación</div>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           <button
             type="button"
@@ -169,11 +124,27 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
             Configuración
           </button>
         </nav>
+
+        {/* Aviso solo cuando el motor necesita atención (el detalle está en la barra inferior) */}
+        {engine.attention && !isBackendOffline && (
+          <button
+            type="button"
+            className={`sidebar-attention tone-${engine.tone}`}
+            onClick={() => onNavigate('settings')}
+          >
+            <Icon name="alert-triangle" size={15} />
+            <div>
+              <strong>{engine.attention.title}</strong>
+              <span>{engine.attention.detail}</span>
+              <span className="sidebar-attention-cta">Revisar configuración</span>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Lista de grabaciones recientes */}
-      <div style={{ padding: '12px 16px 8px' }}>
-        <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="sidebar-recents-header">
+        <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0, margin: 0 }}>
           <span id="sidebar-recents-label">Recientes</span>
           <input
             type="search"
@@ -192,11 +163,16 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
           <div className="sidebar-empty">Servidor desconectado</div>
         ) : filteredRecs.length === 0 ? (
           <div className="sidebar-empty">
-            {filterQuery.trim() ? `Sin coincidencias para «${filterQuery.trim()}»` : 'Aún no hay grabaciones'}
+            {query ? `Sin coincidencias para «${filterQuery.trim()}»` : 'Aún no hay grabaciones'}
           </div>
         ) : (
-          filteredRecs.slice(0, 15).map((rec) => {
-            const name = rec.filename.replace(/\.[^/.]+$/, '')
+          filteredRecs.slice(0, MAX_RECENTS).map((rec) => {
+            const name = getRecordingTitle(rec.filename)
+            const duration = formatDuration(rec.duration)
+            // Segunda línea: el tema detectado si existe; si no, duración (y fecha si el título no la lleva)
+            const meta = rec.summary_preview
+              || [duration, hasDefaultName(rec.filename) ? null : formatDate(rec.created), rec.has_metadata ? null : 'Sin analizar']
+                .filter(Boolean).join(' · ')
             const isActive = currentView === 'analysis' && samePath(currentAudioPath, rec.path)
             return (
               <div key={rec.filename} role="listitem">
@@ -205,16 +181,14 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
                   role="button"
                   tabIndex={0}
                   aria-current={isActive ? 'true' : undefined}
-                  aria-label={`Abrir ${name}, ${formatDate(rec.created)}`}
+                  aria-label={`Abrir ${name}${duration ? `, ${duration}` : ''}`}
                   onClick={() => openRecording(rec)}
                   onKeyDown={(e) => handleItemKeyDown(e, rec)}
-                  title={rec.filename}
+                  title={[name, rec.summary_preview, duration, rec.filename].filter(Boolean).join('\n')}
                   style={{ position: 'relative' }}
                 >
                   <div className="meeting-item-name">{name}</div>
-                  <div className="meeting-item-meta">
-                    {formatDate(rec.created)} · {rec.size_mb} MB
-                  </div>
+                  <div className="meeting-item-meta">{meta}</div>
 
                   <div className="meeting-item-actions">
                     <button
@@ -243,8 +217,12 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
             )
           })
         )}
+        {!isBackendOffline && !query && recordings.length > MAX_RECENTS && (
+          <button type="button" className="sidebar-see-all" onClick={() => onNavigate('history')}>
+            Ver las {recordings.length} grabaciones en Historial
+          </button>
+        )}
       </div>
     </aside>
   )
 }
-

@@ -4,6 +4,7 @@ import { useRecordings } from '../hooks/useRecordings'
 import { getRecordingMetadata } from '../api'
 import Icon from './Icon'
 import Modal from './Modal'
+import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName } from '../utils/recordingName'
 import {
   copyExecutiveMinutes,
   downloadExecutiveMarkdown,
@@ -36,14 +37,23 @@ export default function HistoryScreen({ onNavigate }) {
   }, [isBackendOffline, loadRecordings])
 
   // Filtrado y ordenamiento de reuniones
+  // La búsqueda cubre el nombre de archivo, el título legible y el tema detectado por el análisis
+  const normalizedQuery = searchQuery.trim().toLowerCase()
   const filteredRecordings = recordings.filter(rec => {
-    const cleanName = rec.filename.replace(/\.[^/.]+$/, '').toLowerCase()
-    const matchesSearch = cleanName.includes(searchQuery.toLowerCase())
+    const matchesSearch = !normalizedQuery || [rec.filename, getRecordingTitle(rec.filename), rec.summary_preview, rec.category]
+      .some((text) => (text || '').toLowerCase().includes(normalizedQuery))
     const matchesCategory = categoryFilter === 'All' || rec.category === categoryFilter
     return matchesSearch && matchesCategory
   }).sort((a, b) => {
     return dateSort === 'newest' ? b.created - a.created : a.created - b.created
   })
+
+  // Resumen de la cabecera: cuántas reuniones, cuánto tiempo grabado y cuántas están analizadas
+  const analyzedCount = recordings.filter((r) => r.has_metadata).length
+  const totalSeconds = recordings.reduce((acc, r) => acc + (Number(r.duration) || 0), 0)
+  const totalDuration = totalSeconds >= 3600
+    ? `${Math.floor(totalSeconds / 3600)} h ${Math.round((totalSeconds % 3600) / 60)} min`
+    : totalSeconds > 0 ? `${Math.max(1, Math.round(totalSeconds / 60))} min` : null
 
   // Obtener categorías únicas del listado de reuniones
   const categories = ['All', ...new Set(recordings.map(r => r.category).filter(Boolean))]
@@ -62,9 +72,8 @@ export default function HistoryScreen({ onNavigate }) {
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
-    const cleanName = rec.filename.replace(/\.[^/.]+$/, '')
     setRenamingFile(rec)
-    setNewNameInput(cleanName)
+    setNewNameInput(suggestRecordingName(rec))
   }
 
   const handleExportClick = async (e, rec) => {
@@ -76,7 +85,7 @@ export default function HistoryScreen({ onNavigate }) {
       if (res.data && res.data.exists !== false) {
         setExportingMeeting({
           ...res.data,
-          title: rec.filename.replace(/\.[^/.]+$/, ''),
+          title: getRecordingTitle(rec.filename),
           createdDate: formatDate(rec.created)
         })
       } else {
@@ -137,7 +146,15 @@ export default function HistoryScreen({ onNavigate }) {
               </span>
             )}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Administra, busca y revisa los análisis de tus reuniones guardadas localmente.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+            {recordings.length === 0
+              ? 'Aquí aparecerán tus reuniones grabadas o subidas.'
+              : [
+                  `${recordings.length} ${recordings.length === 1 ? 'reunión' : 'reuniones'}`,
+                  totalDuration ? `${totalDuration} grabadas` : null,
+                  `${analyzedCount} ${analyzedCount === 1 ? 'analizada' : 'analizadas'}`,
+                ].filter(Boolean).join(' · ')}
+          </p>
         </div>
       </div>
 
@@ -148,8 +165,8 @@ export default function HistoryScreen({ onNavigate }) {
           <input
             type="search"
             className="filter-control"
-            placeholder="Buscar reunión por título…"
-            aria-label="Buscar reunión por título"
+            placeholder="Buscar por título, tema o categoría…"
+            aria-label="Buscar reuniones por título, tema o categoría"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery('') }}
@@ -213,44 +230,66 @@ export default function HistoryScreen({ onNavigate }) {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-            {filteredRecordings.map(rec => (
+            {filteredRecordings.map(rec => {
+              const title = getRecordingTitle(rec.filename)
+              const duration = formatDuration(rec.duration)
+              const customName = !hasDefaultName(rec.filename)
+              return (
               <div
                 key={rec.filename}
                 className="meeting-card glass"
                 role="button"
                 tabIndex={0}
-                aria-label={`Abrir análisis de ${rec.filename.replace(/\.[^/.]+$/, '')}, ${formatDate(rec.created)}`}
+                aria-label={`Abrir ${title}${duration ? `, ${duration}` : ''}`}
+                title={`${rec.filename} · ${rec.size_mb} MB`}
                 onClick={() => handleOpenDetails(rec)}
                 onKeyDown={(e) => handleCardKeyDown(e, rec)}
-                style={{
-                  padding: 20,
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-subtle)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  position: 'relative'
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
-                  <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.[^/.]+$/, '')}>
-                      {rec.filename.replace(/\.[^/.]+$/, '')}
-                    </h3>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(rec.created)}</span>
+                <div className="meeting-card-head">
+                  <h3 className="meeting-card-title">{title}</h3>
+                  <div className="meeting-card-meta">
+                    {duration && <span><Icon name="clock" size={12} /> {duration}</span>}
+                    {customName && <span><Icon name="calendar" size={12} /> {formatDate(rec.created)}</span>}
+                    {rec.bookmarks_count > 0 && (
+                      <span className="meeting-card-bookmarks">
+                        <Icon name="bookmark" size={12} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
+                      </span>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+                </div>
+
+                {rec.summary_preview ? (
+                  <p className="meeting-card-topic">{rec.summary_preview}</p>
+                ) : (
+                  <p className="meeting-card-topic is-empty">
+                    {rec.has_metadata ? 'Sin resumen disponible.' : 'Aún sin analizar. Ábrela para transcribirla y obtener el resumen.'}
+                  </p>
+                )}
+
+                <div className="meeting-card-footer">
+                  <div className="meeting-card-tags">
+                    {rec.has_metadata ? (
+                      <>
+                        {rec.category && <span className="pill category">{rec.category}</span>}
+                        {rec.tone && <span className="pill tone">{rec.tone}</span>}
+                        {!rec.category && !rec.tone && (
+                          <span className="meeting-card-status is-done"><Icon name="check-circle" size={11} /> Analizada</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="meeting-card-status"><Icon name="mic" size={11} /> Sin analizar</span>
+                    )}
+                  </div>
+                  <div className="meeting-card-actions">
                     {rec.has_metadata && (
                       <button
                         type="button"
                         onClick={(e) => handleExportClick(e, rec)}
                         onKeyDown={(e) => e.stopPropagation()}
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-secondary btn-sm meeting-card-export"
                         disabled={loadingExportFor === rec.filename}
                         aria-busy={loadingExportFor === rec.filename || undefined}
-                        style={{ padding: '0 9px', height: 26, fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)', gap: 5, boxShadow: 'none' }}
-                        title="Exportar Minuta Ejecutiva (PDF, MD, Copiar)"
+                        title="Exportar minuta ejecutiva (PDF, Markdown o copiar)"
                       >
                         {loadingExportFor === rec.filename
                           ? <span className="spinner-small" style={{ width: 12, height: 12 }} aria-hidden="true" />
@@ -264,7 +303,7 @@ export default function HistoryScreen({ onNavigate }) {
                       onKeyDown={(e) => e.stopPropagation()}
                       className="btn btn-secondary btn-square btn-sm"
                       title="Renombrar"
-                      aria-label={`Renombrar ${rec.filename.replace(/\.[^/.]+$/, '')}`}
+                      aria-label={`Renombrar ${title}`}
                     >
                       <Icon name="edit" size={13} />
                     </button>
@@ -274,41 +313,15 @@ export default function HistoryScreen({ onNavigate }) {
                       onKeyDown={(e) => e.stopPropagation()}
                       className="btn btn-danger btn-square btn-sm"
                       title="Eliminar"
-                      aria-label={`Eliminar ${rec.filename.replace(/\.[^/.]+$/, '')}`}
+                      aria-label={`Eliminar ${title}`}
                     >
                       <Icon name="trash" size={13} />
                     </button>
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name="folder" size={12} /> {rec.size_mb} MB
-                  </span>
-                  {rec.has_metadata ? (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--green-glow)', color: 'var(--green-ok)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="check-circle" size={11} /> Analizado
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="mic" size={11} /> Sin análisis
-                    </span>
-                  )}
-                  {rec.bookmarks_count > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="bookmark" size={11} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
-                    </span>
-                  )}
-                </div>
-
-                {rec.has_metadata && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                    {rec.category && <span className="pill category" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.category}</span>}
-                    {rec.tone && <span className="pill tone" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.tone}</span>}
-                  </div>
-                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

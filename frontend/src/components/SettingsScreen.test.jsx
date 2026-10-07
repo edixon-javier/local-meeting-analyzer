@@ -43,7 +43,7 @@ const BASE_CONFIG = {
 async function renderSettings(configOverrides = {}) {
   mocks.getConfig.mockResolvedValue({ data: { ...BASE_CONFIG, ...configOverrides } });
   render(<SettingsScreen />);
-  await screen.findByText('Privacidad');
+  await screen.findByRole('heading', { name: 'Privacidad' });
 }
 
 describe('SettingsScreen: privacidad, soporte y legal', () => {
@@ -67,8 +67,8 @@ describe('SettingsScreen: privacidad, soporte y legal', () => {
 
   it('muestra las secciones nuevas y la clave guardada enmascarada', async () => {
     await renderSettings();
-    expect(screen.getByText('Ayuda y soporte')).toBeInTheDocument();
-    expect(screen.getByText('Acerca de / Legal')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ayuda y soporte' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Acerca de / Legal' })).toBeInTheDocument();
     expect(screen.getByText('Clave guardada (••••••••1234)')).toBeInTheDocument();
     expect(await screen.findByText(/Versión 1\.6\.0/)).toBeInTheDocument();
     const toggle = screen.getByLabelText(/Usar la nube \(OpenAI\) si el modelo local no está disponible/);

@@ -119,6 +119,18 @@ export function SystemProvider({ children, onToast }) {
     setLoading(false)
   }, [])
 
+  // Refresco inmediato del estado (p. ej. tras guardar la configuración), sin esperar al siguiente sondeo
+  const refreshStatus = useCallback(async () => {
+    try {
+      const res = await getStatus()
+      if (res?.data) {
+        setSystemStatus((prev) => (prev ? { ...res.data, recording: prev.recording, paused: prev.paused } : res.data))
+      }
+    } catch {
+      // El sondeo periódico se encargará de reflejar la desconexión
+    }
+  }, [])
+
   const retryStartup = useCallback(() => {
     performStartupCheck()
   }, [performStartupCheck])
@@ -238,6 +250,7 @@ export function SystemProvider({ children, onToast }) {
     startupError,
     isStartupComplete,
     retryStartup,
+    refreshStatus,
   }
 
   return (

@@ -41,6 +41,13 @@ function getPrivacyNotice(provider, cloudFallback) {
   return null
 }
 
+// Fuente de audio configurada (Configuración › Audio)
+const RECORD_SOURCE_LABELS = {
+  both: 'audio del sistema + micrófono',
+  system: 'solo el audio del sistema',
+  mic: 'solo el micrófono',
+}
+
 export default function RecordScreen({ onRecordingDone }) {
   const { showToast, isBackendOffline, isRecording, setIsRecording, isPaused, setIsPaused, systemStatus } = useSystem()
   const { ensureConsent } = useConsent()
@@ -145,7 +152,8 @@ export default function RecordScreen({ onRecordingDone }) {
         if (cancelled) return
         setPrivacyConfig({
           provider: res.data?.ai_provider,
-          cloudFallback: Boolean(res.data?.allow_cloud_fallback)
+          cloudFallback: Boolean(res.data?.allow_cloud_fallback),
+          recordMode: res.data?.record_mode || 'both'
         })
       })
       .catch(() => {
@@ -886,7 +894,9 @@ export default function RecordScreen({ onRecordingDone }) {
       {!isStudioActive && (
         <>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-            Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
+            {privacyConfig
+              ? <>Se grabará: <strong>{RECORD_SOURCE_LABELS[privacyConfig.recordMode] || RECORD_SOURCE_LABELS.both}</strong> · puedes cambiarlo en Configuración.</>
+              : <>Se grabará según la fuente configurada en Configuración.</>}
           </p>
 
           <div className="upload-container" style={{ width: '100%', maxWidth: 420, marginTop: 12 }}>

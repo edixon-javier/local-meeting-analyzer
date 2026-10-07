@@ -3,9 +3,10 @@ import { chatWithHistory } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import { useRecordings } from '../hooks/useRecordings'
 import Icon from './Icon'
+import { getRecordingTitle } from '../utils/recordingName'
 
 export default function HistoryChatScreen({ onNavigate }) {
-  const { isBackendOffline, systemStatus } = useSystem()
+  const { isBackendOffline } = useSystem()
   const { recordings, formatDate } = useRecordings()
   const [messages, setMessages] = useState([
     {
@@ -131,23 +132,21 @@ export default function HistoryChatScreen({ onNavigate }) {
       {/* Cabecera */}
       <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
             Preguntar al Historial
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-violet-glow)', color: 'var(--text-accent)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
-              RAG Activo
-            </span>
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Realiza preguntas globales, cruza información y genera resúmenes consolidados de todas tus reuniones.
+            Haz preguntas sobre varias reuniones a la vez: decisiones, responsables, temas recurrentes o resúmenes consolidados.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name={systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock'} size={14} />
-            Motor activo: <strong>{systemStatus?.ai_provider === 'openai' ? 'OpenAI (Nube)' : 'Ollama (Local)'}</strong>
-          </span>
-        </div>
+        <span
+          className="chat-scope-chip"
+          title="Solo se consultan las reuniones que ya tienen transcripción y análisis"
+        >
+          <Icon name="folder" size={13} />
+          Consulta {transcribedRecordings.length} {transcribedRecordings.length === 1 ? 'reunión analizada' : 'reuniones analizadas'}
+        </span>
       </div>
 
       {/* Listado de mensajes */}
@@ -207,7 +206,7 @@ export default function HistoryChatScreen({ onNavigate }) {
                     >
                       <Icon name="mic" size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 600 }}>{ref.filename.replace(/\.[^/.]+$/, '')}</span>
+                        <span style={{ fontWeight: 600 }}>{getRecordingTitle(ref.filename)}</span>
                         <span style={{ fontSize: '9.5px', color: 'var(--text-secondary)' }}>
                           {ref.category} · {formatDate(ref.created)}
                         </span>

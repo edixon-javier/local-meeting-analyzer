@@ -1,12 +1,13 @@
 // src/components/SettingsScreen.jsx
 // Pantalla de Configuración: selección de hardware, modelos e IA local.
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getConfig, updateConfig, getAudioDevices, getOllamaModels, testAiProvider, startAudioTest, stopAudioTest, getAudioTestLevels, getAudioUrl } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import { PRIVACY_URL, isPlaceholder } from '../appInfo'
 import { canReportProblem, describeOs, loadAppInfo, openExternalUrl, reportProblem } from '../utils/support'
 import Icon from './Icon'
+import { getEngineStatus } from '../utils/engineStatus'
 
 // Modelo local por defecto (Apache-2.0, buen español, ~2.5 GB) y lista usada si Ollama no responde
 const DEFAULT_OLLAMA_MODEL = 'qwen3:4b'
@@ -15,15 +16,6 @@ const FALLBACK_OLLAMA_MODELS = ['qwen3:4b', 'qwen3:1.7b', 'phi3', 'mistral', 'll
 // Clave de localStorage que reinicia el asistente de bienvenida (ver components/onboarding)
 const ONBOARDING_STORAGE_KEY = 'onboarding_completed_v1'
 
-const SECTION_STYLE = {
-  padding: 20,
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 14,
-}
 const SECTION_TITLE_STYLE = { fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }
 const LABEL_STYLE = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }
 const TEXT_INPUT_STYLE = { width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }
@@ -36,8 +28,38 @@ const LEGAL_DOCS = [
   { id: 'changelog', label: 'Registro de cambios' },
 ]
 
+const RECORD_MODE_LABELS = {
+  both: 'Sistema + micrófono',
+  system: 'Solo audio del sistema',
+  mic: 'Solo micrófono',
+}
+
+// Valores del formulario a partir de la configuración del backend (mismos valores por defecto en todos los usos)
+function normalizeConfig(cfg = {}) {
+  return {
+    whisper_model: cfg.whisper_model || 'small',
+    ai_provider: cfg.ai_provider || 'local',
+    openai_model: cfg.openai_model || 'gpt-4o-mini',
+    ollama_model: cfg.ollama_model || DEFAULT_OLLAMA_MODEL,
+    allow_cloud_fallback: Boolean(cfg.allow_cloud_fallback),
+    analysis_focus: cfg.analysis_focus || '',
+    record_mode: cfg.record_mode || 'both',
+    mic_device_id: cfg.mic_device_id || 'default',
+    diarize: Boolean(cfg.diarize),
+  }
+}
+
+const SETTINGS_SECTIONS = [
+  { id: 'settings-audio', label: 'Audio', icon: 'mic' },
+  { id: 'settings-ai', label: 'Motor de IA', icon: 'cpu' },
+  { id: 'settings-analysis', label: 'Análisis', icon: 'target' },
+  { id: 'settings-privacy', label: 'Privacidad', icon: 'lock' },
+  { id: 'settings-support', label: 'Ayuda y soporte', icon: 'info' },
+  { id: 'settings-legal', label: 'Acerca de / Legal', icon: 'file-text' },
+]
+
 export default function SettingsScreen() {
-  const { showToast, isBackendOffline } = useSystem()
+  const { showToast, isBackendOffline, systemStatus, refreshStatus } = useSystem()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [devices, setDevices] = useState([])
@@ -71,6 +93,27 @@ export default function SettingsScreen() {
   const [testAudioPath, setTestAudioPath] = useState(null)
   const [testAudioTimestamp, setTestAudioTimestamp] = useState(0)
 
+  // Última configuración guardada: permite saber si hay cambios pendientes y descartarlos
+  const savedConfigRef = useRef(null)
+  const [savedSnapshot, setSavedSnapshot] = useState(null)
+
+  const applyConfig = useCallback((values) => {
+    setWhisperModel(values.whisper_model)
+    setAiProvider(values.ai_provider)
+    setAllowCloudFallback(values.allow_cloud_fallback)
+    setOpenaiModel(values.openai_model)
+    setOllamaModel(values.ollama_model)
+    setAnalysisFocus(values.analysis_focus)
+    setRecordMode(values.record_mode)
+    setMicDeviceId(values.mic_device_id)
+    setDiarize(values.diarize)
+  }, [])
+
+  const markSaved = useCallback((values) => {
+    savedConfigRef.current = values
+    setSavedSnapshot(JSON.stringify(values))
+  }, [])
+
   const loadSettingsAndHardware = useCallback(async () => {
     setLoading(true)
     try {
@@ -80,18 +123,12 @@ export default function SettingsScreen() {
         getAudioDevices()
       ])
       const cfg = configRes.data
-      setWhisperModel(cfg.whisper_model || 'small')
-      setAiProvider(cfg.ai_provider || 'local')
+      const values = normalizeConfig(cfg)
+      applyConfig(values)
+      markSaved(values)
       setOpenaiApiKey('')
       setHasApiKey(Boolean(cfg.has_api_key))
       setMaskedApiKey(cfg.openai_api_key || '')
-      setAllowCloudFallback(Boolean(cfg.allow_cloud_fallback))
-      setOpenaiModel(cfg.openai_model || 'gpt-4o-mini')
-      setOllamaModel(cfg.ollama_model || DEFAULT_OLLAMA_MODEL)
-      setAnalysisFocus(cfg.analysis_focus || '')
-      setRecordMode(cfg.record_mode || 'both')
-      setMicDeviceId(cfg.mic_device_id || 'default')
-      setDiarize(cfg.diarize || false)
 
       setDevices(devicesRes.data.devices || [])
     } catch {
@@ -112,7 +149,7 @@ export default function SettingsScreen() {
       console.warn('No se pudieron listar los modelos de Ollama desde el backend, usando fallback:', err)
       setOllamaModels(FALLBACK_OLLAMA_MODELS)
     }
-  }, [showToast])
+  }, [showToast, applyConfig, markSaved])
 
   useEffect(() => {
     if (!isBackendOffline) {
@@ -191,6 +228,7 @@ export default function SettingsScreen() {
       const res = await updateConfig({ openai_api_key: '' })
       applySavedKeyState(res.data?.config)
       setAiTestResult(null)
+      refreshStatus?.()
       showToast({ type: 'success', message: 'Clave de API borrada de este equipo.' })
     } catch {
       showToast({ type: 'error', message: 'No se pudo borrar la clave de API.' })
@@ -204,8 +242,11 @@ export default function SettingsScreen() {
     if (isBackendOffline) return
     setSaving(true)
     try {
-      const res = await updateConfig(buildConfigPayload())
+      const payload = buildConfigPayload()
+      const res = await updateConfig(payload)
       applySavedKeyState(res.data?.config)
+      markSaved(normalizeConfig(payload))
+      refreshStatus?.()
       showToast({ type: 'success', message: 'Configuración guardada correctamente' })
     } catch {
       showToast({ type: 'error', message: 'Error al guardar la configuración' })
@@ -220,8 +261,11 @@ export default function SettingsScreen() {
     setTestAudioPath(null)
     try {
       // Guardar selección actual en el backend antes de testear
-      const res = await updateConfig(buildConfigPayload())
+      const payload = buildConfigPayload()
+      const res = await updateConfig(payload)
       applySavedKeyState(res.data?.config)
+      markSaved(normalizeConfig(payload))
+      refreshStatus?.()
       await startAudioTest()
       showToast({ type: 'success', message: 'Prueba iniciada. Habla o reproduce algún sonido.' })
     } catch {
@@ -304,6 +348,33 @@ export default function SettingsScreen() {
     )
   }
 
+  const currentValues = normalizeConfig({
+    whisper_model: whisperModel,
+    ai_provider: aiProvider,
+    openai_model: openaiModel,
+    ollama_model: ollamaModel,
+    allow_cloud_fallback: allowCloudFallback,
+    analysis_focus: analysisFocus,
+    record_mode: recordMode,
+    mic_device_id: micDeviceId,
+    diarize,
+  })
+  const isDirty = savedSnapshot !== null && (JSON.stringify(currentValues) !== savedSnapshot || openaiApiKey.trim() !== '')
+
+  const handleDiscard = () => {
+    if (savedConfigRef.current) applyConfig(savedConfigRef.current)
+    setOpenaiApiKey('')
+    setAiTestResult(null)
+  }
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const micName = micDeviceId === 'default'
+    ? 'Predeterminado de Windows'
+    : (devices.find((d) => d.id === micDeviceId)?.name || 'Dispositivo seleccionado')
+
   // Se muestra dentro del bloque de OpenAI o, si el proveedor es local, en la sección Privacidad
   const apiKeyField = (
     <div className="form-group">
@@ -347,17 +418,25 @@ export default function SettingsScreen() {
 
   return (
     <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px 0', overflowY: 'auto' }}>
-      <div style={{ marginBottom: 24, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Configuración del Sistema</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Ajusta los motores de IA y hardware para el procesamiento 100% local.</p>
+      <div className="settings-header">
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Configuración</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Audio, motor de IA y privacidad. Los cambios se aplican al guardar.</p>
       </div>
 
-      <form id="settings-form" onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 650 }}>
+      <div className="settings-layout">
+      <div className="settings-main">
+      <form id="settings-form" onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        <section id="settings-audio" className="settings-section" aria-labelledby="settings-audio-title">
+          <header className="settings-section-head">
+            <h2 id="settings-audio-title"><Icon name="mic" size={17} /> Audio</h2>
+            <p>Fuentes de audio, micrófono y prueba de sonido.</p>
+          </header>
 
         {/* Modo de Grabación */}
         <div className="form-group">
           <label htmlFor="record-mode-select" style={LABEL_STYLE}>
-            <Icon name="mic" size={16} /> Modo de Grabación de Audio
+            <Icon name="mic" size={16} /> Qué se graba
           </label>
           <select
             id="record-mode-select"
@@ -381,7 +460,7 @@ export default function SettingsScreen() {
         {(recordMode === 'both' || recordMode === 'mic') && (
           <div className="form-group">
             <label htmlFor="mic-device-select" style={LABEL_STYLE}>
-              <Icon name="mic" size={16} /> Selección de Micrófono
+              <Icon name="mic" size={16} /> Micrófono
             </label>
             <select
               id="mic-device-select"
@@ -399,18 +478,12 @@ export default function SettingsScreen() {
         )}
 
         {/* Panel de Prueba de Audio */}
-        <div className="form-group" style={{
-          padding: '20px',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          marginTop: 12
-        }}>
-          <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 8 }}>
-            <Icon name="volume" size={17} /> Probar Micrófono y Sonido
-          </h2>
+        <div className="form-group settings-subcard">
+          <h3 className="settings-subcard-title">
+            <Icon name="volume" size={15} /> Probar micrófono y sonido
+          </h3>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
-            Valida los niveles de audio en tiempo real y asegúrate de que la grabación de voz y del sistema funcionen correctamente.
+            Comprueba los niveles en tiempo real y escucha una grabación corta antes de una reunión.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
@@ -527,10 +600,44 @@ export default function SettingsScreen() {
           )}
         </div>
 
+        </section>
+
+        <section id="settings-ai" className="settings-section" aria-labelledby="settings-ai-title">
+          <header className="settings-section-head">
+            <h2 id="settings-ai-title"><Icon name="cpu" size={17} /> Motor de IA</h2>
+            <p>Quién transcribe y analiza tus reuniones.</p>
+          </header>
+
+        {/* Proveedor de IA */}
+        <div className="form-group">
+          <label htmlFor="ai-provider-select" style={LABEL_STYLE}>
+            <Icon name="cloud" size={16} /> ¿Dónde se procesan tus reuniones?
+          </label>
+          <select
+            id="ai-provider-select"
+            value={aiProvider}
+            onChange={(e) => {
+              setAiProvider(e.target.value)
+              setAiTestResult(null)
+            }}
+            className="input-select"
+            style={TEXT_INPUT_STYLE}
+          >
+            <option value="local">En este equipo (Whisper + Ollama) · privado</option>
+            <option value="openai">En la nube (OpenAI) · más rápido, envía audio y texto</option>
+          </select>
+          <span className="form-hint">
+            {aiProvider === 'openai'
+              ? <>Se envían <strong>el audio y el texto</strong> a OpenAI: transcribe Whisper-1 y analiza el modelo elegido abajo. No sobrecarga tu equipo.</>
+              : 'Todo se procesa en tu equipo: Whisper transcribe y Ollama analiza. Nada sale de este equipo.'}
+          </span>
+        </div>
+
         {/* Modelo Whisper */}
-        <div className="form-group" style={{ opacity: aiProvider === 'openai' ? 0.5 : 1, pointerEvents: aiProvider === 'openai' ? 'none' : 'auto' }}>
+        {aiProvider === 'local' && (
+        <div className="form-group">
           <label htmlFor="whisper-model-select" style={LABEL_STYLE}>
-            <Icon name="file-text" size={16} /> Modelo de Transcripción (Local)
+            <Icon name="file-text" size={16} /> Modelo de transcripción (Whisper)
           </label>
           <select
             id="whisper-model-select"
@@ -546,41 +653,17 @@ export default function SettingsScreen() {
             <option value="large">Large (Máxima precisión - ~3.0GB)</option>
           </select>
           <span className="form-hint">
-            {aiProvider === 'openai'
-              ? 'Se utilizará el modelo Whisper-1 en la nube (la selección local será ignorada).'
-              : 'Nota: Al cambiar el modelo, la primera transcripción puede tardar más mientras se descarga.'}
+            Los modelos más grandes son más precisos pero más lentos. Al cambiarlo, la primera transcripción tarda más mientras se descarga.
           </span>
         </div>
-
-        {/* Proveedor de IA */}
-        <div className="form-group">
-          <label htmlFor="ai-provider-select" style={LABEL_STYLE}>
-            <Icon name="cloud" size={16} /> Proveedor de Inteligencia Artificial (Transcripción y Análisis)
-          </label>
-          <select
-            id="ai-provider-select"
-            value={aiProvider}
-            onChange={(e) => {
-              setAiProvider(e.target.value)
-              setAiTestResult(null)
-            }}
-            className="input-select"
-            style={TEXT_INPUT_STYLE}
-          >
-            <option value="local">Ollama & Whisper (100% Local y Privado)</option>
-            <option value="openai">OpenAI (Procesamiento en la Nube ultra rápido)</option>
-          </select>
-          <span className="form-hint">
-            Al usar OpenAI, <strong>tanto el audio como el texto</strong> se enviarán a la nube. La transcripción y el análisis serán casi instantáneos (sin sobrecargar tu PC).
-          </span>
-        </div>
+        )}
 
         {/* Configuraciones Específicas del Proveedor */}
         {aiProvider === 'local' ? (
           <div className="form-group" style={{ padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label htmlFor="ollama-model-select" style={LABEL_STYLE}>
-                <Icon name="lock" size={16} /> Modelo de Análisis (Ollama LLM)
+                <Icon name="lock" size={16} /> Modelo de análisis (Ollama)
               </label>
               <select
                 id="ollama-model-select"
@@ -666,7 +749,7 @@ export default function SettingsScreen() {
             {apiKeyField}
             <div className="form-group">
               <label htmlFor="openai-model-select" style={LABEL_STYLE}>
-                <Icon name="cloud" size={16} /> Modelo OpenAI
+                <Icon name="cloud" size={16} /> Modelo de análisis (OpenAI)
               </label>
               <select
                 id="openai-model-select"
@@ -743,8 +826,16 @@ export default function SettingsScreen() {
           </div>
         )}
 
+        </section>
+
+        <section id="settings-analysis" className="settings-section" aria-labelledby="settings-analysis-title">
+          <header className="settings-section-head">
+            <h2 id="settings-analysis-title"><Icon name="target" size={17} /> Análisis</h2>
+            <p>Cómo se interpreta la conversación.</p>
+          </header>
+
         {/* Diarización de Hablantes */}
-        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+        <div className="form-group form-group-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
           <input
             type="checkbox"
             id="diarize-chk"
@@ -754,7 +845,7 @@ export default function SettingsScreen() {
           />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label htmlFor="diarize-chk" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              <Icon name="user" size={15} /> Habilitar Diarización de Hablantes (Speaker Separation)
+              <Icon name="user" size={15} /> Separar a los hablantes
             </label>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
               Separa automáticamente los diálogos en "Hablante A", "Hablante B", o por nombres si se mencionan en la reunión.
@@ -765,7 +856,7 @@ export default function SettingsScreen() {
         {/* Prompts Personalizados (Enfoque de Análisis) */}
         <div className="form-group">
           <label htmlFor="analysis-focus-input" style={LABEL_STYLE}>
-            <Icon name="target" size={16} /> Enfoque de Análisis Personalizado (Prompt)
+            <Icon name="target" size={16} /> Instrucciones para el análisis (opcional)
           </label>
           <textarea
             id="analysis-focus-input"
@@ -776,21 +867,23 @@ export default function SettingsScreen() {
             style={{ ...TEXT_INPUT_STYLE, padding: '12px', resize: 'vertical', fontSize: 13, lineHeight: 1.5, minHeight: 96 }}
           />
           <span className="form-hint">
-            Instrucciones adicionales que se inyectarán en la IA para guiar cómo extrae los insights de tus reuniones.
+            Se añaden a cada análisis: por ejemplo, qué temas priorizar o qué tipo de tareas buscar.
           </span>
         </div>
 
+        </section>
+
         {/* Privacidad */}
-        <section aria-labelledby="privacy-section-title" style={SECTION_STYLE}>
-          <h2 id="privacy-section-title" style={SECTION_TITLE_STYLE}>
-            <Icon name="lock" size={17} /> Privacidad
-          </h2>
+        <section id="settings-privacy" className="settings-section" aria-labelledby="privacy-section-title">
+          <header className="settings-section-head">
+            <h2 id="privacy-section-title"><Icon name="lock" size={17} /> Privacidad</h2>
+          </header>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
             Por defecto todo se procesa en tu equipo. Nada se envía a la nube sin que tú lo actives.
           </p>
 
           <div
-            className="form-group"
+            className="form-group form-group-row"
             style={{
               display: 'flex', alignItems: 'flex-start', gap: 12, padding: 12,
               borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
@@ -844,13 +937,103 @@ export default function SettingsScreen() {
               ? <><span className="spinner-small on-accent" style={{ width: 14, height: 14 }} aria-hidden="true" /> Guardando…</>
               : <><Icon name="save" size={16} /> Guardar ajustes</>}
           </button>
-          <span className="settings-actions-hint">Los cambios se aplican al guardar.</span>
+          {isDirty ? (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={handleDiscard} disabled={saving}>
+                Descartar
+              </button>
+              <span className="settings-actions-hint is-dirty" role="status">
+                <span className="settings-dirty-dot" aria-hidden="true" /> Tienes cambios sin guardar
+              </span>
+            </>
+          ) : (
+            <span className="settings-actions-hint" role="status">
+              <Icon name="check-circle" size={13} /> Todo guardado
+            </span>
+          )}
       </div>
 
-      <div style={{ maxWidth: 650, marginTop: 8, paddingBottom: 32 }}>
+      <div style={{ marginTop: 20, paddingBottom: 32 }}>
         <HelpAndLegal />
       </div>
+      </div>
+
+      <SettingsSummary
+        values={currentValues}
+        micName={micName}
+        isDirty={isDirty}
+        engine={getEngineStatus(systemStatus, isBackendOffline)}
+        onJump={scrollToSection}
+      />
+      </div>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// Panel lateral: resumen de lo configurado (incluidos cambios sin guardar), estado del motor y
+// accesos directos a cada sección. Aprovecha el ancho libre sin repetir controles.
+// ─────────────────────────────────────────
+function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
+  const isCloud = values.ai_provider === 'openai'
+  const usesMic = values.record_mode !== 'system'
+  const privacy = isCloud
+    ? { icon: 'cloud', tone: 'warn', title: 'Se procesa en la nube', text: 'El audio y el texto de tus reuniones se envían a OpenAI.' }
+    : values.allow_cloud_fallback
+      ? { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'Si Ollama no responde, el texto se enviará a OpenAI (respaldo activado).' }
+      : { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'El audio y el texto nunca salen de tu equipo.' }
+
+  const rows = [
+    { label: 'Grabación', value: RECORD_MODE_LABELS[values.record_mode] || values.record_mode },
+    usesMic ? { label: 'Micrófono', value: micName } : null,
+    { label: 'Transcripción', value: isCloud ? 'Whisper-1 (OpenAI)' : `Whisper ${values.whisper_model}` },
+    { label: 'Análisis', value: isCloud ? `${values.openai_model} (OpenAI)` : `${values.ollama_model} (Ollama)` },
+    { label: 'Hablantes', value: values.diarize ? 'Se separan por voz' : 'Sin separar' },
+    { label: 'Enfoque', value: values.analysis_focus.trim() ? 'Personalizado' : 'Estándar' },
+  ].filter(Boolean)
+
+  return (
+    <aside className="settings-aside" aria-label="Resumen de la configuración">
+      <div className="settings-summary">
+        <div className="settings-summary-head">
+          <h2>Resumen</h2>
+          {isDirty && <span className="settings-badge-dirty">Sin guardar</span>}
+        </div>
+
+        <div className={`settings-privacy-card tone-${privacy.tone}`}>
+          <Icon name={privacy.icon} size={16} />
+          <div>
+            <strong>{privacy.title}</strong>
+            <span>{privacy.text}</span>
+          </div>
+        </div>
+
+        <dl className="settings-summary-list">
+          {rows.map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd title={row.value}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className={`settings-engine-state tone-${engine.tone}`}>
+          <span className="status-dot-indicator" aria-hidden="true" />
+          <span>Estado del motor: <strong>{engine.headline}</strong></span>
+        </div>
+        {engine.attention && (
+          <p className="settings-engine-hint">{engine.attention.detail}</p>
+        )}
+      </div>
+
+      <nav className="settings-toc" aria-label="Secciones de configuración">
+        {SETTINGS_SECTIONS.map((section) => (
+          <button key={section.id} type="button" onClick={() => onJump(section.id)}>
+            <Icon name={section.icon} size={13} /> {section.label}
+          </button>
+        ))}
+      </nav>
+    </aside>
   )
 }
 
@@ -940,7 +1123,7 @@ function HelpAndLegal() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Ayuda y soporte */}
-      <section aria-labelledby="support-section-title" style={SECTION_STYLE}>
+      <section id="settings-support" className="settings-section" aria-labelledby="support-section-title">
         <h2 id="support-section-title" style={SECTION_TITLE_STYLE}>
           <Icon name="info" size={17} /> Ayuda y soporte
         </h2>
@@ -1001,7 +1184,7 @@ function HelpAndLegal() {
       </section>
 
       {/* Acerca de / Legal */}
-      <section aria-labelledby="legal-section-title" style={SECTION_STYLE}>
+      <section id="settings-legal" className="settings-section" aria-labelledby="legal-section-title">
         <h2 id="legal-section-title" style={SECTION_TITLE_STYLE}>
           <Icon name="file-text" size={17} /> Acerca de / Legal
         </h2>

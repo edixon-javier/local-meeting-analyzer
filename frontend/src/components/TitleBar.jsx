@@ -3,8 +3,9 @@
 // La zona de drag permite mover la ventana.
 
 import logoImg from '../assets/icon.jpg'
+import { getRecordingTitle } from '../utils/recordingName'
 
-export default function TitleBar({ currentView }) {
+export default function TitleBar({ currentView, audioPath }) {
   const viewLabels = {
     record: 'Grabación',
     analysis: 'Análisis',
@@ -21,7 +22,9 @@ export default function TitleBar({ currentView }) {
     <div className="title-bar">
       <span className="title-bar-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <img src={logoImg} alt="" style={{ width: 14, height: 14, borderRadius: '2px', objectFit: 'cover' }} />
-        Local Meeting Analyzer — {viewLabels[currentView] || ''}
+        Local Meeting Analyzer — {currentView === 'analysis' && audioPath
+          ? getRecordingTitle(audioPath.split(/[/\\]/).pop())
+          : (viewLabels[currentView] || '')}
       </span>
       <div className="title-bar-controls">
         <button className="title-bar-btn minimize" onClick={handleMinimize} title="Minimizar" aria-label="Minimizar ventana">

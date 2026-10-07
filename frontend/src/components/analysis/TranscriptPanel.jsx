@@ -19,7 +19,8 @@ export default function TranscriptPanel({
   onOpenRenameSpeaker,
   bookmarks = [],
   onAddBookmark,
-  onDeleteBookmark
+  onDeleteBookmark,
+  meetingTitle
 }) {
   const [isAddingBookmark, setIsAddingBookmark] = useState(false)
   const [newBookmarkNote, setNewBookmarkNote] = useState('')
@@ -148,11 +149,13 @@ export default function TranscriptPanel({
       <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
         {/* Fila Superior: Título y Acciones Principales */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div className="panel-title">
-            <Icon name="file-text" size={16} />
-            <span className="panel-title-text" title={`Transcripción (${segments?.length || 0} intervenciones)`}>
-              Transcripción ({segments?.length || 0} intervenciones)
-            </span>
+          <div className="panel-title" style={{ alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <h1 className="panel-title-text analysis-meeting-title" title={meetingTitle}>{meetingTitle || 'Reunión'}</h1>
+              <span className="analysis-meeting-sub">
+                <Icon name="file-text" size={12} /> Transcripción · {segments?.length || 0} {segments?.length === 1 ? 'intervención' : 'intervenciones'}
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button

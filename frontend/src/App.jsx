@@ -181,7 +181,7 @@ export default function App() {
       <RecordingsProvider>
         <div className="app-layout">
           {/* Barra de título personalizada (frameless) */}
-          <TitleBar currentView={view} />
+          <TitleBar currentView={view} audioPath={audioPath} />
 
           <ErrorBoundary>
             <ConsentProvider>
@@ -198,7 +198,7 @@ export default function App() {
           </ErrorBoundary>
 
           {/* Barra de estado inferior */}
-          <StatusBar />
+          <StatusBar onNavigate={handleNavigate} />
 
           {/* Notificaciones */}
           <Toast toast={toast} onDismiss={() => setToast(null)} />

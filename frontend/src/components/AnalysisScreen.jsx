@@ -12,6 +12,7 @@ import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
 import SpeakerRenameModal from './SpeakerRenameModal'
 import Icon from './Icon'
+import { getRecordingTitle } from '../utils/recordingName'
 
 export default function AnalysisScreen({ audioPath, onBack }) {
   const { showToast, systemStatus } = useSystem()
@@ -123,7 +124,9 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     ? segments.filter(s => s.speaker === selectedSpeaker).length
     : 0
 
-  const cleanTitle = audioPath ? audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '') : 'Reunión'
+  // Título legible ("Reunión · 6 oct, 19:56" o el nombre que puso el usuario) y nombre seguro para archivos exportados
+  const cleanTitle = audioPath ? getRecordingTitle(audioPath.split(/[/\\]/).pop()) : 'Reunión'
+  const exportFileName = cleanTitle.replace(/[<>:"/\\|?*]/g, '-')
 
   const getMinutesData = () => ({
     title: cleanTitle,
@@ -146,12 +149,12 @@ export default function AnalysisScreen({ audioPath, onBack }) {
 
   const handleDownloadMarkdown = () => {
     if (!analysis) return
-    downloadExecutiveMarkdown(getMinutesData(), cleanTitle, showToast)
+    downloadExecutiveMarkdown(getMinutesData(), exportFileName, showToast)
   }
 
   const handleExportPDF = async () => {
     if (!analysis) return
-    await exportExecutivePdf(getMinutesData(), cleanTitle, showToast)
+    await exportExecutivePdf(getMinutesData(), exportFileName, showToast)
   }
 
   const handleTimeUpdate = () => {
@@ -199,7 +202,6 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     onBack()
   }
 
-  const meetingFilename = audioPath ? audioPath.split(/[/\\]/).pop() : 'Reunión'
 
   // ── Pantallas de Carga y Espera Unificada (Cero sobreposición de loaders) ──
   if (step === 'checking') {
@@ -207,7 +209,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card" style={{ maxWidth: 440 }}>
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
           <div style={{ margin: '24px 0 16px', display: 'flex', justifyContent: 'center' }}>
             <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} aria-hidden="true" />
@@ -226,7 +228,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
           <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' }}>
             <Icon name="clock" size={30} />
@@ -258,7 +260,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
 
           {/* Anillo de Progreso Único (Cero sobreposiciones) */}
@@ -351,7 +353,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
           <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#EF4444' }}>
             <Icon name="alert-triangle" size={32} />
@@ -377,6 +379,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   return (
     <div className="analysis-screen">
       <TranscriptPanel
+        meetingTitle={cleanTitle}
         audioPath={audioPath}
         transcript={transcript}
         segments={segments}

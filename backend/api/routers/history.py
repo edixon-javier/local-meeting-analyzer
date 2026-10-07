@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import shutil
 from typing import Optional
@@ -38,6 +39,45 @@ def _get_json_path(audio_path: str) -> str:
 def _get_recordings_dir() -> str:
     return get_recordings_dir()
 
+# Caracteres no válidos en nombres de archivo de Windows (y separadores de ruta)
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+def _sanitize_filename(name: str) -> str:
+    """Convierte un título escrito por el usuario en un nombre de archivo válido."""
+    clean = _INVALID_FILENAME_CHARS.sub("-", name)
+    clean = re.sub(r"\s+", " ", clean).strip(" .")
+    return clean[:120]
+
+# Duración en segundos por (ruta, mtime): leer la cabecera es rápido, pero se evita repetirlo
+_duration_cache: dict = {}
+
+def _get_audio_duration(path: str) -> Optional[float]:
+    """Duración real del audio leída con PyAV (dependencia de faster-whisper). None si no se puede leer."""
+    try:
+        key = (path, os.path.getmtime(path))
+        if key in _duration_cache:
+            return _duration_cache[key]
+        import av
+        with av.open(path) as container:
+            duration = round(container.duration / av.time_base, 1) if container.duration else None
+        _duration_cache[key] = duration
+        return duration
+    except Exception:
+        return None
+
+def _summary_preview(analysis: dict) -> Optional[str]:
+    """Primer punto del resumen: sirve para reconocer de qué trató la reunión sin abrirla."""
+    summary = analysis.get("summary") if isinstance(analysis, dict) else None
+    if isinstance(summary, list) and summary:
+        first = str(summary[0]).strip()
+    elif isinstance(summary, str):
+        first = summary.strip()
+    else:
+        return None
+    if not first:
+        return None
+    return (first[:157] + "…") if len(first) > 160 else first
+
 def _is_safe_recording_path(path: str) -> bool:
     try:
         real_path = os.path.realpath(path)
@@ -64,10 +104,12 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
             
             category = None
             tone = None
+            preview = None
             if meta:
                 analysis = meta.get("analysis") or {}
                 category = analysis.get("category")
                 tone = analysis.get("tone")
+                preview = _summary_preview(analysis)
             
             files.append({
                 "filename": f,
@@ -77,6 +119,8 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
                 "has_metadata": has_metadata,
                 "category": category,
                 "tone": tone,
+                "summary_preview": preview,
+                "duration": _get_audio_duration(path),
                 "bookmarks_count": len(meta.get("bookmarks", [])) if (meta and isinstance(meta.get("bookmarks"), list)) else 0
             })
 
@@ -127,7 +171,8 @@ def delete_recording(filename: str):
 def rename_recording(filename: str, request: RenameRequest, repo: IMetadataRepository = Depends(get_metadata_repo)):
     """Renombra una grabación y su JSON de metadatos asociado."""
     safe_filename = os.path.basename(filename)
-    clean_target_name = os.path.basename(request.new_name.strip())
+    # Se sanea antes de basename: "Reunión 6/oct" pasa a "Reunión 6-oct" en vez de quedarse en "oct"
+    clean_target_name = os.path.basename(_sanitize_filename(request.new_name.strip()))
     if not clean_target_name:
         raise HTTPException(status_code=400, detail="El nuevo nombre no puede estar vacío.")
 
