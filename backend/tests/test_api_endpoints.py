@@ -383,6 +383,43 @@ class TestApiEndpoints(unittest.TestCase):
             if os.path.exists(test_json_path):
                 os.remove(test_json_path)
 
+    def test_get_audio_file_download_and_stream(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_audio_download.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummybytesWAVEfmt ")
+
+        try:
+            # 1. Reproducción en streaming (inline) con ruta absoluta
+            res_stream = self.client.get(f"/recordings/audio?path={test_audio_path}")
+            self.assertEqual(res_stream.status_code, 200)
+            self.assertEqual(res_stream.headers.get("content-type"), "audio/wav")
+            self.assertNotIn("attachment", res_stream.headers.get("content-disposition", ""))
+
+            # 2. Descarga (attachment) con nombre de archivo relativo
+            res_download = self.client.get(f"/recordings/audio?path={test_filename}&download=true")
+            self.assertEqual(res_download.status_code, 200)
+            disp = res_download.headers.get("content-disposition", "")
+            self.assertIn("attachment", disp)
+            self.assertIn(test_filename, disp)
+
+            # 3. Descarga con filename personalizado
+            custom_name = "mi_reunion_exportada.wav"
+            res_custom = self.client.get(f"/recordings/audio?path={test_filename}&download=true&filename={custom_name}")
+            self.assertEqual(res_custom.status_code, 200)
+            disp_custom = res_custom.headers.get("content-disposition", "")
+            self.assertIn(custom_name, disp_custom)
+
+            # 4. Seguridad: ruta fuera de recordings debe retornar 403
+            res_unsafe = self.client.get("/recordings/audio?path=../../outside.wav")
+            self.assertEqual(res_unsafe.status_code, 403)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,8 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Copia al portapapeles un diagnóstico sin claves y devuelve el texto -> string
   copyDiagnostics: () => ipcRenderer.invoke('app:copy-diagnostics'),
   // id: 'privacy' | 'eula' | 'third_party' | 'changelog' | 'consent' -> boolean
-  openLegalDoc: (id) => ipcRenderer.invoke('app:open-legal-doc', id),
-  
+  // Archivos de audio locales (descargar o revelar en Explorador de archivos)
+  showItemInFolder: (itemPath) => ipcRenderer.invoke('app:show-item-in-folder', itemPath),
+  saveAudioFile: (defaultFilename, sourcePath) => ipcRenderer.invoke('app:save-audio', { defaultFilename, sourcePath }),
+
   // Atajos globales
   onShortcutToggleRecording: (callback) => {
     const subscription = (_event, ...args) => callback(...args)

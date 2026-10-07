@@ -432,6 +432,66 @@ ipcMain.handle('export:pdf', async (event, defaultFilename) => {
   return false
 })
 
+// Mostrar archivo de audio en el Explorador de Windows con el archivo seleccionado
+ipcMain.handle('app:show-item-in-folder', async (_event, itemPath) => {
+  try {
+    if (!itemPath || typeof itemPath !== 'string') return false
+    const recordingsDir = path.join(getBackendDataDir(), 'recordings')
+    let target = itemPath
+    if (!path.isAbsolute(target)) {
+      target = path.join(recordingsDir, path.basename(target))
+    }
+    target = path.normalize(target)
+    if (!fs.existsSync(target)) {
+      console.warn('[Electron] Archivo a mostrar no existe:', target)
+      return false
+    }
+    shell.showItemInFolder(target)
+    return true
+  } catch (err) {
+    console.error('[Electron] Error al mostrar archivo en carpeta:', err)
+    return false
+  }
+})
+
+// Guardar copia del archivo de audio en ubicación elegida por el usuario
+ipcMain.handle('app:save-audio', async (_event, { defaultFilename, sourcePath }) => {
+  const { dialog } = require('electron')
+  try {
+    if (!sourcePath || typeof sourcePath !== 'string') return false
+    const recordingsDir = path.join(getBackendDataDir(), 'recordings')
+    let src = sourcePath
+    if (!path.isAbsolute(src)) {
+      src = path.join(recordingsDir, path.basename(src))
+    }
+    src = path.normalize(src)
+    if (!fs.existsSync(src)) {
+      console.warn('[Electron] Archivo de origen no existe:', src)
+      return false
+    }
+
+    const ext = path.extname(src).replace('.', '').toLowerCase() || 'wav'
+    const cleanDefault = defaultFilename || path.basename(src)
+
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: cleanDefault,
+      filters: [
+        { name: 'Archivos de audio', extensions: [ext, 'wav', 'mp3', 'm4a', 'ogg', 'flac'] },
+        { name: 'Todos los archivos', extensions: ['*'] }
+      ]
+    })
+
+    if (filePath) {
+      fs.copyFileSync(src, filePath)
+      return true
+    }
+    return false
+  } catch (err) {
+    console.error('[Electron] Error al guardar archivo de audio:', err)
+    return false
+  }
+})
+
 // Detiene el backend (y sus hijos, p. ej. ffmpeg) de forma SÍNCRONA: debe terminar antes de
 // salir y antes de que el instalador de una actualización reemplace meeting-backend.exe.
 function stopPythonBackend() {

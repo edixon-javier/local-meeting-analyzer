@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { getAudioUrl } from '../../api'
+import { useSystem } from '../../hooks/useSystem'
+import { downloadAudioRecording, revealAudioRecording } from '../../utils/audioExport'
 import Icon from '../Icon'
 
 export default function TranscriptPanel({ 
@@ -22,6 +24,7 @@ export default function TranscriptPanel({
   onDeleteBookmark,
   meetingTitle
 }) {
+  const { showToast } = useSystem()
   const [isAddingBookmark, setIsAddingBookmark] = useState(false)
   const [newBookmarkNote, setNewBookmarkNote] = useState('')
 
@@ -202,6 +205,24 @@ export default function TranscriptPanel({
                 <span className="btn-label-collapsible">Marcar Momento</span>
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => downloadAudioRecording({ path: audioPath }, showToast)}
+              title="Descargar o guardar archivo de audio"
+              aria-label="Descargar archivo de audio"
+            >
+              <Icon name="download" size={13} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => revealAudioRecording({ path: audioPath }, showToast)}
+              title="Mostrar archivo en el Explorador"
+              aria-label="Mostrar archivo en el Explorador"
+            >
+              <Icon name="folder" size={13} />
+            </button>
           </div>
         )}
 

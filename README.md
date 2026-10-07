@@ -13,6 +13,8 @@ Concebida para capturar el valor de tus reuniones sin comprometer tu privacidad,
 - 👥 **Diarización Textual**: Reconoce a los diferentes hablantes (Hablante A, B) basándose en el contexto del diálogo.
 - 💬 **Asistente de Chat RAG**: Chatea de forma interactiva con el contenido de una reunión o realiza búsquedas semánticas sobre *todo tu historial* de reuniones.
 - 🛡️ **Privacidad Primero**: Tus datos, grabaciones y metadatos se guardan localmente. Sin cuentas, sin telemetría, sin anuncios. La nube (OpenAI) solo se usa si tú la activas con tu propia clave API.
+- 🤖 **Servidor MCP Local (Model Context Protocol)**: Conecta agentes externos (Claude, Cursor, Antigravity) para consultar tareas, resúmenes y transcripciones de forma privada (ver [docs/MCP-INTEGRACION.md](docs/MCP-INTEGRACION.md)).
+- 🎧 **Exportación y Gestión Rápida de Audios**: Descarga copias de tus grabaciones o ábrelas directamente en el Explorador de Windows para compartirlas al instante en Slack, Teams o correo.
 - 🎨 **Interfaz Moderna (UI/UX)**: Diseño premium en Dark Mode (Slate/Indigo) con animaciones fluidas construido sobre Electron y React.
 
 ## ⬇️ Descarga e Instalación (usuarios)

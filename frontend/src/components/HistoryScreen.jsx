@@ -12,6 +12,7 @@ import {
   exportExecutivePdf,
   formatTime
 } from '../utils/minutesExport'
+import { downloadAudioRecording, revealAudioRecording } from '../utils/audioExport'
 
 export default function HistoryScreen({ onNavigate }) {
   const { isBackendOffline, showToast } = useSystem()
@@ -88,6 +89,8 @@ export default function HistoryScreen({ onNavigate }) {
       if (res.data && res.data.exists !== false) {
         setExportingMeeting({
           ...res.data,
+          path: rec.path,
+          filename: rec.filename,
           title: getRecordingTitle(rec.filename),
           createdDate: formatDate(rec.created)
         })
@@ -302,6 +305,26 @@ export default function HistoryScreen({ onNavigate }) {
                     )}
                     <button
                       type="button"
+                      onClick={(e) => { e.stopPropagation(); downloadAudioRecording(rec, showToast) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
+                      title="Descargar archivo de audio"
+                      aria-label={`Descargar audio de ${title}`}
+                    >
+                      <Icon name="download" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); revealAudioRecording(rec, showToast) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
+                      title="Mostrar archivo en el Explorador"
+                      aria-label={`Mostrar archivo de ${title} en el Explorador`}
+                    >
+                      <Icon name="folder" size={13} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); togglePin(rec.filename) }}
                       onKeyDown={(e) => e.stopPropagation()}
                       className="btn btn-secondary btn-square btn-sm btn-pin"
@@ -459,6 +482,27 @@ export default function HistoryScreen({ onNavigate }) {
               >
                 <Icon name="file-text" size={15} /> Exportar / Imprimir PDF
               </button>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 4, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => downloadAudioRecording(exportingMeeting, showToast)}
+                  style={{ flex: 1, justifyContent: 'center', padding: '9px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  title="Guardar archivo original de audio en el equipo"
+                >
+                  <Icon name="download" size={14} /> Guardar Audio
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => revealAudioRecording(exportingMeeting, showToast)}
+                  style={{ flex: 1, justifyContent: 'center', padding: '9px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  title="Abrir ubicación del archivo en el Explorador de Windows"
+                >
+                  <Icon name="folder" size={14} /> En Carpeta
+                </button>
+              </div>
             </div>
         </Modal>
       )}

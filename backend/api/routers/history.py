@@ -325,23 +325,38 @@ def update_meeting_task(
     }
 
 @router.get("/audio")
-def get_audio_file(path: str):
-    """Sirve el archivo de audio local para ser reproducido en el frontend."""
-    if not _is_safe_recording_path(path):
+def get_audio_file(
+    path: str,
+    download: bool = False,
+    filename: Optional[str] = None
+):
+    """
+    Sirve el archivo de audio local para reproducción (inline) o descarga (attachment).
+    Acepta tanto ruta absoluta dentro de grabaciones como solo el nombre de archivo.
+    """
+    resolved_path = path
+    if not os.path.dirname(path):
+        resolved_path = os.path.join(_get_recordings_dir(), path)
+
+    if not _is_safe_recording_path(resolved_path):
         raise HTTPException(status_code=403, detail="Acceso denegado al archivo fuera del directorio de grabaciones.")
 
-    if not os.path.isfile(path):
+    if not os.path.isfile(resolved_path):
         raise HTTPException(status_code=404, detail="Archivo de audio no encontrado.")
     
-    ext = os.path.splitext(path)[1].lower()
+    ext = os.path.splitext(resolved_path)[1].lower()
     if ext not in SUPPORTED_AUDIO_EXTS:
         raise HTTPException(status_code=400, detail="Formato de archivo no permitido.")
         
     import mimetypes
-    mime_type, _ = mimetypes.guess_type(path)
+    mime_type, _ = mimetypes.guess_type(resolved_path)
     if not mime_type:
         mime_type = "audio/mpeg" if ext == ".mp3" else "audio/wav"
-    return FileResponse(path, media_type=mime_type)
+
+    if download:
+        download_name = filename or os.path.basename(resolved_path)
+        return FileResponse(resolved_path, media_type=mime_type, filename=download_name)
+    return FileResponse(resolved_path, media_type=mime_type)
 
 @router.post("/upload")
 def upload_audio_file(file: UploadFile = File(...)):

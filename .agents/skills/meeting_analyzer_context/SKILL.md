@@ -248,6 +248,7 @@ Antes de sugerir o ejecutar cualquier `git add` + `git commit`, verificar:
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.7.0` | 2026-10-07 | Integración de Servidor MCP y Exportación de Audios: Servidor MCP local (`backend/mcp_server.py`) para agentes externos (Claude, Cursor, Antigravity) con herramientas de reuniones, resúmenes, transcripciones, tareas y búsqueda RAG; exportación nativa de grabaciones en Explorador de Windows y diálogo de guardado. | `feature/mcp-and-audio-export` |
 | `v1.5.0` | 2026-09-18 | Minutas Ejecutivas y Renombrado Interactivo de Hablantes: Exportación de reportes ejecutivos (PDF formal, Markdown estructurado y portapapeles con HTML/Markdown), modal interactivo para renombrar hablantes ("Hablante A" -> Nombre real) con persistencia en JSON y sincronización RAG. | `feature/export-and-speaker-rename` |
 | `v1.4.0` | 2026-09-18 | Live Transcription SSE: Streaming en tiempo real palabra por palabra con Faster-Whisper, segmentación VAD, reconexión inteligente, UI en RecordScreen con auto-scroll no intrusivo y cancelación limpia de recursos. | `feature/live-transcription` |
 | `v1.3.2` | 2026-09-18 | Cierre y Estabilización: Blindaje de seguridad (path traversal), prevención de pérdida de datos (splitext en metadatos multiformato), cancelación en Whisper, prevención de fugas SSE, suite de 22 tests automatizados y circuit breaker robusto. | `feature/mic-tester` |

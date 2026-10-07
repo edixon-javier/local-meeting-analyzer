@@ -5,6 +5,10 @@ import axios from 'axios'
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8765'
 export const getAudioUrl = (audioPath) => `${BASE_URL}/recordings/audio?path=${encodeURIComponent(audioPath)}`
+export const getAudioDownloadUrl = (audioPath, filename) => {
+  const fileParam = filename ? `&filename=${encodeURIComponent(filename)}` : ''
+  return `${BASE_URL}/recordings/audio?path=${encodeURIComponent(audioPath)}&download=true${fileParam}`
+}
 
 // Estado local de conectividad en la capa de red
 let isBackendOffline = false
