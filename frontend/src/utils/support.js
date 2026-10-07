@@ -28,17 +28,25 @@ export function maskSecrets(text) {
   return String(text ?? '').replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-***')
 }
 
-/** Información de la app desde Electron; valores neutros si se ejecuta en un navegador. */
-export async function loadAppInfo() {
+/**
+ * Información de la app desde Electron; valores neutros si se ejecuta en un navegador.
+ * La versión de Electron tiene prioridad; `fallbackVersion` (p. ej. la del backend) solo se usa
+ * cuando Electron no aporta ninguna. Si tampoco hay, queda 'desconocida'.
+ */
+export async function loadAppInfo({ fallbackVersion } = {}) {
+  let info = { ...FALLBACK_INFO }
   try {
     const api = typeof window !== 'undefined' ? window.electronAPI : null
     if (api && typeof api.getAppInfo === 'function') {
-      return { ...FALLBACK_INFO, ...(await api.getAppInfo()) }
+      info = { ...FALLBACK_INFO, ...(await api.getAppInfo()) }
     }
   } catch (err) {
     console.warn('No se pudo obtener la información de la app:', err)
   }
-  return { ...FALLBACK_INFO }
+  if (!info.version || info.version === FALLBACK_INFO.version) {
+    info.version = fallbackVersion ? String(fallbackVersion) : FALLBACK_INFO.version
+  }
+  return info
 }
 
 /** "Windows 11 (10.0.26300), x64" a partir de os.release() de Electron. */

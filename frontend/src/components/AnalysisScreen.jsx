@@ -12,6 +12,7 @@ import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
 import SpeakerRenameModal from './SpeakerRenameModal'
 import Icon from './Icon'
+import '../styles/analysis.css'
 import { getRecordingTitle } from '../utils/recordingName'
 
 export default function AnalysisScreen({ audioPath, onBack }) {
@@ -207,15 +208,15 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   if (step === 'checking') {
     return (
       <div className="unified-processing-screen">
-        <div className="unified-processing-card" style={{ maxWidth: 440 }}>
+        <div className="unified-processing-card analysis-card-compact">
           <div className="processing-card-header">
             <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '24px 0 16px', display: 'flex', justifyContent: 'center' }}>
-            <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} aria-hidden="true" />
+          <div className="analysis-spinner-wrap">
+            <div className="spinner-small analysis-spinner-lg" aria-hidden="true" />
           </div>
-          <h2 className="unified-processing-title" style={{ fontSize: 18 }}>Preparando reunión...</h2>
-          <p className="unified-processing-sub" style={{ fontSize: 13, marginBottom: 8 }}>
+          <h2 className="unified-processing-title analysis-title-sm">Preparando reunión...</h2>
+          <p className="unified-processing-sub analysis-sub-sm">
             Verificando datos locales y configurando el motor de análisis.
           </p>
         </div>
@@ -230,14 +231,14 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           <div className="processing-card-header">
             <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' }}>
+          <div className="analysis-status-icon is-warning">
             <Icon name="clock" size={30} />
           </div>
           <h2 className="unified-processing-title">Proceso previo en cola</h2>
-          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+          <p className="unified-processing-sub analysis-sub-narrow">
             El motor de IA está finalizando una tarea anterior o liberando memoria. Puedes esperar o desbloquear el reprocesamiento inmediato.
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <div className="analysis-status-actions">
             <button type="button" className="btn btn-primary" onClick={reprocess}>
               <Icon name="refresh" size={15} /> Desbloquear y Reprocesar
             </button>
@@ -324,17 +325,17 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               <span className="stage-dot">
                 <Icon name="check" size={11} />
               </span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Audio</span>
+              <span className="analysis-stage-label">Audio</span>
             </div>
             <div className="processing-stage-item active">
               <span className="stage-dot">
                 {!isTranscribing ? <Icon name="check" size={11} /> : '2'}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Transcripción</span>
+              <span className="analysis-stage-label">Transcripción</span>
             </div>
             <div className={`processing-stage-item ${!isTranscribing ? 'active' : ''}`}>
               <span className="stage-dot">3</span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Análisis IA</span>
+              <span className="analysis-stage-label">Análisis IA</span>
             </div>
           </div>
 
@@ -355,14 +356,14 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           <div className="processing-card-header">
             <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#EF4444' }}>
+          <div className="analysis-status-icon is-error">
             <Icon name="alert-triangle" size={32} />
           </div>
-          <h2 className="unified-processing-title" style={{ color: '#EF4444' }}>Error en el procesamiento</h2>
-          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+          <h2 className="unified-processing-title analysis-title-error">Error en el procesamiento</h2>
+          <p className="unified-processing-sub analysis-sub-narrow">
             {errorMsg || 'No fue posible completar el procesamiento de la reunión.'}
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <div className="analysis-status-actions">
             <button type="button" className="btn btn-primary" onClick={reprocess}>
               <Icon name="refresh" size={15} /> Reprocesar Audio
             </button>
@@ -399,18 +400,17 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         onDeleteBookmark={handleDeleteBookmark}
       />
 
-      <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="tabs" role="tablist" aria-label="Vista del panel" style={{ display: 'flex', gap: '8px' }}>
+      <div className="insights-panel analysis-side-panel">
+        <div className="panel-header analysis-side-header">
+          <div className="tabs analysis-tabs" role="tablist" aria-label="Vista del panel">
             <button
               type="button"
               role="tab"
               id="insights-tab"
               aria-selected={activeTab === 'insights'}
               aria-controls="insights-tabpanel"
-              className={`btn btn-sm ${activeTab === 'insights' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-sm analysis-tab ${activeTab === 'insights' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('insights')}
-              style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
               <Icon name="file-text" size={14} /> Resumen
             </button>
@@ -420,16 +420,15 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               id="chat-tab"
               aria-selected={activeTab === 'chat'}
               aria-controls="insights-tabpanel"
-              className={`btn btn-sm ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-sm analysis-tab ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('chat')}
-              style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
               <Icon name="chat" size={14} /> Chat IA
             </button>
           </div>
 
           {activeTab === 'insights' && (
-            <div style={{ display: 'flex', gap: 6 }} role="group" aria-label="Exportar minuta">
+            <div className="analysis-export-actions" role="group" aria-label="Exportar minuta">
               <button
                 type="button"
                 onClick={handleCopyMinutes}
@@ -462,11 +461,10 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         </div>
 
         <div
-          className="panel-body"
+          className="panel-body analysis-side-body"
           id="insights-tabpanel"
           role="tabpanel"
           aria-labelledby={activeTab === 'chat' ? 'chat-tab' : 'insights-tab'}
-          style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
           {activeTab === 'chat' ? (
             <ChatPanel audioPath={audioPath} />

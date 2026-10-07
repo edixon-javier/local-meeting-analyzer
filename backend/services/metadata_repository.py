@@ -68,6 +68,22 @@ class MetadataRepository(IMetadataRepository):
             print(f"[MetadataRepo] Error al cargar metadatos: {e}")
             return None
 
+    def update_audio_path(self, json_path: str, audio_path: str) -> Optional[Dict[str, Any]]:
+        """Actualiza solo `filename` y `audio_path` de un JSON existente, conservando el resto de claves."""
+        json_path = _resolve_path(json_path)
+        metadata = self.get_metadata(json_path)
+        if not isinstance(metadata, dict):
+            return None
+        metadata["filename"] = os.path.basename(audio_path)
+        metadata["audio_path"] = audio_path
+        try:
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            return metadata
+        except Exception as e:
+            print(f"[MetadataRepo] Error al actualizar ruta de audio en {json_path}: {e}")
+            return None
+
     def rename_speaker(self, audio_path: str, old_speaker: str, new_speaker: str) -> Optional[Dict[str, Any]]:
         if not audio_path:
             return None

@@ -4,6 +4,13 @@ import { useSystem } from '../hooks/useSystem'
 import { useRecordings } from '../hooks/useRecordings'
 import Icon from './Icon'
 import { getRecordingTitle } from '../utils/recordingName'
+import '../styles/settings-chat.css'
+
+const SUGGESTED_QUESTIONS = [
+  '¿Qué decisiones tomamos sobre el presupuesto el mes pasado?',
+  '¿Quién quedó a cargo de las tareas del frontend?',
+  'Hazme un resumen consolidado de las últimas reuniones sobre el diseño del producto.',
+]
 
 export default function HistoryChatScreen({ onNavigate }) {
   const { isBackendOffline } = useSystem()
@@ -11,7 +18,7 @@ export default function HistoryChatScreen({ onNavigate }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '¡Hola! Soy tu asistente de reuniones. Puedo consultar y analizar el historial completo de tus grabaciones transcritas.\n\nHazme preguntas como:\n• "¿Qué decisiones tomamos sobre el presupuesto el mes pasado?"\n• "¿Quién quedó a cargo de las tareas del frontend?"\n• "Hazme un resumen consolidado de las últimas reuniones sobre el diseño del producto."',
+      content: '¡Hola! Soy tu asistente de reuniones. Puedo consultar y analizar el historial completo de tus grabaciones transcritas.\n\nEscribe tu pregunta o elige una de estas para empezar:',
       referenced_meetings: []
     }
   ])
@@ -35,11 +42,10 @@ export default function HistoryChatScreen({ onNavigate }) {
   // Filtrar solo reuniones que ya están analizadas/transcritas para saber si hay información
   const transcribedRecordings = recordings.filter(r => r.has_metadata)
 
-  const handleSend = async (e) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading || isBackendOffline) return
-
-    const userQuestion = input.trim()
+  // Envía una pregunta (escrita o elegida de las sugerencias) y añade la respuesta a la conversación
+  const sendQuestion = async (question) => {
+    const userQuestion = (question || '').trim()
+    if (!userQuestion || isLoading || isBackendOffline) return
     setInput('')
 
     // Agregar mensaje de usuario al estado de la interfaz
@@ -83,7 +89,15 @@ export default function HistoryChatScreen({ onNavigate }) {
     }
   }
 
-  const handleReferenceClick = (path) => {
+  const handleSend = (e) => {
+    e.preventDefault()
+    sendQuestion(input)
+  }
+
+  // Las sugerencias solo se ofrecen mientras el usuario aún no ha preguntado nada
+  const showSuggestions = !messages.some(m => m.role === 'user')
+
+  const handleReferenceClick =(path) => {
     if (path) {
       onNavigate('analysis', { path })
     }
@@ -218,6 +232,21 @@ export default function HistoryChatScreen({ onNavigate }) {
             )}
           </div>
         ))}
+        {showSuggestions && (
+          <div className="chat-suggestions" role="group" aria-label="Preguntas sugeridas">
+            {SUGGESTED_QUESTIONS.map((question) => (
+              <button
+                key={question}
+                type="button"
+                className="chat-suggestion"
+                onClick={() => sendQuestion(question)}
+                disabled={isLoading || isBackendOffline}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        )}
         {isLoading && (
           <div role="status" style={{ alignSelf: 'flex-start', padding: '16px 20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="spinner-small" aria-hidden="true" />

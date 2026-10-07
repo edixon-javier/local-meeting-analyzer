@@ -1,0 +1,33 @@
+/* Acceso rápido: grupos de la barra lateral (Fijadas / Pendientes / Recientes) y botón de fijar */
+
+.sidebar-quick-group { margin-bottom: 10px; }
+.sidebar-quick-group:last-of-type { margin-bottom: 0; }
+
+.sidebar-quick-group > .sidebar-section-label {
+  padding: 6px 8px 4px;
+  margin-bottom: 2px;
+}
+
+/* Pista breve cuando aún no hay fijadas */
+.sidebar-quick-hint {
+  margin: 0;
+  padding: 2px 8px 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Con tres acciones (fijar, renombrar, eliminar) el nombre necesita más margen derecho */
+.sidebar-meetings .meeting-item:hover .meeting-item-name,
+.sidebar-meetings .meeting-item:focus-within .meeting-item-name,
+.sidebar-meetings .meeting-item.active .meeting-item-name { padding-right: 90px; }
+
+/* Las acciones se alinean con la línea del nombre para no tapar la segunda línea (tema o duración) */
+.sidebar-meetings .meeting-item-actions { top: 7px; transform: none; }
+
+/* Botón de fijar: la bandera se rellena y se tiñe de ámbar cuando está fijada */
+.btn-pin[aria-pressed="true"] {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.btn-pin[aria-pressed="true"] .app-icon { fill: currentColor; }

@@ -8,6 +8,7 @@ import { PRIVACY_URL, isPlaceholder } from '../appInfo'
 import { canReportProblem, describeOs, loadAppInfo, openExternalUrl, reportProblem } from '../utils/support'
 import Icon from './Icon'
 import { getEngineStatus } from '../utils/engineStatus'
+import '../styles/settings-chat.css'
 
 // Modelo local por defecto (Apache-2.0, buen español, ~2.5 GB) y lista usada si Ollama no responde
 const DEFAULT_OLLAMA_MODEL = 'qwen3:4b'
@@ -368,7 +369,8 @@ export default function SettingsScreen() {
   }
 
   const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = document.getElementById(id)
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const micName = micDeviceId === 'default'
@@ -975,6 +977,63 @@ export default function SettingsScreen() {
 // accesos directos a cada sección. Aprovecha el ancho libre sin repetir controles.
 // ─────────────────────────────────────────
 function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
+  const tocRef = useRef(null)
+  const jumpLockRef = useRef(null)
+  const [activeId, setActiveId] = useState(SETTINGS_SECTIONS[0].id)
+
+  // Scroll-spy: la sección activa es la última cuyo borde superior ya pasó la cabecera del
+  // contenedor; al llegar al final del scroll se marca la última (las secciones cortas nunca
+  // alcanzan el borde superior). El contenedor con scroll es .settings-screen, no la ventana.
+  useEffect(() => {
+    const container = tocRef.current?.closest('.settings-screen')
+    if (!container) return undefined
+    let frame = 0
+
+    const update = () => {
+      frame = 0
+      // Sin layout (contenedor oculto o entorno de tests) no hay posiciones fiables que medir
+      if (jumpLockRef.current || container.clientHeight === 0) return
+      const top = container.getBoundingClientRect().top
+      const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 4
+      let current = SETTINGS_SECTIONS[0].id
+      if (atBottom && container.scrollTop > 0) {
+        current = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id
+      } else {
+        for (const section of SETTINGS_SECTIONS) {
+          const el = document.getElementById(section.id)
+          if (el && el.getBoundingClientRect().top - top <= 96) current = section.id
+        }
+      }
+      setActiveId(current)
+    }
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update)
+    }
+
+    container.addEventListener('scroll', onScroll, { passive: true })
+    update()
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+      clearTimeout(jumpLockRef.current)
+    }
+  }, [])
+
+  // Al hacer clic se marca de inmediato y se ignora el scroll-spy mientras dura el desplazamiento suave
+  const handleJump = (id) => {
+    setActiveId(id)
+    clearTimeout(jumpLockRef.current)
+    jumpLockRef.current = setTimeout(() => {
+      jumpLockRef.current = null
+      onScrollSettled()
+    }, 700)
+    onJump(id)
+  }
+  const onScrollSettled = () => {
+    const container = tocRef.current?.closest('.settings-screen')
+    container?.dispatchEvent(new Event('scroll'))
+  }
+
   const isCloud = values.ai_provider === 'openai'
   const usesMic = values.record_mode !== 'system'
   const privacy = isCloud
@@ -1026,9 +1085,15 @@ function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
         )}
       </div>
 
-      <nav className="settings-toc" aria-label="Secciones de configuración">
+      <nav ref={tocRef} className="settings-toc" aria-label="Secciones de configuración">
         {SETTINGS_SECTIONS.map((section) => (
-          <button key={section.id} type="button" onClick={() => onJump(section.id)}>
+          <button
+            key={section.id}
+            type="button"
+            className={activeId === section.id ? 'is-active' : undefined}
+            aria-current={activeId === section.id ? 'true' : undefined}
+            onClick={() => handleJump(section.id)}
+          >
             <Icon name={section.icon} size={13} /> {section.label}
           </button>
         ))}
@@ -1042,21 +1107,23 @@ function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
 // Todo es local: el diagnóstico se copia al portapapeles y el usuario decide si lo comparte.
 // ─────────────────────────────────────────
 function HelpAndLegal() {
-  const { showToast } = useSystem()
+  const { showToast, systemStatus } = useSystem()
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState('')
   const electron = typeof window !== 'undefined' ? window.electronAPI : undefined
   const reportAvailable = canReportProblem()
+  // Versión del backend (GET /status): respaldo cuando Electron no la aporta (navegador/desarrollo)
+  const backendVersion = systemStatus?.version
 
   useEffect(() => {
     let alive = true
-    loadAppInfo().then((loaded) => {
+    loadAppInfo({ fallbackVersion: backendVersion }).then((loaded) => {
       if (alive) setInfo(loaded)
     })
     return () => {
       alive = false
     }
-  }, [])
+  }, [backendVersion])
 
   const desktopOnly = () => showToast({ type: 'info', message: 'Esta función solo está disponible en la aplicación de escritorio.' })
 

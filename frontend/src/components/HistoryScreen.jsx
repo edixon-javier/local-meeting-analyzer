@@ -4,6 +4,7 @@ import { useRecordings } from '../hooks/useRecordings'
 import { getRecordingMetadata } from '../api'
 import Icon from './Icon'
 import Modal from './Modal'
+import '../styles/quick-access.css'
 import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName } from '../utils/recordingName'
 import {
   copyExecutiveMinutes,
@@ -16,6 +17,8 @@ export default function HistoryScreen({ onNavigate }) {
   const { isBackendOffline, showToast } = useSystem()
   const {
     recordings,
+    isPinned,
+    togglePin,
     loading,
     isRefreshing,
     loadRecordings,
@@ -297,6 +300,17 @@ export default function HistoryScreen({ onNavigate }) {
                         <span>Minuta</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); togglePin(rec.filename) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm btn-pin"
+                      aria-pressed={isPinned(rec.filename)}
+                      title={isPinned(rec.filename) ? 'Quitar de fijadas' : 'Fijar en acceso rápido'}
+                      aria-label={`${isPinned(rec.filename) ? 'Quitar de fijadas' : 'Fijar'} ${title}`}
+                    >
+                      <Icon name="flag" size={13} />
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => handleRenameClick(e, rec)}

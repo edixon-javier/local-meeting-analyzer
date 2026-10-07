@@ -5,6 +5,7 @@ import { RecordingsContext } from './recordingsContextDef'
 import Modal from '../components/Modal'
 import Icon from '../components/Icon'
 import { getRecordingTitle, hasDefaultName } from '../utils/recordingName'
+import { loadPins, savePins, togglePin as togglePinList, renamePin, removePin } from '../utils/pins'
 
 export function RecordingsProvider({ children }) {
   const { showToast, isBackendOffline, isStartupComplete } = useSystem()
@@ -21,6 +22,23 @@ export function RecordingsProvider({ children }) {
 
   const recordingsRef = useRef(recordings)
   recordingsRef.current = recordings
+
+  // Grabaciones fijadas (acceso rápido): persisten en localStorage
+  const [pinnedFiles, setPinnedFiles] = useState(loadPins)
+  const pinnedRef = useRef(pinnedFiles)
+  pinnedRef.current = pinnedFiles
+
+  const updatePins = useCallback((next) => {
+    pinnedRef.current = next
+    setPinnedFiles(next)
+    savePins(next)
+  }, [])
+
+  const togglePin = useCallback((filename) => {
+    updatePins(togglePinList(pinnedRef.current, filename))
+  }, [updatePins])
+
+  const isPinned = useCallback((filename) => pinnedFiles.includes(filename), [pinnedFiles])
 
   const loadRecordings = useCallback(async (options = {}) => {
     if (isBackendOffline || isFetchingRef.current) return
@@ -52,6 +70,7 @@ export function RecordingsProvider({ children }) {
     setModalBusy(true)
     try {
       await deleteRecording(deletingFile)
+      updatePins(removePin(pinnedRef.current, deletingFile))
       showToast({ type: 'success', message: 'Grabación eliminada correctamente' })
       setDeletingFile(null)
       loadRecordings()
@@ -66,7 +85,12 @@ export function RecordingsProvider({ children }) {
     if (!renamingFile || !newNameInput.trim() || modalBusy) return
     setModalBusy(true)
     try {
-      await renameRecording(renamingFile.filename, newNameInput.trim())
+      const res = await renameRecording(renamingFile.filename, newNameInput.trim())
+      // El backend devuelve el nombre final (con extensión): la fijada migra al nombre nuevo
+      const newFilename = res?.data?.new_filename
+      if (newFilename && pinnedRef.current.includes(renamingFile.filename)) {
+        updatePins(renamePin(pinnedRef.current, renamingFile.filename, newFilename))
+      }
       showToast({ type: 'success', message: 'Grabación renombrada correctamente' })
       setRenamingFile(null)
       setNewNameInput('')
@@ -101,6 +125,9 @@ export function RecordingsProvider({ children }) {
 
   const value = {
     recordings,
+    pinnedFiles,
+    togglePin,
+    isPinned,
     loading,
     isRefreshing,
     loadRecordings,

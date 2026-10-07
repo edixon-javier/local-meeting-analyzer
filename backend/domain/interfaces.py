@@ -130,6 +130,10 @@ class IMetadataRepository(ABC):
         pass
 
     @abstractmethod
+    def update_audio_path(self, json_path: str, audio_path: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
     def rename_speaker(self, audio_path: str, old_speaker: str, new_speaker: str) -> Optional[Dict[str, Any]]:
         pass
 

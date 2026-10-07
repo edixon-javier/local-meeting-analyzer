@@ -1,0 +1,44 @@
+/* Estilos de Configuración (índice con sección activa) y Preguntar al Historial (sugerencias) */
+
+/* ─── Configuración: índice de secciones con scroll-spy ─── */
+.settings-toc button {
+  position: relative;
+}
+.settings-toc button.is-active,
+.settings-toc button.is-active:hover {
+  background: var(--accent-primary-glow);
+  color: var(--text-accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+/* ─── Preguntar al Historial: preguntas sugeridas ─── */
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 85%;
+  margin-top: -8px;
+}
+.chat-suggestion {
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.chat-suggestion:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-accent);
+}
+.chat-suggestion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

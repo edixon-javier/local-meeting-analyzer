@@ -102,6 +102,28 @@ describe('support', () => {
     expect(info.version).toBe('desconocida');
   });
 
+  it('loadAppInfo usa la versión del backend si Electron no la aporta', async () => {
+    const support = await loadSupport();
+    expect((await support.loadAppInfo({ fallbackVersion: '1.6.0' })).version).toBe('1.6.0');
+    window.electronAPI = { getAppInfo: vi.fn().mockResolvedValue({ electron: '42.0.0' }) };
+    try {
+      expect((await support.loadAppInfo({ fallbackVersion: '1.6.0' })).version).toBe('1.6.0');
+      expect((await support.loadAppInfo()).version).toBe('desconocida');
+    } finally {
+      delete window.electronAPI;
+    }
+  });
+
+  it('loadAppInfo prefiere la versión de Electron sobre la del backend', async () => {
+    const support = await loadSupport();
+    window.electronAPI = { getAppInfo: vi.fn().mockResolvedValue({ version: '2.0.0' }) };
+    try {
+      expect((await support.loadAppInfo({ fallbackVersion: '1.6.0' })).version).toBe('2.0.0');
+    } finally {
+      delete window.electronAPI;
+    }
+  });
+
   it('describeOs distingue Windows 10 y 11', async () => {
     const support = await loadSupport();
     expect(support.describeOs({ os: '10.0.19045', arch: 'x64' })).toBe('Windows 10 (10.0.19045), x64');

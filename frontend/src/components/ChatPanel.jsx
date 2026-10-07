@@ -52,34 +52,22 @@ export default function ChatPanel({ audioPath }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div className="chat-panel">
       {/* Messages list */}
       <div
         ref={chatContainerRef}
         role="log"
         aria-live="polite"
         aria-label="Conversación sobre la reunión"
-        style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0 }}
+        className="chat-panel-messages"
       >
         {messages.map((msg, i) => (
-          <div key={i} style={{
-            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '85%',
-            padding: '12px 16px',
-            borderRadius: '16px',
-            borderBottomRightRadius: msg.role === 'user' ? 0 : '16px',
-            borderBottomLeftRadius: msg.role === 'assistant' ? 0 : '16px',
-            background: msg.role === 'user' ? 'var(--accent-primary)' : msg.isError ? 'rgba(248, 113, 113, 0.08)' : 'var(--bg-surface)',
-            color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-            border: msg.role === 'assistant' ? `1px solid ${msg.isError ? 'rgba(248, 113, 113, 0.35)' : 'var(--border-subtle)'}` : 'none',
-            fontSize: '13px',
-            lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            userSelect: 'text'
-          }}>
+          <div
+            key={i}
+            className={`chat-panel-msg ${msg.role === 'user' ? 'is-user' : 'is-assistant'} ${msg.isError ? 'is-error' : ''}`}
+          >
             {msg.role === 'assistant' && (
-              <div style={{ fontSize: '11px', color: msg.isError ? 'var(--red-record)' : 'var(--text-muted)', marginBottom: '4px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div className="chat-panel-msg-label">
                 {msg.isError && <Icon name="alert-triangle" size={12} />}
                 {msg.isError ? 'No se pudo responder' : 'Asistente IA'}
               </div>
@@ -88,33 +76,31 @@ export default function ChatPanel({ audioPath }) {
           </div>
         ))}
         {isLoading && (
-          <div role="status" style={{ alignSelf: 'flex-start', padding: '14px 18px 14px 22px', borderRadius: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 18 }}>
+          <div role="status" className="chat-panel-typing">
             <span className="dot-typing" aria-hidden="true" />
-            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '12px' }}>Escribiendo…</span>
+            <span className="chat-panel-typing-text">Escribiendo…</span>
           </div>
         )}
       </div>
 
       {/* Input area */}
-      <div style={{ padding: '16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
-        <form onSubmit={handleSend} style={{ display: 'flex', gap: '8px' }}>
+      <div className="chat-panel-footer">
+        <form onSubmit={handleSend} className="chat-panel-form">
           <input
             ref={inputRef}
             type="text"
-            className="chat-input"
+            className="chat-input chat-panel-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Pregunta algo sobre la reunión…"
             aria-label="Pregunta sobre esta reunión"
             disabled={isLoading || !audioPath}
-            style={{ padding: '12px 16px', fontSize: 13 }}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim() || !audioPath}
-            className="btn btn-primary"
+            className="btn btn-primary chat-panel-send"
             aria-busy={isLoading || undefined}
-            style={{ borderRadius: '50%', width: '44px', height: '44px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             aria-label="Enviar mensaje"
             title="Enviar mensaje"
           >

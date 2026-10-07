@@ -127,6 +127,26 @@ def get_session(
     session.set_paused(audio.is_paused)
     return session.get_state()
 
+def _clean_mic_name(name: str) -> str:
+    """Nombre legible del micrófono: Windows ya suele traerlo como 'Micrófono (X)', así que no se vuelve a prefijar."""
+    name = (name or "").strip()
+    if name.lower().startswith(("micrófono", "microfono", "microphone")):
+        return name
+    return f"Micrófono - {name}" if name else "Micrófono"
+
+def _unique_labels(devices: list) -> list:
+    """Si dos dispositivos quedan con la misma etiqueta, añade un sufijo numérico para distinguirlos."""
+    counts = {}
+    for d in devices:
+        counts[d["name"]] = counts.get(d["name"], 0) + 1
+    seen = {}
+    for d in devices:
+        base = d["name"]
+        if counts[base] > 1:
+            seen[base] = seen.get(base, 0) + 1
+            d["name"] = f"{base} ({seen[base]})"
+    return devices
+
 @router.get("/audio/devices")
 def get_audio_devices():
     """Retorna los dispositivos de audio de grabación disponibles."""
@@ -142,8 +162,8 @@ def get_audio_devices():
 
         mics = sc.all_microphones(include_loopback=False)
         for mic in mics:
-            devices.append({"id": mic.id, "name": f"Micrófono - {mic.name}"})
-        return {"devices": devices}
+            devices.append({"id": mic.id, "name": _clean_mic_name(mic.name)})
+        return {"devices": _unique_labels(devices)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

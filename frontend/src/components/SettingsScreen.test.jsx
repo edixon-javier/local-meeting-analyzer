@@ -1,11 +1,12 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
+  systemStatus: undefined,
 }));
 
 vi.mock('../api', () => ({
@@ -21,7 +22,7 @@ vi.mock('../api', () => ({
 }));
 
 vi.mock('../hooks/useSystem', () => ({
-  useSystem: () => ({ showToast: mocks.showToast, isBackendOffline: false }),
+  useSystem: () => ({ showToast: mocks.showToast, isBackendOffline: false, systemStatus: mocks.systemStatus }),
 }));
 
 import SettingsScreen from './SettingsScreen';
@@ -62,7 +63,34 @@ describe('SettingsScreen: privacidad, soporte y legal', () => {
 
   afterEach(() => {
     delete window.electronAPI;
+    mocks.systemStatus = undefined;
     localStorage.clear();
+  });
+
+  it('fuera de Electron muestra la versión del backend', async () => {
+    delete window.electronAPI;
+    mocks.systemStatus = { version: '1.6.0' };
+    await renderSettings();
+    expect(await screen.findByText(/Versión 1\.6\.0/)).toBeInTheDocument();
+    expect(screen.queryByText(/desconocida/)).not.toBeInTheDocument();
+  });
+
+  it('sin Electron ni backend indica versión desconocida', async () => {
+    delete window.electronAPI;
+    await renderSettings();
+    expect(await screen.findByText(/Versión desconocida/)).toBeInTheDocument();
+  });
+
+  it('el índice marca la sección elegida con aria-current', async () => {
+    await renderSettings();
+    const toc = screen.getByRole('navigation', { name: 'Secciones de configuración' });
+    const audio = within(toc).getByRole('button', { name: /Audio/ });
+    const privacy = within(toc).getByRole('button', { name: /Privacidad/ });
+    expect(audio).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(privacy);
+    expect(privacy).toHaveAttribute('aria-current', 'true');
+    expect(privacy).toHaveClass('is-active');
+    expect(audio).not.toHaveAttribute('aria-current');
   });
 
   it('muestra las secciones nuevas y la clave guardada enmascarada', async () => {

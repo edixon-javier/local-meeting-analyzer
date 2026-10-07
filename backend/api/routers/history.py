@@ -200,17 +200,8 @@ def rename_recording(filename: str, request: RenameRequest, repo: IMetadataRepos
         
         if os.path.exists(old_json_path):
             os.rename(old_json_path, new_json_path)
-            meta = repo.get_metadata(new_json_path)
-            if meta:
-                meta["audio_path"] = new_audio_path
-                meta["filename"] = new_filename_audio
-                repo.save_meeting_metadata(
-                    audio_path=new_audio_path,
-                    transcript=meta.get("transcript", ""),
-                    analysis=meta.get("analysis", {}),
-                    language=meta.get("language"),
-                    segments=meta.get("segments")
-                )
+            # Solo cambian filename y audio_path; el resto de claves (bookmarks, speaker_map, created...) se conserva
+            repo.update_audio_path(new_json_path, new_audio_path)
                 
         return {"status": "renamed", "new_filename": new_filename_audio, "new_path": new_audio_path}
     except Exception as e:

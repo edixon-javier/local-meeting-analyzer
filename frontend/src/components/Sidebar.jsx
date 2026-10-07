@@ -10,8 +10,10 @@ import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName
 import { APP_NAME } from '../appInfo'
 import Icon from './Icon'
 import logoImg from '../assets/icon.jpg'
+import '../styles/quick-access.css'
 
-const MAX_RECENTS = 15
+const MAX_RECENTS = 5
+const MAX_PENDING = 5
 
 // Compara rutas sin depender de mayúsculas ni del separador (\ o /) que devuelva el backend
 function samePath(a, b) {
@@ -25,6 +27,9 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
   const engine = getEngineStatus(systemStatus, isBackendOffline)
   const {
     recordings,
+    pinnedFiles,
+    isPinned,
+    togglePin,
     setDeletingFile,
     setRenamingFile,
     setNewNameInput,
@@ -68,11 +73,92 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
     setDeletingFile(filename)
   }
 
+  const handlePinClick = (e, filename) => {
+    e.stopPropagation()
+    togglePin(filename)
+  }
+
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
     setRenamingFile(rec)
     setNewNameInput(suggestRecordingName(rec))
+  }
+
+  // Grupos del acceso rápido (sin repetir grabaciones entre grupos)
+  const sortedRecs = [...recordings].sort((a, b) => (b.created || 0) - (a.created || 0))
+  const byFilename = new Map(recordings.map((rec) => [rec.filename, rec]))
+  // Se ignoran las fijadas cuyo archivo ya no existe
+  const pinnedRecs = pinnedFiles.map((f) => byFilename.get(f)).filter(Boolean)
+  const pinnedSet = new Set(pinnedRecs.map((rec) => rec.filename))
+  const pendingRecs = sortedRecs
+    .filter((rec) => rec.has_metadata === false && !pinnedSet.has(rec.filename))
+    .slice(0, MAX_PENDING)
+  const shownSet = new Set([...pinnedSet, ...pendingRecs.map((rec) => rec.filename)])
+  const recentRecs = sortedRecs.filter((rec) => !shownSet.has(rec.filename)).slice(0, MAX_RECENTS)
+  const shownCount = pinnedRecs.length + pendingRecs.length + recentRecs.length
+
+  const renderItem = (rec) => {
+    const name = getRecordingTitle(rec.filename)
+    const duration = formatDuration(rec.duration)
+    // Segunda línea: el tema detectado si existe; si no, duración (y fecha si el título no la lleva)
+    const meta = rec.summary_preview
+      || [duration, hasDefaultName(rec.filename) ? null : formatDate(rec.created), rec.has_metadata ? null : 'Sin analizar']
+        .filter(Boolean).join(' · ')
+    const isActive = currentView === 'analysis' && samePath(currentAudioPath, rec.path)
+    const pinned = isPinned(rec.filename)
+    return (
+      <div key={rec.filename} role="listitem">
+        <div
+          className={`meeting-item ${isActive ? 'active' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-current={isActive ? 'true' : undefined}
+          aria-label={`Abrir ${name}${duration ? `, ${duration}` : ''}`}
+          onClick={() => openRecording(rec)}
+          onKeyDown={(e) => handleItemKeyDown(e, rec)}
+          title={[name, rec.summary_preview, duration, rec.filename].filter(Boolean).join('\n')}
+          style={{ position: 'relative' }}
+        >
+          <div className="meeting-item-name">{name}</div>
+          <div className="meeting-item-meta">{meta}</div>
+
+          <div className="meeting-item-actions">
+            <button
+              type="button"
+              onClick={(e) => handlePinClick(e, rec.filename)}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="btn btn-secondary btn-square btn-sm btn-pin"
+              aria-pressed={pinned}
+              title={pinned ? 'Quitar de fijadas' : 'Fijar'}
+              aria-label={`${pinned ? 'Quitar de fijadas' : 'Fijar'} ${name}`}
+            >
+              <Icon name="flag" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleRenameClick(e, rec)}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="btn btn-secondary btn-square btn-sm"
+              title="Renombrar"
+              aria-label={`Renombrar ${name}`}
+            >
+              <Icon name="edit" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleDeleteClick(e, rec.filename)}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="btn btn-danger btn-square btn-sm"
+              title="Eliminar"
+              aria-label={`Eliminar ${name}`}
+            >
+              <Icon name="trash" size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -142,15 +228,15 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
         )}
       </div>
 
-      {/* Lista de grabaciones recientes */}
+      {/* Acceso rápido: fijadas, pendientes de analizar y recientes */}
       <div className="sidebar-recents-header">
         <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0, margin: 0 }}>
-          <span id="sidebar-recents-label">Recientes</span>
+          <span id="sidebar-recents-label">Acceso rápido</span>
           <input
             type="search"
             className="sidebar-filter"
             placeholder="Filtrar…"
-            aria-label="Filtrar grabaciones recientes"
+            aria-label="Filtrar todas las grabaciones"
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape') setFilterQuery('') }}
@@ -158,69 +244,56 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
           />
         </div>
       </div>
-      <div className="sidebar-meetings" ref={meetingsListRef} role="list" aria-labelledby="sidebar-recents-label">
+      <div className="sidebar-meetings sidebar-quick" ref={meetingsListRef}>
         {isBackendOffline ? (
           <div className="sidebar-empty">Servidor desconectado</div>
-        ) : filteredRecs.length === 0 ? (
-          <div className="sidebar-empty">
-            {query ? `Sin coincidencias para «${filterQuery.trim()}»` : 'Aún no hay grabaciones'}
-          </div>
+        ) : query ? (
+          filteredRecs.length === 0 ? (
+            <div className="sidebar-empty">{`Sin coincidencias para «${filterQuery.trim()}»`}</div>
+          ) : (
+            <div className="sidebar-quick-group">
+              <div className="sidebar-section-label" id="sidebar-group-results">Resultados</div>
+              <div role="list" aria-labelledby="sidebar-group-results">
+                {filteredRecs.map(renderItem)}
+              </div>
+            </div>
+          )
+        ) : recordings.length === 0 ? (
+          <div className="sidebar-empty">Aún no hay grabaciones</div>
         ) : (
-          filteredRecs.slice(0, MAX_RECENTS).map((rec) => {
-            const name = getRecordingTitle(rec.filename)
-            const duration = formatDuration(rec.duration)
-            // Segunda línea: el tema detectado si existe; si no, duración (y fecha si el título no la lleva)
-            const meta = rec.summary_preview
-              || [duration, hasDefaultName(rec.filename) ? null : formatDate(rec.created), rec.has_metadata ? null : 'Sin analizar']
-                .filter(Boolean).join(' · ')
-            const isActive = currentView === 'analysis' && samePath(currentAudioPath, rec.path)
-            return (
-              <div key={rec.filename} role="listitem">
-                <div
-                  className={`meeting-item ${isActive ? 'active' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  aria-current={isActive ? 'true' : undefined}
-                  aria-label={`Abrir ${name}${duration ? `, ${duration}` : ''}`}
-                  onClick={() => openRecording(rec)}
-                  onKeyDown={(e) => handleItemKeyDown(e, rec)}
-                  title={[name, rec.summary_preview, duration, rec.filename].filter(Boolean).join('\n')}
-                  style={{ position: 'relative' }}
-                >
-                  <div className="meeting-item-name">{name}</div>
-                  <div className="meeting-item-meta">{meta}</div>
-
-                  <div className="meeting-item-actions">
-                    <button
-                      type="button"
-                      onClick={(e) => handleRenameClick(e, rec)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      className="btn btn-secondary btn-square btn-sm"
-                      title="Renombrar"
-                      aria-label={`Renombrar ${name}`}
-                    >
-                      <Icon name="edit" size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteClick(e, rec.filename)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      className="btn btn-danger btn-square btn-sm"
-                      title="Eliminar"
-                      aria-label={`Eliminar ${name}`}
-                    >
-                      <Icon name="trash" size={12} />
-                    </button>
-                  </div>
+          <>
+            <div className="sidebar-quick-group">
+              <div className="sidebar-section-label" id="sidebar-group-pinned">Fijadas</div>
+              {pinnedRecs.length > 0 ? (
+                <div role="list" aria-labelledby="sidebar-group-pinned">
+                  {pinnedRecs.map(renderItem)}
+                </div>
+              ) : (
+                <p className="sidebar-quick-hint">Fija reuniones desde el Historial para tenerlas a mano</p>
+              )}
+            </div>
+            {pendingRecs.length > 0 && (
+              <div className="sidebar-quick-group">
+                <div className="sidebar-section-label" id="sidebar-group-pending">Pendientes de analizar</div>
+                <div role="list" aria-labelledby="sidebar-group-pending">
+                  {pendingRecs.map(renderItem)}
                 </div>
               </div>
-            )
-          })
-        )}
-        {!isBackendOffline && !query && recordings.length > MAX_RECENTS && (
-          <button type="button" className="sidebar-see-all" onClick={() => onNavigate('history')}>
-            Ver las {recordings.length} grabaciones en Historial
-          </button>
+            )}
+            {recentRecs.length > 0 && (
+              <div className="sidebar-quick-group">
+                <div className="sidebar-section-label" id="sidebar-group-recent">Recientes</div>
+                <div role="list" aria-labelledby="sidebar-group-recent">
+                  {recentRecs.map(renderItem)}
+                </div>
+              </div>
+            )}
+            {recordings.length > shownCount && (
+              <button type="button" className="sidebar-see-all" onClick={() => onNavigate('history')}>
+                Ver las {recordings.length} grabaciones en Historial
+              </button>
+            )}
+          </>
         )}
       </div>
     </aside>
