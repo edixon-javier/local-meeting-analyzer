@@ -147,21 +147,31 @@ export default function TranscriptPanel({
     <div className="transcript-panel">
       <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
         {/* Fila Superior: Título y Acciones Principales */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div className="panel-title">
             <Icon name="file-text" size={16} />
-            Transcripción ({segments?.length || 0} intervenciones)
+            <span className="panel-title-text" title={`Transcripción (${segments?.length || 0} intervenciones)`}>
+              Transcripción ({segments?.length || 0} intervenciones)
+            </span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button 
-              className="btn btn-secondary btn-sm" 
-              onClick={reprocess} 
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={reprocess}
               title="Volver a transcribir y analizar esta reunión"
+              aria-label="Reprocesar reunión"
             >
-              <Icon name="refresh" size={14} /> Reprocesar
+              <Icon name="refresh" size={14} /> <span className="btn-label-collapsible">Reprocesar</span>
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={onBack}>
-              <Icon name="mic" size={14} /> Nueva Reunión
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onBack}
+              title="Volver a la pantalla de grabación"
+              aria-label="Nueva reunión"
+            >
+              <Icon name="mic" size={14} /> <span className="btn-label-collapsible">Nueva Reunión</span>
             </button>
           </div>
         </div>
@@ -199,9 +209,10 @@ export default function TranscriptPanel({
                   borderColor: isAddingBookmark ? '#F59E0B' : undefined
                 }}
                 title="Marcar momento en el segundo actual del audio"
+                aria-label="Marcar momento clave"
               >
                 <Icon name="bookmark" size={13} />
-                <span>Marcar Momento</span>
+                <span className="btn-label-collapsible">Marcar Momento</span>
               </button>
             )}
           </div>
@@ -493,6 +504,16 @@ export default function TranscriptPanel({
                     key={originalIdx} 
                     id={`segment-${originalIdx}`}
                     onClick={() => handleSegmentClick(seg.start)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleSegmentClick(seg.start)
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Reproducir desde ${formatSegmentTime(seg.start)}: ${seg.speaker || 'Hablante'}`}
                     className={`chat-bubble glass ${isActivePlayback ? 'active-segment' : ''}`} 
                     style={{
                       padding: '12px 16px',
@@ -521,8 +542,9 @@ export default function TranscriptPanel({
                             onOpenRenameSpeaker?.(seg.speaker)
                           }}
                           className="speaker-badge-btn"
-                          title={`Clic para renombrar a "${seg.speaker}" en toda la reunión`}
-                          aria-label={`Renombrar hablante ${seg.speaker}`}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          title={`Clic para renombrar a "${seg.speaker || 'Hablante'}" en toda la reunión`}
+                          aria-label={`Renombrar hablante ${seg.speaker || 'sin nombre'}`}
                           style={{
                             background: 'rgba(99, 102, 241, 0.12)',
                             border: '1px solid rgba(99, 102, 241, 0.25)',
@@ -539,7 +561,7 @@ export default function TranscriptPanel({
                           }}
                         >
                           <Icon name="user" size={13} />
-                          <span>{seg.speaker}</span>
+                          <span>{seg.speaker || 'Hablante'}</span>
                           <Icon name="edit" size={11} style={{ opacity: 0.7 }} />
                         </button>
                         {segBookmarks.map((bm) => (
@@ -564,8 +586,8 @@ export default function TranscriptPanel({
                           </span>
                         ))}
                       </div>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {formatSegmentTime(seg.start)} – {formatSegmentTime(seg.end)}
                       </span>
                     </div>
                     <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, margin: 0 }}>

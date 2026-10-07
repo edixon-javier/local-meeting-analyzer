@@ -3,29 +3,31 @@ import { useSystem } from '../hooks/useSystem'
 import { useRecordings } from '../hooks/useRecordings'
 import { getRecordingMetadata } from '../api'
 import Icon from './Icon'
-import { 
-  copyExecutiveMinutes, 
-  downloadExecutiveMarkdown, 
+import Modal from './Modal'
+import {
+  copyExecutiveMinutes,
+  downloadExecutiveMarkdown,
   exportExecutivePdf,
-  formatTime 
+  formatTime
 } from '../utils/minutesExport'
 
 export default function HistoryScreen({ onNavigate }) {
   const { isBackendOffline, showToast } = useSystem()
-  const { 
-    recordings, 
-    loading, 
+  const {
+    recordings,
+    loading,
     isRefreshing,
-    loadRecordings, 
-    setDeletingFile, 
-    setRenamingFile, 
-    setNewNameInput, 
-    formatDate 
+    loadRecordings,
+    setDeletingFile,
+    setRenamingFile,
+    setNewNameInput,
+    formatDate
   } = useRecordings()
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [dateSort, setDateSort] = useState('newest') // newest | oldest
   const [exportingMeeting, setExportingMeeting] = useState(null)
+  const [loadingExportFor, setLoadingExportFor] = useState(null) // filename mientras se cargan los metadatos
 
   useEffect(() => {
     if (!isBackendOffline) {
@@ -67,7 +69,8 @@ export default function HistoryScreen({ onNavigate }) {
 
   const handleExportClick = async (e, rec) => {
     e.stopPropagation()
-    if (isBackendOffline) return
+    if (isBackendOffline || loadingExportFor) return
+    setLoadingExportFor(rec.filename)
     try {
       const res = await getRecordingMetadata(rec.path)
       if (res.data && res.data.exists !== false) {
@@ -81,6 +84,17 @@ export default function HistoryScreen({ onNavigate }) {
       }
     } catch {
       showToast?.({ type: 'error', message: 'Error cargando metadatos de la reunión' })
+    } finally {
+      setLoadingExportFor(null)
+    }
+  }
+
+  // Las tarjetas son role="button": Enter y Espacio las abren (solo si el foco está en la propia tarjeta)
+  const handleCardKeyDown = (e, rec) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleOpenDetails(rec)
     }
   }
 
@@ -88,7 +102,9 @@ export default function HistoryScreen({ onNavigate }) {
     return (
       <div className="history-screen" style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450 }}>
-          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div className="empty-state-icon" style={{ marginBottom: 16, opacity: 1 }}>
+            <Icon name="alert-triangle" size={48} style={{ color: 'var(--red-record)' }} />
+          </div>
           <div className="empty-state-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Servidor Desconectado</div>
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             El historial no se puede cargar porque el motor local de la aplicación no está disponible.
@@ -109,7 +125,7 @@ export default function HistoryScreen({ onNavigate }) {
 
   return (
     <div className="history-screen" style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-      
+
       {/* Cabecera */}
       <div style={{ marginBottom: 24, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -117,7 +133,7 @@ export default function HistoryScreen({ onNavigate }) {
             <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Historial de Reuniones</h1>
             {isRefreshing && (
               <span style={{ fontSize: 11, color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
-                <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} /> Actualizando...
+                <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} aria-hidden="true" /> Actualizando…
               </span>
             )}
           </div>
@@ -127,36 +143,27 @@ export default function HistoryScreen({ onNavigate }) {
 
       {/* Barra de Filtros e Búsqueda */}
       <div className="filters-container" style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <input 
-          type="text" 
-          placeholder="Buscar reunión por título..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: 200,
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13
-          }}
-        />
+        <div style={{ position: 'relative', flex: 1, minWidth: 200, display: 'flex' }}>
+          <Icon name="search" size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            type="search"
+            className="filter-control"
+            placeholder="Buscar reunión por título…"
+            aria-label="Buscar reunión por título"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery('') }}
+            style={{ flex: 1, paddingLeft: 36 }}
+          />
+        </div>
 
         {/* Filtro de Categoría */}
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13,
-            minWidth: 150
-          }}
+          className="filter-control input-select"
+          aria-label="Filtrar por categoría"
+          style={{ minWidth: 170 }}
         >
           {categories.map(c => (
             <option key={c} value={c}>{c === 'All' ? 'Todas las Categorías' : c}</option>
@@ -167,14 +174,8 @@ export default function HistoryScreen({ onNavigate }) {
         <select
           value={dateSort}
           onChange={(e) => setDateSort(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13
-          }}
+          className="filter-control input-select"
+          aria-label="Ordenar por fecha"
         >
           <option value="newest">Más recientes primero</option>
           <option value="oldest">Más antiguos primero</option>
@@ -188,34 +189,48 @@ export default function HistoryScreen({ onNavigate }) {
             <div className="empty-state-icon" style={{ opacity: 0.6 }}>
               <Icon name="search" size={32} />
             </div>
-            <div className="empty-state-title">No se encontraron reuniones</div>
-            <div className="empty-state-sub">Prueba con otros términos de búsqueda o filtros.</div>
+{recordings.length === 0 ? (
+              <>
+                <div className="empty-state-title">Aún no hay reuniones guardadas</div>
+                <div className="empty-state-sub">Graba una reunión o sube un archivo de audio para verla aquí.</div>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => onNavigate('record')}>
+                  <Icon name="mic" size={14} /> Nueva grabación
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="empty-state-title">No se encontraron reuniones</div>
+                <div className="empty-state-sub">Prueba con otros términos de búsqueda o filtros.</div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setSearchQuery(''); setCategoryFilter('All') }}
+                >
+                  <Icon name="x" size={13} /> Limpiar filtros
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
             {filteredRecordings.map(rec => (
-              <div 
-                key={rec.filename} 
+              <div
+                key={rec.filename}
                 className="meeting-card glass"
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir análisis de ${rec.filename.replace(/\.[^/.]+$/, '')}, ${formatDate(rec.created)}`}
                 onClick={() => handleOpenDetails(rec)}
+                onKeyDown={(e) => handleCardKeyDown(e, rec)}
                 style={{
                   padding: 20,
                   borderRadius: 'var(--radius-lg)',
                   border: '1px solid var(--border-subtle)',
                   cursor: 'pointer',
-                  transition: 'transform var(--transition-fast), border-color var(--transition-fast)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 12,
                   position: 'relative'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--accent-primary)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-subtle)'
-                  e.currentTarget.style.transform = 'translateY(0)'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
@@ -227,31 +242,39 @@ export default function HistoryScreen({ onNavigate }) {
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
                     {rec.has_metadata && (
-                      <button 
-                        onClick={(e) => handleExportClick(e, rec)} 
+                      <button
+                        type="button"
+                        onClick={(e) => handleExportClick(e, rec)}
+                        onKeyDown={(e) => e.stopPropagation()}
                         className="btn btn-secondary btn-sm"
-                        style={{ padding: '4px 8px', fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                        disabled={loadingExportFor === rec.filename}
+                        aria-busy={loadingExportFor === rec.filename || undefined}
+                        style={{ padding: '0 9px', height: 26, fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)', gap: 5, boxShadow: 'none' }}
                         title="Exportar Minuta Ejecutiva (PDF, MD, Copiar)"
                       >
-                        <Icon name="file-text" size={13} />
+                        {loadingExportFor === rec.filename
+                          ? <span className="spinner-small" style={{ width: 12, height: 12 }} aria-hidden="true" />
+                          : <Icon name="file-text" size={13} />}
                         <span>Minuta</span>
                       </button>
                     )}
-                    <button 
-                      onClick={(e) => handleRenameClick(e, rec)} 
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    <button
+                      type="button"
+                      onClick={(e) => handleRenameClick(e, rec)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
                       title="Renombrar"
-                      aria-label="Renombrar reunión"
+                      aria-label={`Renombrar ${rec.filename.replace(/\.[^/.]+$/, '')}`}
                     >
                       <Icon name="edit" size={13} />
                     </button>
-                    <button 
-                      onClick={(e) => handleDeleteClick(e, rec.filename)} 
-                      className="btn btn-secondary btn-sm" 
-                      style={{ padding: '4px 8px', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteClick(e, rec.filename)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-danger btn-square btn-sm"
                       title="Eliminar"
-                      aria-label="Eliminar reunión"
+                      aria-label={`Eliminar ${rec.filename.replace(/\.[^/.]+$/, '')}`}
                     >
                       <Icon name="trash" size={13} />
                     </button>
@@ -292,40 +315,20 @@ export default function HistoryScreen({ onNavigate }) {
 
       {/* Modal de Exportación de Minuta desde Historial */}
       {exportingMeeting && (
-        <div 
-          className="modal-overlay"
-          onClick={() => setExportingMeeting(null)}
-          style={{
-            position: 'fixed',
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(15, 23, 42, 0.82)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999
-          }}
-        >
-          <div 
-            className="glass"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 480,
-              padding: 24, borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border-subtle)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
-            }}
-          >
+        <Modal titleId="export-minutes-title" onClose={() => setExportingMeeting(null)} maxWidth={480}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="file-text" size={20} style={{ color: 'var(--accent-primary)' }} />
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                <Icon name="file-text" size={20} style={{ color: 'var(--accent-primary-hover)' }} />
+                <h3 id="export-minutes-title" className="modal-title" style={{ margin: 0 }}>
                   Minuta Ejecutiva
                 </h3>
               </div>
-              <button 
-                className="btn btn-secondary btn-sm"
+              <button
+                type="button"
+                className="btn btn-secondary btn-square btn-sm"
                 onClick={() => setExportingMeeting(null)}
-                style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                aria-label="Cerrar modal"
+                aria-label="Cerrar"
+                title="Cerrar (Esc)"
               >
                 <Icon name="x" size={14} />
               </button>
@@ -430,8 +433,7 @@ export default function HistoryScreen({ onNavigate }) {
                 <Icon name="file-text" size={15} /> Exportar / Imprimir PDF
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Plantilla oculta para impresión si se lanza PDF desde Historial */}

@@ -97,7 +97,7 @@ export default function OfflineOverlay() {
         >
           {retrying ? (
             <>
-              <span className="spinner-sm" style={{ borderLeftColor: 'transparent', width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span className="spinner-small on-accent" style={{ width: 16, height: 16 }} aria-hidden="true" />
               Reintentando conexión...
             </>
           ) : (

@@ -17,12 +17,19 @@ export default function HistoryChatScreen({ onNavigate }) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const chatContainerRef = useRef(null)
+  const inputRef = useRef(null)
 
+  // Mantener visible el último mensaje (y el indicador de "consultando")
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, isLoading])
+
+  // Devolver el foco al campo al terminar cada respuesta para encadenar preguntas con el teclado
+  useEffect(() => {
+    if (!isLoading) inputRef.current?.focus()
+  }, [isLoading])
 
   // Filtrar solo reuniones que ya están analizadas/transcritas para saber si hay información
   const transcribedRecordings = recordings.filter(r => r.has_metadata)
@@ -65,7 +72,8 @@ export default function HistoryChatScreen({ onNavigate }) {
         ...updatedMessages,
         {
           role: 'assistant',
-          content: `Error: ${errorMsg}`,
+          content: errorMsg,
+          isError: true,
           referenced_meetings: []
         }
       ])
@@ -119,12 +127,12 @@ export default function HistoryChatScreen({ onNavigate }) {
 
   return (
     <div className="history-chat-screen" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      
+
       {/* Cabecera */}
       <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            Preguntar al Historial 
+            Preguntar al Historial
             <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--accent-violet-glow)', color: 'var(--text-accent)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
               RAG Activo
             </span>
@@ -133,7 +141,7 @@ export default function HistoryChatScreen({ onNavigate }) {
             Realiza preguntas globales, cruza información y genera resúmenes consolidados de todas tus reuniones.
           </p>
         </div>
-        
+
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Icon name={systemStatus?.ai_provider === 'openai' ? 'cloud' : 'lock'} size={14} />
@@ -143,23 +151,27 @@ export default function HistoryChatScreen({ onNavigate }) {
       </div>
 
       {/* Listado de mensajes */}
-      <div 
+      <div
         ref={chatContainerRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Conversación con el historial"
         style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}
       >
         {messages.map((msg, i) => (
-          <div 
-            key={i} 
-            style={{ 
+          <div
+            key={i}
+            style={{
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: msg.role === 'user' ? '75%' : '85%',
               padding: '16px 20px',
               borderRadius: 'var(--radius-lg)',
               borderBottomRightRadius: msg.role === 'user' ? 0 : 'var(--radius-lg)',
               borderBottomLeftRadius: msg.role === 'assistant' ? 0 : 'var(--radius-lg)',
-              background: msg.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-surface)',
+              background: msg.role === 'user' ? 'var(--accent-primary)' : msg.isError ? 'rgba(248, 113, 113, 0.08)' : 'var(--bg-surface)',
               color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-              border: msg.role === 'assistant' ? '1px solid var(--border-subtle)' : 'none',
+              border: msg.role === 'assistant' ? `1px solid ${msg.isError ? 'rgba(248, 113, 113, 0.35)' : 'var(--border-subtle)'}` : 'none',
+              userSelect: 'text',
               fontSize: '13.5px',
               lineHeight: 1.6,
               whiteSpace: 'pre-wrap',
@@ -168,11 +180,12 @@ export default function HistoryChatScreen({ onNavigate }) {
             }}
           >
             {msg.role === 'assistant' && (
-              <div style={{ fontSize: '11px', color: 'var(--text-accent)', marginBottom: '6px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                Asistente AI
+              <div style={{ fontSize: '11px', color: msg.isError ? 'var(--red-record)' : 'var(--text-accent)', marginBottom: '6px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {msg.isError && <Icon name="alert-triangle" size={12} />}
+                {msg.isError ? 'No se pudo responder' : 'Asistente IA'}
               </div>
             )}
-            
+
             <div style={{ wordBreak: 'break-word' }}>
               {msg.content}
             </div>
@@ -185,31 +198,12 @@ export default function HistoryChatScreen({ onNavigate }) {
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {msg.referenced_meetings.map((ref, idx) => (
-                    <div 
+                    <button
+                      type="button"
                       key={idx}
+                      className="chat-reference"
                       onClick={() => handleReferenceClick(ref.path)}
-                      title="Haz clic para ver el análisis de esta reunión"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 12px',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border-subtle)',
-                        fontSize: '11.5px',
-                        color: 'var(--text-primary)',
-                        cursor: 'pointer',
-                        transition: 'background var(--transition-fast), border-color var(--transition-fast)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'var(--bg-hover)'
-                        e.currentTarget.style.borderColor = 'var(--accent-primary)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'var(--bg-elevated)'
-                        e.currentTarget.style.borderColor = 'var(--border-subtle)'
-                      }}
+                      title="Ver el análisis de esta reunión"
                     >
                       <Icon name="mic" size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -218,7 +212,7 @@ export default function HistoryChatScreen({ onNavigate }) {
                           {ref.category} · {formatDate(ref.created)}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -226,8 +220,8 @@ export default function HistoryChatScreen({ onNavigate }) {
           </div>
         ))}
         {isLoading && (
-          <div style={{ alignSelf: 'flex-start', padding: '16px 20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="spinner-border" style={{ width: '1rem', height: '1rem', border: '2px solid var(--text-muted)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div role="status" style={{ alignSelf: 'flex-start', padding: '16px 20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="spinner-small" aria-hidden="true" />
             <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '13px' }}>Consultando tu historial de reuniones...</span>
           </div>
         )}
@@ -236,33 +230,26 @@ export default function HistoryChatScreen({ onNavigate }) {
       {/* Formulario de entrada */}
       <div style={{ padding: '20px 32px 28px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
         <form onSubmit={handleSend} style={{ display: 'flex', gap: '12px', maxWidth: '1000px', margin: '0 auto' }}>
-          <input 
-            type="text" 
+          <input
+            ref={inputRef}
+            type="text"
+            className="chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Pregunta algo sobre las reuniones guardadas..."
+            placeholder="Pregunta algo sobre las reuniones guardadas…"
+            aria-label="Pregunta sobre tus reuniones"
             disabled={isLoading || isBackendOffline}
-            style={{ 
-              flex: 1, 
-              padding: '14px 20px', 
-              borderRadius: 'var(--radius-xl)', 
-              border: '1px solid var(--border-subtle)', 
-              background: 'var(--bg-surface)', 
-              color: 'var(--text-primary)',
-              fontSize: '13.5px',
-              outline: 'none',
-              transition: 'border-color var(--transition-fast)'
-            }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--border-subtle)'}
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading || !input.trim() || isBackendOffline}
             className="btn btn-primary"
+            aria-busy={isLoading || undefined}
             style={{ borderRadius: 'var(--radius-xl)', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', gap: '8px', fontWeight: 600 }}
           >
-            Preguntar <Icon name="send" size={15} />
+            {isLoading
+              ? <><span className="spinner-small on-accent" style={{ width: 14, height: 14 }} aria-hidden="true" /> Consultando…</>
+              : <>Preguntar <Icon name="send" size={15} /></>}
           </button>
         </form>
       </div>

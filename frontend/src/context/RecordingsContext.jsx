@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { getRecordings, deleteRecording, renameRecording } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import { RecordingsContext } from './recordingsContextDef'
+import Modal from '../components/Modal'
+import Icon from '../components/Icon'
 
 export function RecordingsProvider({ children }) {
   const { showToast, isBackendOffline, isStartupComplete } = useSystem()
@@ -14,6 +16,7 @@ export function RecordingsProvider({ children }) {
   const [deletingFile, setDeletingFile] = useState(null) // filename
   const [renamingFile, setRenamingFile] = useState(null) // { filename }
   const [newNameInput, setNewNameInput] = useState('')
+  const [modalBusy, setModalBusy] = useState(false)
 
   const recordingsRef = useRef(recordings)
   recordingsRef.current = recordings
@@ -44,7 +47,8 @@ export function RecordingsProvider({ children }) {
   }, [isBackendOffline])
 
   const confirmDelete = async () => {
-    if (!deletingFile) return
+    if (!deletingFile || modalBusy) return
+    setModalBusy(true)
     try {
       await deleteRecording(deletingFile)
       showToast({ type: 'success', message: 'Grabación eliminada correctamente' })
@@ -52,11 +56,14 @@ export function RecordingsProvider({ children }) {
       loadRecordings()
     } catch {
       showToast({ type: 'error', message: 'Error al eliminar la grabación' })
+    } finally {
+      setModalBusy(false)
     }
   }
 
   const confirmRename = async () => {
-    if (!renamingFile || !newNameInput.trim()) return
+    if (!renamingFile || !newNameInput.trim() || modalBusy) return
+    setModalBusy(true)
     try {
       await renameRecording(renamingFile.filename, newNameInput.trim())
       showToast({ type: 'success', message: 'Grabación renombrada correctamente' })
@@ -66,6 +73,8 @@ export function RecordingsProvider({ children }) {
     } catch (err) {
       const msg = err.response?.data?.detail || 'Error al renombrar la grabación'
       showToast({ type: 'error', message: msg })
+    } finally {
+      setModalBusy(false)
     }
   }
 
@@ -111,56 +120,79 @@ export function RecordingsProvider({ children }) {
 
       {/* Modal de Eliminación Centralizado */}
       {deletingFile && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-        }}>
-          <div className="glass" style={{ padding: 24, borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 400, border: '1px solid var(--border-subtle)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>¿Eliminar grabación?</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Esta acción eliminará de forma permanente <strong>{deletingFile}</strong>. No se puede deshacer.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="btn btn-secondary" onClick={() => setDeletingFile(null)}>Cancelar</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-record)', borderColor: 'var(--red-record)' }} onClick={confirmDelete}>Eliminar</button>
-            </div>
+        <Modal
+          titleId="delete-recording-title"
+          describedBy="delete-recording-desc"
+          onClose={() => setDeletingFile(null)}
+          dismissible={!modalBusy}
+          maxWidth={400}
+        >
+          <h3 id="delete-recording-title" className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Icon name="trash" size={18} style={{ color: 'var(--red-record)' }} />
+            ¿Eliminar grabación?
+          </h3>
+          <p id="delete-recording-desc" className="modal-text">
+            Esta acción eliminará de forma permanente <strong>{deletingFile}</strong> y su análisis. No se puede deshacer.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setDeletingFile(null)} disabled={modalBusy}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-danger-solid" onClick={confirmDelete} disabled={modalBusy} aria-busy={modalBusy || undefined}>
+              {modalBusy ? <><span className="spinner-small on-accent" style={{ width: 13, height: 13 }} aria-hidden="true" /> Eliminando…</> : 'Eliminar'}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Modal de Renombrado Centralizado */}
-      {renamingFile && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-        }}>
-          <div className="glass" style={{ padding: 24, borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 400, border: '1px solid var(--border-subtle)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Renombrar grabación</h3>
-            <input 
-              type="text" 
-              value={newNameInput}
-              onChange={(e) => setNewNameInput(e.target.value)}
-              placeholder="Ej: Reunion_Diaria"
-              autoFocus
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-primary)',
-                fontSize: 14,
-                marginBottom: 24,
-                marginTop: 12
+      {renamingFile && (() => {
+        const currentName = renamingFile.filename.replace(/.[^/.]+$/, '')
+        const trimmed = newNameInput.trim()
+        const canSave = Boolean(trimmed) && trimmed !== currentName && !modalBusy
+        return (
+          <Modal
+            titleId="rename-recording-title"
+            onClose={() => setRenamingFile(null)}
+            dismissible={!modalBusy}
+            maxWidth={400}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (canSave) confirmRename()
               }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="btn btn-secondary" onClick={() => setRenamingFile(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmRename}>Guardar</button>
-            </div>
-          </div>
-        </div>
-      )}
+            >
+              <h3 id="rename-recording-title" className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Icon name="edit" size={18} style={{ color: 'var(--accent-primary-hover)' }} />
+                Renombrar grabación
+              </h3>
+              <label htmlFor="rename-recording-input" className="sr-only">Nuevo nombre</label>
+              <input
+                id="rename-recording-input"
+                type="text"
+                className="modal-input"
+                value={newNameInput}
+                onChange={(e) => setNewNameInput(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                placeholder="Ej: Reunion_Diaria"
+                autoFocus
+                disabled={modalBusy}
+                style={{ marginTop: 12 }}
+              />
+              <span className="form-hint">Pulsa Enter para guardar o Esc para cancelar.</span>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setRenamingFile(null)} disabled={modalBusy}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={!canSave} aria-busy={modalBusy || undefined}>
+                  {modalBusy ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )
+      })()}
     </RecordingsContext.Provider>
   )
 }

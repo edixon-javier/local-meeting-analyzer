@@ -224,7 +224,7 @@ export async function copyExecutiveMinutes(data, showToast) {
     }
     showToast?.({ 
       type: 'success', 
-      message: '📋 Minuta copiada al portapapeles (lista para Slack/Email)' 
+      message: 'Minuta copiada al portapapeles (lista para Slack/Email)' 
     })
     return true
   } catch (err) {
@@ -232,7 +232,7 @@ export async function copyExecutiveMinutes(data, showToast) {
       await navigator.clipboard.writeText(md)
       showToast?.({ 
         type: 'success', 
-        message: '📋 Minuta en Markdown copiada al portapapeles' 
+        message: 'Minuta en Markdown copiada al portapapeles' 
       })
       return true
     } catch (fallbackErr) {
@@ -258,7 +258,7 @@ export function downloadExecutiveMarkdown(data, filename, showToast) {
     a.href = url
     a.click()
     URL.revokeObjectURL(url)
-    showToast?.({ type: 'success', message: '📥 Archivo Markdown (.md) descargado' })
+    showToast?.({ type: 'success', message: 'Archivo Markdown (.md) descargado' })
     return true
   } catch (err) {
     showToast?.({ type: 'error', message: 'Error al descargar Markdown: ' + err.message })
@@ -276,7 +276,7 @@ export async function exportExecutivePdf(data, filename, showToast) {
     try {
       const success = await window.electronAPI.exportPDF(defaultFilename)
       if (success) {
-        showToast?.({ type: 'success', message: '📥 PDF exportado correctamente' })
+        showToast?.({ type: 'success', message: 'PDF exportado correctamente' })
         return true
       } else {
         showToast?.({ type: 'info', message: 'Exportación a PDF cancelada' })
@@ -291,7 +291,7 @@ export async function exportExecutivePdf(data, filename, showToast) {
     try {
       showToast?.({ 
         type: 'info', 
-        message: '🖨️ Abriendo diálogo de impresión (selecciona "Guardar como PDF")' 
+        message: 'Abriendo diálogo de impresión: elige «Guardar como PDF»' 
       })
       setTimeout(() => {
         window.print()

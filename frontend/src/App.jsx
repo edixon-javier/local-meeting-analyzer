@@ -92,6 +92,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
       {/* Sidebar de navegación */}
       <Sidebar
         currentView={view}
+        currentAudioPath={audioPath}
         onNavigate={handleNavigate}
       />
 
@@ -112,7 +113,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
 
         {view === 'analysis' && !audioPath && (
           <div className="empty-state" style={{ flex: 1 }}>
-            <img src={logoImg} alt="Empty" className="empty-state-icon" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', opacity: 0.6 }} />
+            <img src={logoImg} alt="" className="empty-state-icon" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', opacity: 0.6 }} />
             <div className="empty-state-title">Sin grabación</div>
             <div className="empty-state-sub">Primero graba una reunión para poder analizarla.</div>
             <button className="btn btn-primary" onClick={() => setView('record')}>

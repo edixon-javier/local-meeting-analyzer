@@ -26,7 +26,6 @@ const SECTION_STYLE = {
 }
 const SECTION_TITLE_STYLE = { fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }
 const LABEL_STYLE = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }
-const HINT_STYLE = { fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }
 const TEXT_INPUT_STYLE = { width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }
 
 const LEGAL_DOCS = [
@@ -43,7 +42,7 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false)
   const [devices, setDevices] = useState([])
   const [ollamaModels, setOllamaModels] = useState(FALLBACK_OLLAMA_MODELS)
-  
+
   // Estados de configuración
   const [recordMode, setRecordMode] = useState('both')
   const [micDeviceId, setMicDeviceId] = useState('default')
@@ -340,37 +339,38 @@ export default function SettingsScreen() {
         placeholder={hasApiKey ? 'Escribe una nueva clave para reemplazar la guardada' : 'sk-...'}
         style={TEXT_INPUT_STYLE}
       />
-      <span style={HINT_STYLE}>
+      <span className="form-hint">
         La clave se guarda solo en este equipo y nunca se vuelve a mostrar completa. Si dejas el campo vacío se conserva la guardada.
       </span>
     </div>
   )
 
   return (
-    <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
+    <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px 0', overflowY: 'auto' }}>
       <div style={{ marginBottom: 24, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Configuración del Sistema</h1>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Ajusta los motores de IA y hardware para el procesamiento 100% local.</p>
       </div>
 
-      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 650 }}>
-        
+      <form id="settings-form" onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 650 }}>
+
         {/* Modo de Grabación */}
         <div className="form-group">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+          <label htmlFor="record-mode-select" style={LABEL_STYLE}>
             <Icon name="mic" size={16} /> Modo de Grabación de Audio
           </label>
-          <select 
-            value={recordMode} 
+          <select
+            id="record-mode-select"
+            value={recordMode}
             onChange={(e) => setRecordMode(e.target.value)}
             className="input-select"
-            style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+            style={TEXT_INPUT_STYLE}
           >
             <option value="both">Sistema + Micrófono (Recomendado para reuniones)</option>
             <option value="system">Solo Audio del Sistema (Loopback)</option>
             <option value="mic">Solo Micrófono (Físico)</option>
           </select>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+          <span className="form-hint">
             {recordMode === 'both' ? 'Graba lo que escuchas y lo que dices al mismo tiempo. Se mezclará automáticamente.' : ''}
             {recordMode === 'system' ? 'Graba solo el sonido de la PC. Ideal para videos, podcasts o si no vas a hablar.' : ''}
             {recordMode === 'mic' ? 'Graba solo tu micrófono. Ideal para notas de voz o dictado.' : ''}
@@ -380,14 +380,15 @@ export default function SettingsScreen() {
         {/* Micrófono Físico (Solo visible si el modo usa micrófono) */}
         {(recordMode === 'both' || recordMode === 'mic') && (
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            <label htmlFor="mic-device-select" style={LABEL_STYLE}>
               <Icon name="mic" size={16} /> Selección de Micrófono
             </label>
-            <select 
-              value={micDeviceId} 
+            <select
+              id="mic-device-select"
+            value={micDeviceId}
               onChange={(e) => setMicDeviceId(e.target.value)}
               className="input-select"
-              style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+              style={TEXT_INPUT_STYLE}
             >
               <option value="default">Micrófono por Defecto de Windows</option>
               {devices.filter(d => d.id !== 'loopback').map(d => (
@@ -398,16 +399,16 @@ export default function SettingsScreen() {
         )}
 
         {/* Panel de Prueba de Audio */}
-        <div className="form-group" style={{ 
-          padding: '20px', 
-          background: 'var(--bg-surface)', 
-          border: '1px solid var(--border-subtle)', 
+        <div className="form-group" style={{
+          padding: '20px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-lg)',
           marginTop: 12
         }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 8 }}>
             <Icon name="volume" size={17} /> Probar Micrófono y Sonido
-          </h3>
+          </h2>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
             Valida los niveles de audio en tiempo real y asegúrate de que la grabación de voz y del sistema funcionen correctamente.
           </p>
@@ -422,11 +423,11 @@ export default function SettingsScreen() {
                     {micLevel}%
                   </span>
                 </div>
-                <div style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${micLevel}%`, 
-                    background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-violet) 100%)', 
+                <div role="meter" aria-label="Volumen del micrófono" aria-valuemin={0} aria-valuemax={100} aria-valuenow={micLevel} style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${micLevel}%`,
+                    background: 'linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-violet) 100%)',
                     borderRadius: 'var(--radius-full)',
                     transition: 'width 80ms ease'
                   }} />
@@ -443,11 +444,11 @@ export default function SettingsScreen() {
                     {sysLevel}%
                   </span>
                 </div>
-                <div style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${sysLevel}%`, 
-                    background: 'linear-gradient(90deg, #10B981 0%, var(--accent-primary) 100%)', 
+                <div role="meter" aria-label="Volumen del audio del sistema" aria-valuemin={0} aria-valuemax={100} aria-valuenow={sysLevel} style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${sysLevel}%`,
+                    background: 'linear-gradient(90deg, #10B981 0%, var(--accent-primary) 100%)',
                     borderRadius: 'var(--radius-full)',
                     transition: 'width 80ms ease'
                   }} />
@@ -463,7 +464,7 @@ export default function SettingsScreen() {
                 onClick={handleStartTest}
                 disabled={isBackendOffline}
                 className="btn btn-secondary"
-                style={{ 
+                style={{
                   padding: '8px 16px',
                   fontSize: 13,
                   fontWeight: 600
@@ -476,7 +477,7 @@ export default function SettingsScreen() {
                 type="button"
                 onClick={handleStopTest}
                 className="btn btn-primary pulse-animation"
-                style={{ 
+                style={{
                   background: 'var(--red-record)',
                   border: '1px solid transparent',
                   boxShadow: '0 0 12px var(--red-glow)',
@@ -491,13 +492,13 @@ export default function SettingsScreen() {
 
             {/* Reproductor si hay audio grabado */}
             {testAudioPath && !testing && (
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12, 
-                padding: '4px 12px', 
-                background: 'var(--bg-elevated)', 
-                border: '1px solid var(--border-subtle)', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '4px 12px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-md)',
                 flex: 1,
                 minWidth: 260
@@ -505,16 +506,16 @@ export default function SettingsScreen() {
                 <span style={{ fontSize: 12, color: 'var(--text-accent)', whiteSpace: 'nowrap', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <Icon name="volume" size={14} /> Escuchar:
                 </span>
-                <audio 
-                  src={`${getAudioUrl(testAudioPath)}&t=${testAudioTimestamp}`} 
-                  controls  
-                  style={{ 
-                    height: 28, 
+                <audio
+                  src={`${getAudioUrl(testAudioPath)}&t=${testAudioTimestamp}`}
+                  controls
+                  style={{
+                    height: 28,
                     outline: 'none',
                     borderRadius: 'var(--radius-sm)',
                     flex: 1,
                     maxWidth: '100%'
-                  }} 
+                  }}
                 />
               </div>
             )}
@@ -528,14 +529,15 @@ export default function SettingsScreen() {
 
         {/* Modelo Whisper */}
         <div className="form-group" style={{ opacity: aiProvider === 'openai' ? 0.5 : 1, pointerEvents: aiProvider === 'openai' ? 'none' : 'auto' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+          <label htmlFor="whisper-model-select" style={LABEL_STYLE}>
             <Icon name="file-text" size={16} /> Modelo de Transcripción (Local)
           </label>
-          <select 
-            value={whisperModel} 
+          <select
+            id="whisper-model-select"
+            value={whisperModel}
             onChange={(e) => setWhisperModel(e.target.value)}
             className="input-select"
-            style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+            style={TEXT_INPUT_STYLE}
           >
             <option value="tiny">Tiny (Muy rápido - ~75MB)</option>
             <option value="base">Base (Rápido - ~140MB)</option>
@@ -543,31 +545,32 @@ export default function SettingsScreen() {
             <option value="medium">Medium (Preciso, requiere GPU/RAM - ~1.5GB)</option>
             <option value="large">Large (Máxima precisión - ~3.0GB)</option>
           </select>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
-            {aiProvider === 'openai' 
-              ? 'Se utilizará el modelo Whisper-1 en la nube (la selección local será ignorada).' 
+          <span className="form-hint">
+            {aiProvider === 'openai'
+              ? 'Se utilizará el modelo Whisper-1 en la nube (la selección local será ignorada).'
               : 'Nota: Al cambiar el modelo, la primera transcripción puede tardar más mientras se descarga.'}
           </span>
         </div>
 
         {/* Proveedor de IA */}
         <div className="form-group">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+          <label htmlFor="ai-provider-select" style={LABEL_STYLE}>
             <Icon name="cloud" size={16} /> Proveedor de Inteligencia Artificial (Transcripción y Análisis)
           </label>
-          <select 
-            value={aiProvider} 
+          <select
+            id="ai-provider-select"
+            value={aiProvider}
             onChange={(e) => {
               setAiProvider(e.target.value)
               setAiTestResult(null)
             }}
             className="input-select"
-            style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+            style={TEXT_INPUT_STYLE}
           >
             <option value="local">Ollama & Whisper (100% Local y Privado)</option>
             <option value="openai">OpenAI (Procesamiento en la Nube ultra rápido)</option>
           </select>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+          <span className="form-hint">
             Al usar OpenAI, <strong>tanto el audio como el texto</strong> se enviarán a la nube. La transcripción y el análisis serán casi instantáneos (sin sobrecargar tu PC).
           </span>
         </div>
@@ -576,17 +579,18 @@ export default function SettingsScreen() {
         {aiProvider === 'local' ? (
           <div className="form-group" style={{ padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+              <label htmlFor="ollama-model-select" style={LABEL_STYLE}>
                 <Icon name="lock" size={16} /> Modelo de Análisis (Ollama LLM)
               </label>
-              <select 
-                value={ollamaModel} 
+              <select
+                id="ollama-model-select"
+            value={ollamaModel}
                 onChange={(e) => {
                   setOllamaModel(e.target.value)
                   setAiTestResult(null)
                 }}
                 className="input-select"
-                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+                style={TEXT_INPUT_STYLE}
               >
                 {ollamaModels.map(m => (
                   <option key={m} value={m}>{m}</option>
@@ -595,7 +599,7 @@ export default function SettingsScreen() {
                   <option value={ollamaModel}>{ollamaModel} (Personalizado)</option>
                 )}
               </select>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+              <span className="form-hint">
                 Detectados desde tu servidor local de Ollama. Asegúrate de haber ejecutado 'ollama run &lt;modelo&gt;' en tu terminal previamente.
               </span>
             </div>
@@ -610,10 +614,10 @@ export default function SettingsScreen() {
                   className="btn btn-secondary"
                   style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
                 >
-                  <Icon 
-                    name={testingAi ? 'refresh' : 'zap'} 
-                    size={14} 
-                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--yellow-warn)' }} 
+                  <Icon
+                    name={testingAi ? 'refresh' : 'zap'}
+                    size={14}
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite', color: 'var(--text-accent)' } : { color: 'var(--yellow-warn)' }}
                   />
                   {testingAi ? 'Comprobando Ollama...' : 'Probar Conexión Ollama'}
                 </button>
@@ -641,6 +645,7 @@ export default function SettingsScreen() {
 
               {aiTestResult && aiTestResult.provider === 'local' && (
                 <div
+                  role="status"
                   style={{
                     padding: '8px 12px',
                     borderRadius: 'var(--radius-md)',
@@ -660,17 +665,18 @@ export default function SettingsScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             {apiKeyField}
             <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+              <label htmlFor="openai-model-select" style={LABEL_STYLE}>
                 <Icon name="cloud" size={16} /> Modelo OpenAI
               </label>
-              <select 
-                value={openaiModel} 
+              <select
+                id="openai-model-select"
+            value={openaiModel}
                 onChange={(e) => {
                   setOpenaiModel(e.target.value)
                   setAiTestResult(null)
                 }}
                 className="input-select"
-                style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+                style={TEXT_INPUT_STYLE}
               >
                 <option value="gpt-4o-mini">GPT-4o-Mini (Rápido, Barato)</option>
                 <option value="gpt-4o">GPT-4o (Máxima Precisión)</option>
@@ -688,10 +694,10 @@ export default function SettingsScreen() {
                   className="btn btn-secondary"
                   style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
                 >
-                  <Icon 
-                    name={testingAi ? 'refresh' : 'zap'} 
-                    size={14} 
-                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--accent-primary)' }} 
+                  <Icon
+                    name={testingAi ? 'refresh' : 'zap'}
+                    size={14}
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--accent-primary)' }}
                   />
                   {testingAi ? 'Verificando OpenAI...' : 'Probar Conexión OpenAI'}
                 </button>
@@ -719,6 +725,7 @@ export default function SettingsScreen() {
 
               {aiTestResult && aiTestResult.provider === 'openai' && (
                 <div
+                  role="status"
                   style={{
                     padding: '8px 12px',
                     borderRadius: 'var(--radius-md)',
@@ -738,10 +745,10 @@ export default function SettingsScreen() {
 
         {/* Diarización de Hablantes */}
         <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             id="diarize-chk"
-            checked={diarize} 
+            checked={diarize}
             onChange={(e) => setDiarize(e.target.checked)}
             style={{ width: 18, height: 18, cursor: 'pointer' }}
           />
@@ -757,17 +764,18 @@ export default function SettingsScreen() {
 
         {/* Prompts Personalizados (Enfoque de Análisis) */}
         <div className="form-group">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+          <label htmlFor="analysis-focus-input" style={LABEL_STYLE}>
             <Icon name="target" size={16} /> Enfoque de Análisis Personalizado (Prompt)
           </label>
           <textarea
+            id="analysis-focus-input"
             value={analysisFocus}
             onChange={(e) => setAnalysisFocus(e.target.value)}
             placeholder="Ej: 'Concéntrate solo en los aspectos técnicos y fechas límite' o 'Extrae los puntos donde haya desacuerdos entre el equipo'..."
             rows={4}
-            style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', resize: 'vertical', fontSize: 13, fontFamily: 'inherit' }}
+            style={{ ...TEXT_INPUT_STYLE, padding: '12px', resize: 'vertical', fontSize: 13, lineHeight: 1.5, minHeight: 96 }}
           />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+          <span className="form-hint">
             Instrucciones adicionales que se inyectarán en la IA para guiar cómo extrae los insights de tus reuniones.
           </span>
         </div>
@@ -809,10 +817,10 @@ export default function SettingsScreen() {
                 </span>
               </span>
               {aiProvider === 'openai' && (
-                <span style={HINT_STYLE}>No aplica: ya usas OpenAI como proveedor principal.</span>
+                <span className="form-hint">No aplica: ya usas OpenAI como proveedor principal.</span>
               )}
               {aiProvider !== 'openai' && allowCloudFallback && !hasApiKey && !openaiApiKey.trim() && (
-                <span style={HINT_STYLE}>Añade una clave de API abajo para que el respaldo funcione.</span>
+                <span className="form-hint">Añade una clave de API abajo para que el respaldo funcione.</span>
               )}
             </div>
           </div>
@@ -820,21 +828,26 @@ export default function SettingsScreen() {
           {/* Con proveedor OpenAI la clave se gestiona en su propio bloque (arriba) */}
           {aiProvider !== 'openai' && apiKeyField}
         </section>
-
-        {/* Acciones */}
-        <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
-          <button 
-            type="submit" 
-            disabled={saving}
-            className="btn btn-primary"
-            style={{ padding: '10px 20px', minWidth: 150 }}
-          >
-            <Icon name="save" size={16} /> {saving ? 'Guardando...' : 'Guardar Ajustes'}
-          </button>
-        </div>
       </form>
 
-      <div style={{ maxWidth: 650, marginTop: 32 }}>
+      {/* Acciones: fijas al pie mientras se recorre el formulario (fuera del <form> para ocupar todo el ancho) */}
+      <div className="settings-actions">
+          <button
+            type="submit"
+            form="settings-form"
+            disabled={saving}
+            aria-busy={saving || undefined}
+            className="btn btn-primary"
+            style={{ padding: '10px 20px', minWidth: 160 }}
+          >
+            {saving
+              ? <><span className="spinner-small on-accent" style={{ width: 14, height: 14 }} aria-hidden="true" /> Guardando…</>
+              : <><Icon name="save" size={16} /> Guardar ajustes</>}
+          </button>
+          <span className="settings-actions-hint">Los cambios se aplican al guardar.</span>
+      </div>
+
+      <div style={{ maxWidth: 650, marginTop: 8, paddingBottom: 32 }}>
         <HelpAndLegal />
       </div>
     </div>

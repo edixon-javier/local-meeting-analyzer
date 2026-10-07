@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useSystem } from '../hooks/useSystem'
 import { useAnalysisPipeline } from '../hooks/useAnalysisPipeline'
 import { renameSpeaker, addRecordingBookmark, deleteRecordingBookmark, updateRecordingTaskStatus } from '../api'
-import { 
-  copyExecutiveMinutes, 
-  downloadExecutiveMarkdown, 
-  exportExecutivePdf 
+import {
+  copyExecutiveMinutes,
+  downloadExecutiveMarkdown,
+  exportExecutivePdf
 } from '../utils/minutesExport'
 import TranscriptPanel from './analysis/TranscriptPanel'
 import InsightsPanel from './analysis/InsightsPanel'
@@ -15,18 +15,18 @@ import Icon from './Icon'
 
 export default function AnalysisScreen({ audioPath, onBack }) {
   const { showToast, systemStatus } = useSystem()
-  
-  const { 
-    step, 
-    transcript, 
-    segments, 
-    analysis, 
+
+  const {
+    step,
+    transcript,
+    segments,
+    analysis,
     bookmarks,
     setBookmarks,
-    errorMsg, 
-    elapsedSeconds, 
-    progressPercent, 
-    cancelPipeline, 
+    errorMsg,
+    elapsedSeconds,
+    progressPercent,
+    cancelPipeline,
     reprocess,
     updateSpeakerInState,
     updateTaskInState
@@ -36,7 +36,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1)
   const audioRef = useRef(null)
-  
+
   const [activeTab, setActiveTab] = useState('insights') // insights | chat
 
   const formatSegmentTime = (seconds) => {
@@ -210,7 +210,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
             <span className="processing-meeting-title">{meetingFilename}</span>
           </div>
           <div style={{ margin: '24px 0 16px', display: 'flex', justifyContent: 'center' }}>
-            <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} />
+            <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} aria-hidden="true" />
           </div>
           <h2 className="unified-processing-title" style={{ fontSize: 18 }}>Preparando reunión...</h2>
           <p className="unified-processing-sub" style={{ fontSize: 13, marginBottom: 8 }}>
@@ -376,7 +376,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   // ── Vista completa de análisis ──
   return (
     <div className="analysis-screen">
-      <TranscriptPanel 
+      <TranscriptPanel
         audioPath={audioPath}
         transcript={transcript}
         segments={segments}
@@ -398,15 +398,25 @@ export default function AnalysisScreen({ audioPath, onBack }) {
 
       <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="tabs" style={{ display: 'flex', gap: '8px' }}>
-            <button 
+          <div className="tabs" role="tablist" aria-label="Vista del panel" style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              role="tab"
+              id="insights-tab"
+              aria-selected={activeTab === 'insights'}
+              aria-controls="insights-tabpanel"
               className={`btn btn-sm ${activeTab === 'insights' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('insights')}
               style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
               <Icon name="file-text" size={14} /> Resumen
             </button>
-            <button 
+            <button
+              type="button"
+              role="tab"
+              id="chat-tab"
+              aria-selected={activeTab === 'chat'}
+              aria-controls="insights-tabpanel"
               className={`btn btn-sm ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('chat')}
               style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
@@ -414,43 +424,52 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               <Icon name="chat" size={14} /> Chat IA
             </button>
           </div>
-          
+
           {activeTab === 'insights' && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button 
-                onClick={handleCopyMinutes} 
-                className="btn btn-secondary btn-sm" 
-                title="Copiar Minuta Ejecutiva (lista para Slack/Email en Markdown y formato enriquecido)"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+            <div style={{ display: 'flex', gap: 6 }} role="group" aria-label="Exportar minuta">
+              <button
+                type="button"
+                onClick={handleCopyMinutes}
+                className="btn btn-secondary btn-square"
+                title="Copiar minuta (lista para Slack / Email)"
+                aria-label="Copiar minuta al portapapeles"
               >
-                <Icon name="copy" size={14} /> Copiar Minuta
+                <Icon name="copy" size={14} />
               </button>
-              <button 
-                onClick={handleDownloadMarkdown} 
-                className="btn btn-secondary btn-sm" 
-                title="Descargar archivo Markdown (.md) estructurado"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+              <button
+                type="button"
+                onClick={handleDownloadMarkdown}
+                className="btn btn-secondary btn-square"
+                title="Descargar minuta en Markdown (.md)"
+                aria-label="Descargar minuta en Markdown"
               >
-                <Icon name="download" size={14} /> Descargar MD
+                <Icon name="download" size={14} />
               </button>
-              <button 
-                onClick={handleExportPDF} 
-                className="btn btn-secondary btn-sm" 
-                title="Generar y guardar Minuta Ejecutiva en PDF"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+              <button
+                type="button"
+                onClick={handleExportPDF}
+                className="btn btn-secondary btn-square"
+                title="Exportar minuta en PDF"
+                aria-label="Exportar minuta en PDF"
               >
-                <Icon name="file-text" size={14} /> PDF
+                <Icon name="file-text" size={14} />
               </button>
             </div>
           )}
         </div>
-        
-        <div className="panel-body" style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        <div
+          className="panel-body"
+          id="insights-tabpanel"
+          role="tabpanel"
+          aria-labelledby={activeTab === 'chat' ? 'chat-tab' : 'insights-tab'}
+          style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        >
           {activeTab === 'chat' ? (
             <ChatPanel audioPath={audioPath} />
           ) : (
-            <InsightsPanel 
-              analysis={analysis} 
+            <InsightsPanel
+              analysis={analysis}
               bookmarks={bookmarks}
               onSeekAudio={handleSegmentClick}
               onToggleTask={handleToggleTaskStatus}

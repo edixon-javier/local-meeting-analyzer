@@ -200,8 +200,15 @@ export default function RecordScreen({ onRecordingDone }) {
     setIsDragging(true)
   }
 
-  const handleDragLeave = () => {
+  const handleDragLeave = (e) => {
+    // Ignorar el dragleave que se produce al pasar sobre elementos hijos (evita parpadeo)
+    if (e.currentTarget.contains(e.relatedTarget)) return
     setIsDragging(false)
+  }
+
+  const openFilePicker = () => {
+    if (isBackendOffline || isUploading) return
+    fileInputRef.current?.click()
   }
 
   const handleDrop = (e) => {
@@ -217,6 +224,8 @@ export default function RecordScreen({ onRecordingDone }) {
   const handleFileChange = (e) => {
     if (isBackendOffline || isUploading) return
     const file = e.target.files[0]
+    // Permite volver a elegir el mismo archivo (p. ej. tras un error)
+    e.target.value = ''
     if (file) {
       handleUpload(file)
     }
@@ -235,7 +244,7 @@ export default function RecordScreen({ onRecordingDone }) {
 
     setIsUploading(true)
     setUploadProgress(0)
-    showToast({ type: 'info', message: 'Subiendo archivo de audio...' })
+    showToast({ type: 'info', message: 'Subiendo archivo de audio…' })
 
     try {
       const res = await uploadAudioFile(file, (progressEvent) => {
@@ -243,7 +252,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setUploadProgress(percent)
       })
 
-      showToast({ type: 'success', message: '✅ Archivo subido con éxito. Iniciando análisis...' })
+      showToast({ type: 'success', message: 'Archivo subido. Iniciando análisis…' })
       setIsUploading(false)
       onRecordingDone(res.data.path)
     } catch (err) {
@@ -473,7 +482,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setIsPaused(true)
         await pauseRecording()
         setStreamStatus('paused')
-        showToast({ type: 'info', message: '⏸️ Grabación pausada' })
+        showToast({ type: 'info', message: 'Grabación pausada' })
       } catch {
         setIsPaused(false)
         showToast({ type: 'error', message: 'Error al pausar la grabación' })
@@ -501,11 +510,14 @@ export default function RecordScreen({ onRecordingDone }) {
             Presiona el botón para iniciar la captura de audio y análisis automático con IA.
           </p>
           <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)' }}>
-              <input 
-                type="checkbox" 
-                checked={isLiveTranscriptionEnabled} 
-                onChange={(e) => handleToggleLiveTranscription(e.target.checked)} 
+            <label className="switch-field">
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={isLiveTranscriptionEnabled}
+                aria-checked={isLiveTranscriptionEnabled}
+                onChange={(e) => handleToggleLiveTranscription(e.target.checked)}
               />
               Transcripción en tiempo real
             </label>
@@ -518,8 +530,8 @@ export default function RecordScreen({ onRecordingDone }) {
         <div className="record-studio" role="region" aria-label="Estudio de Grabación Activa">
           {/* Overlay de Finalización Suave */}
           {isFinalizing && (
-            <div className="studio-finalizing-overlay">
-              <div className="spinner-small" style={{ width: 36, height: 36, borderWidth: 3 }} />
+            <div className="studio-finalizing-overlay" role="status" aria-live="polite">
+              <div className="spinner-small" style={{ width: 36, height: 36, borderWidth: 3 }} aria-hidden="true" />
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginTop: 8 }}>
                 Finalizando reunión...
               </div>
@@ -589,7 +601,7 @@ export default function RecordScreen({ onRecordingDone }) {
               >
                 {isFinalizing ? (
                   <>
-                    <div className="spinner-small" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    <div className="spinner-small on-accent" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
                     <span>Finalizando...</span>
                   </>
                 ) : (
@@ -747,7 +759,8 @@ export default function RecordScreen({ onRecordingDone }) {
                     ref={noteInputRef}
                     type="text"
                     className="bookmark-text-input"
-                    placeholder="Nota rápida (Enter para guardar)..."
+                    placeholder="Nota rápida (Enter para guardar)…"
+                    aria-label="Nota del momento clave"
                     value={bookmarkNote}
                     onChange={(e) => setBookmarkNote(e.target.value)}
                     onKeyDown={(e) => {
@@ -837,19 +850,20 @@ export default function RecordScreen({ onRecordingDone }) {
             className="record-btn"
             onClick={handleStartStop}
             disabled={isBackendOffline || isPreparing}
+            aria-busy={isPreparing || undefined}
             style={{
-              cursor: isBackendOffline || isPreparing ? 'not-allowed' : 'pointer',
-              opacity: isBackendOffline || isPreparing ? 0.5 : 1,
+              cursor: isBackendOffline ? 'not-allowed' : isPreparing ? 'progress' : 'pointer',
+              opacity: isBackendOffline ? 0.5 : 1,
               filter: isBackendOffline ? 'grayscale(1)' : 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
             aria-label={isPreparing ? 'Iniciando grabación...' : 'Iniciar grabación'}
-            title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación'}
+            title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación (Ctrl+Shift+R)'}
           >
             {isPreparing ? (
-              <div className="spinner-small" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff', width: 24, height: 24, borderWidth: 3 }}></div>
+              <div className="spinner-small on-accent" style={{ width: 26, height: 26, borderWidth: 3 }}></div>
             ) : (
               <span className="btn-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="mic" size={32} />
@@ -882,36 +896,56 @@ export default function RecordScreen({ onRecordingDone }) {
 
             <div
               className={`upload-dropzone ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''} ${isBackendOffline ? 'disabled' : ''}`}
+              role="button"
+              tabIndex={isBackendOffline || isUploading ? -1 : 0}
+              aria-disabled={isBackendOffline || isUploading || undefined}
+              aria-busy={isUploading || undefined}
+              aria-label="Subir un archivo de audio para analizarlo (WAV, MP3, M4A, MP4, OGG, AAC o FLAC)"
+              title={isBackendOffline ? 'Sin conexión al backend' : undefined}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => !isBackendOffline && !isUploading && fileInputRef.current?.click()}
+              onClick={openFilePicker}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  openFilePicker()
+                }
+              }}
             >
               <input
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 accept=".wav,.mp3,.m4a,.mp4,.ogg,.aac,.flac,audio/*"
+                tabIndex={-1}
                 style={{ display: 'none' }}
               />
 
               {isUploading ? (
-                <div className="upload-progress-box">
-                  <div className="spinner-small" />
-                  <div className="upload-progress-text">Subiendo audio... {uploadProgress}%</div>
-                  <div className="upload-progress-bar">
+                <div className="upload-progress-box" aria-live="polite">
+                  <div className="spinner-small" style={{ width: 22, height: 22 }} />
+                  <div className="upload-progress-text">Subiendo audio… {uploadProgress}%</div>
+                  <div
+                    className="upload-progress-bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={uploadProgress}
+                    aria-label="Progreso de subida"
+                  >
                     <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
                   </div>
                 </div>
               ) : (
                 <div className="upload-prompt">
-                  <span className="upload-icon" style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
-                    <Icon name="upload" size={28} style={{ color: 'var(--accent-primary)' }} />
+                  <span className="upload-icon" style={{ display: 'flex', justifyContent: 'center', marginBottom: 2 }}>
+                    <Icon name="upload" size={26} style={{ color: 'var(--accent-primary-hover)' }} />
                   </span>
                   <span className="upload-text">
-                    Arrastra un archivo de audio aquí o <span className="upload-link">selecciónalo</span>
+                    {isDragging ? 'Suelta el archivo para subirlo' : <>Arrastra un archivo de audio aquí o <span className="upload-link">selecciónalo</span></>}
                   </span>
-                  <span className="upload-subtext">WAV, MP3, M4A, MP4, OGG, FLAC</span>
+                  <span className="upload-subtext">WAV · MP3 · M4A · MP4 · OGG · AAC · FLAC</span>
                 </div>
               )}
             </div>

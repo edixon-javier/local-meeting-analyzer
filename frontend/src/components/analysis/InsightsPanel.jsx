@@ -107,6 +107,15 @@ export default function InsightsPanel({
                 <div
                   key={bm.id || i}
                   onClick={() => onSeekAudio?.(bm.time)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSeekAudio?.(bm.time)
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Reproducir momento clave ${timeStr}${bm.note ? ': ' + bm.note : ''}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -236,6 +245,7 @@ export default function InsightsPanel({
             <button
               type="button"
               onClick={() => setTaskFilter('all')}
+              aria-pressed={taskFilter === 'all'}
               style={{
                 fontSize: 11,
                 fontWeight: 600,
@@ -253,6 +263,7 @@ export default function InsightsPanel({
             <button
               type="button"
               onClick={() => setTaskFilter('pending')}
+              aria-pressed={taskFilter === 'pending'}
               style={{
                 fontSize: 11,
                 fontWeight: 600,
@@ -270,6 +281,7 @@ export default function InsightsPanel({
             <button
               type="button"
               onClick={() => setTaskFilter('completed')}
+              aria-pressed={taskFilter === 'completed'}
               style={{
                 fontSize: 11,
                 fontWeight: 600,
@@ -313,7 +325,9 @@ export default function InsightsPanel({
                       type="button"
                       onClick={() => onToggleTask?.(item.originalIndex, !isCompleted)}
                       disabled={!onToggleTask}
-                      aria-label={isCompleted ? 'Marcar tarea como pendiente' : 'Marcar tarea como completada'}
+                      role="checkbox"
+                      aria-checked={isCompleted}
+                      aria-label={`Tarea completada: ${item.task || ''}`}
                       style={{
                         background: isCompleted ? '#10B981' : 'var(--bg-surface)',
                         border: isCompleted ? '2px solid #10B981' : '2px solid var(--border-default)',
