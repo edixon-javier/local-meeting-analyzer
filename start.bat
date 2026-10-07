@@ -34,6 +34,17 @@ if not exist "node_modules" (
     call npm install
 )
 
+REM Electron descarga su ejecutable bajo demanda; aquí se lanza directamente, así que hay que asegurarlo.
+if not exist "node_modules\electron\dist\electron.exe" (
+    echo [SETUP] Descargando Electron ^(solo la primera vez^)...
+    call node node_modules\electron\install.js
+    if not exist "node_modules\electron\dist\electron.exe" (
+        echo [ERROR] No se pudo descargar Electron. Revisa tu conexion y vuelve a intentarlo.
+        pause
+        exit /b 1
+    )
+)
+
 if not exist "dist\index.html" (
     echo [SETUP] Construyendo la interfaz de usuario...
     call npm run build
