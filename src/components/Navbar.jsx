@@ -80,7 +80,7 @@ export function Navbar() {
           <a
             href="/Meeting-Analyzer.exe"
             download="Meeting-Analyzer.exe"
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-xs font-semibold text-white shadow-glow-cyan hover:brightness-110 active:scale-95 transition-all"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-xs font-semibold text-white shadow-[0_0_20px_-3px_rgba(16,185,129,0.45)] hover:brightness-110 active:scale-95 transition-all"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Descargar .exe</span>
@@ -139,7 +139,7 @@ export function Navbar() {
             <a
               href="/Meeting-Analyzer.exe"
               download="Meeting-Analyzer.exe"
-              className="w-full text-center py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 font-semibold text-white text-xs"
+              className="w-full text-center py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 font-semibold text-white text-xs shadow-md"
             >
               Descargar para Windows (.exe)
             </a>
