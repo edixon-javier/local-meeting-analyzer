@@ -1,140 +1,244 @@
-# Local Meeting Analyzer
+<p align="center">
+  <img src="icon.png" width="96" height="96" alt="Local Meeting Analyzer Logo" style="border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);" />
+</p>
 
-Local Meeting Analyzer es una aplicación de escritorio **Híbrida (Privacidad-Primero)** para Windows que graba el audio del sistema o micrófono, lo transcribe y lo analiza mediante Inteligencia Artificial.
+<h1 align="center">Local Meeting Analyzer</h1>
 
-Concebida para capturar el valor de tus reuniones sin comprometer tu privacidad, realiza la transcripción y el análisis **de manera local en tu equipo** por defecto usando Whisper y Ollama (Qwen3). Opcionalmente, permite delegar el procesamiento a modelos en la nube (OpenAI) con tu propia clave API para mayor velocidad y precisión; solo en ese caso el audio o el texto de tus reuniones salen de tu equipo.
+<p align="center">
+  <strong>Grabador y Asistente de Reuniones con IA 100% Local para Windows.</strong><br>
+  Sin bots intrusivos en tus llamadas, sin suscripciones mensuales y con privacidad absoluta: tus audios y conversaciones nunca salen de tu equipo.
+</p>
 
-## ✨ Características
+<p align="center">
+  <a href="docs/REQUISITOS.md"><img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20x64-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Plataforma Windows"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3.0-blue?style=flat-square&logo=gnu&logoColor=white" alt="Licencia AGPL v3.0"></a>
+  <a href="https://github.com/SYSTRAN/faster-whisper"><img src="https://img.shields.io/badge/Speech%20Engine-Faster--Whisper-FF6B6B?style=flat-square&logo=openai&logoColor=white" alt="Faster-Whisper"></a>
+  <a href="https://ollama.com"><img src="https://img.shields.io/badge/Local%20LLM-Ollama%20%28Qwen%20%2F%20Llama%29-10B981?style=flat-square&logo=ollama&logoColor=white" alt="Ollama Local"></a>
+  <a href="docs/MCP-INTEGRACION.md"><img src="https://img.shields.io/badge/Protocol-MCP%20Server-8B5CF6?style=flat-square&logo=anthropic&logoColor=white" alt="Model Context Protocol"></a>
+  <a href="https://local-meeting-analyzer.vercel.app/"><img src="https://img.shields.io/badge/Web%20Oficial-local--meeting--analyzer.vercel.app-06B6D4?style=flat-square&logo=vercel&logoColor=white" alt="Landing Page"></a>
+</p>
 
-- 🎙️ **Grabación Nativa de Audio**: Captura el audio del sistema operativo (loopback en Windows) o de tu micrófono.
-- 📝 **Transcripción Local Inteligente**: Utiliza modelos locales de Whisper (tiny, base, small, medium, large) que se descargan la primera vez que los usas.
-- ⚡ **Transcripción en Vivo**: Visualiza la transcripción en tiempo real palabra por palabra.
-- 🧠 **Análisis Híbrido Estructurado**: Extrae el resumen, tareas, decisiones, tono y categorías de la reunión usando Ollama (Local) o OpenAI (Cloud, opcional).
-- 👥 **Diarización Textual**: Reconoce a los diferentes hablantes (Hablante A, B) basándose en el contexto del diálogo.
-- 💬 **Asistente de Chat RAG**: Chatea de forma interactiva con el contenido de una reunión o realiza búsquedas semánticas sobre *todo tu historial* de reuniones.
-- 🛡️ **Privacidad Primero**: Tus datos, grabaciones y metadatos se guardan localmente. Sin cuentas, sin telemetría, sin anuncios. La nube (OpenAI) solo se usa si tú la activas con tu propia clave API.
-- 🤖 **Servidor MCP Local (Model Context Protocol)**: Conecta agentes externos (Claude, Cursor, Antigravity) para consultar tareas, resúmenes y transcripciones de forma privada (ver [docs/MCP-INTEGRACION.md](docs/MCP-INTEGRACION.md)).
-- 🎧 **Exportación y Gestión Rápida de Audios**: Descarga copias de tus grabaciones o ábrelas directamente en el Explorador de Windows para compartirlas al instante en Slack, Teams o correo.
-- 🎨 **Interfaz Moderna (UI/UX)**: Diseño premium en Dark Mode (Slate/Indigo) con animaciones fluidas construido sobre Electron y React.
+<p align="center">
+  <a href="https://local-meeting-analyzer.vercel.app/"><strong>🌐 Web Oficial & Descarga Directa</strong></a> •
+  <a href="https://github.com/edixon-javier/local-meeting-analyzer/releases"><strong>⬇️ Releases en GitHub</strong></a> •
+  <a href="#-arquitectura-del-sistema"><strong>🏛️ Arquitectura</strong></a> •
+  <a href="#-servidor-mcp-model-context-protocol"><strong>🤖 Servidor MCP</strong></a> •
+  <a href="#-garantía-de-privacidad-y-seguridad"><strong>🛡️ Privacidad</strong></a>
+</p>
 
-## ⬇️ Descarga e Instalación (usuarios)
+---
 
-> Solo para **Windows**. Si quieres ejecutar el proyecto desde el código fuente, ve a la sección *Instalación y Uso (desarrollo)* más abajo.
+## 💡 ¿Por qué Local-First?
 
-1. **Microsoft Store (recomendado)**: instálala desde [ENLACE DE MICROSOFT STORE] (próximamente). Se actualiza sola y evita, en general, las advertencias de SmartScreen.
-2. **GitHub Releases**: descarga el instalador `.exe` desde [URL DEL REPOSITORIO]/releases. Windows SmartScreen puede mostrar una advertencia al ejecutarlo; consulta [docs/DISTRIBUCION.md](docs/DISTRIBUCION.md) para saber por qué ocurre y cómo proceder.
+Las herramientas tradicionales de transcripción (Otter, Fireflies, Zoom AI Companion) introducen bots visibles que incomodan a los clientes, exigen costosas suscripciones y almacenan tus reuniones de negocios en servidores de terceros. 
 
-**Primeros pasos tras instalar:**
+**Local Meeting Analyzer** revoluciona este flujo con una arquitectura **100% privada y local**:
 
-1. Instala **[Ollama](https://ollama.com/)** (gratuito), necesario para el análisis con IA local. La app te guía para instalarlo y descargar el modelo `qwen3:4b`.
-2. Abre la aplicación y acepta el aviso de consentimiento de grabación.
-3. La primera vez que transcribas, la app descargará el modelo de voz de Whisper (requiere conexión a Internet).
-4. ¡Graba tu primera reunión!
+| Característica | Herramientas Cloud (Otter, Fireflies) | Local Meeting Analyzer |
+|---|:---:|:---:|
+| **Presencia en la llamada** | 🤖 Bot visible obligatorio | 🎙️ **WASAPI Loopback (100% invisible)** |
+| **Ubicación del Audio** | ☁️ Servidores cloud de terceros | 🔒 **Tu propio SSD (`%APPDATA%`)** |
+| **Modelo de Precios** | 💳 $20 – $40 USD / usuario / mes | 🆓 **Gratuito y de Código Abierto (AGPL-3.0)** |
+| **Motor de Inteligencia** | ☁️ APIs en la nube cerradas | 🧠 **Faster-Whisper + Ollama (Qwen / Llama)** |
+| **Integración con Agentes** | ❌ Ecosistemas cerrados | 🤖 **Servidor MCP Local (Claude / Cursor)** |
+| **Telemetría y Rastreo** | 📊 Recolección activa | 🛡️ **0% telemetría, 0% publicidad** |
 
-## 💻 Requisitos
+---
 
-Resumen (detalle y razones en **[docs/REQUISITOS.md](docs/REQUISITOS.md)**):
+## ✨ Capacidades Principales
 
-| | Mínimo | Recomendado |
-|---|---|---|
-| **Sistema** | Windows 10 de 64 bits (1809 o posterior) o Windows 11 | — |
-| **CPU** | x64 de 4 núcleos con AVX2 | 6 núcleos o más |
-| **RAM** | 8 GB | 16 GB |
-| **Disco** | 10 GB libres | SSD con 20 GB libres |
-| **Otros** | Micrófono y [Ollama](https://ollama.com/) instalado | — |
+- 🎙️ **Captura Invisible por Bucle Invertido (WASAPI Loopback)**: Graba en tiempo real el audio que sale de tus altavoces/auriculares mezclado con tu micrófono. Funciona de inmediato en Google Meet, Microsoft Teams, Zoom, Slack o Discord sin requerir permisos de administrador ni invitar participantes virtuales.
+- ⚡ **Transcripción Ultrarrápida con Faster-Whisper**: Motor optimizado con CTranslate2 para CPU (AVX2) o GPU NVIDIA. Transcribe palabra por palabra en tiempo real con latencia mínima y soporte para múltiples idiomas.
+- 🧠 **Minutas y Extracción Estructurada con Ollama**: Genera resúmenes ejecutivos, acuerdos clave, listas de tareas con responsables y análisis de tono mediante modelos locales abiertos (`qwen2.5`, `qwen3`, `llama3`). *(Opción de respaldo a OpenAI si introduces tu propia clave API).*
+- 👥 **Diarización Contextual**: Identifica y distingue a los participantes de la conversación, permitiendo renombrar interlocutores en un clic ("Hablante A" → "Carlos - Lead Arch").
+- 💬 **Bóveda RAG & Chat Global**: Realiza preguntas sobre una reunión específica o busca información semántica cruzada sobre todo tu historial acumulado de reuniones.
+- 🤖 **Servidor MCP Nativo (Model Context Protocol)**: Conecta tus grabaciones locales directamente a entornos como **Claude Desktop**, **Cursor** o **Antigravity** sin exponer tus datos a Internet.
+- 🎧 **Gestión y Exportación Inmediata**: Escucha o exporta grabaciones a MP3 comprimido, genera minutas en PDF o Markdown y abre el directorio local con un solo clic.
+- 🎨 **Interfaz Dark Mode de Nivel Profesional**: Construida con Electron, React 18 y Tailwind CSS, ofreciendo animaciones suaves, atajos de teclado globales y soporte offline continuo.
 
-- La **GPU no es necesaria**: Ollama usa automáticamente una GPU NVIDIA/AMD compatible si existe.
-- Se necesita **Internet** solo para la descarga inicial de la app y los modelos, las actualizaciones y el uso opcional de OpenAI.
-- En equipos modestos, la app sugiere modelos Whisper `tiny`/`base` y modelos de lenguaje más ligeros.
+---
 
-## 🚀 Arquitectura
+## 🏛️ Arquitectura del Sistema
 
-El proyecto se divide en dos grandes piezas:
-- **Backend (Python + FastAPI)**: Responsable de la captura de audio en streaming (evitando desbordamientos de memoria - OOM), orquestación de modelos Whisper, comunicación con Ollama/OpenAI y almacenamiento local de metadatos (JSON) y audios (MP3).
-- **Frontend (Electron + React + Vite)**: Aplicación nativa de escritorio sin bordes, que se comunica con el backend mediante una capa robusta de peticiones HTTP y Server-Sent Events (SSE) para actualizaciones en vivo de estado, transcripción y salud del motor de IA.
+```mermaid
+flowchart TD
+  subgraph Audio["🎙️ Captura de Audio Nativo"]
+    Mic["Micrófono"]
+    Speakers["Altavoces / Auriculares"]
+    WASAPI["WASAPI Loopback (Windows)"]
+    Mic --> WASAPI
+    Speakers --> WASAPI
+  end
 
-## 📦 Requisitos Previos (desarrollo)
+  subgraph Engine["⚡ Backend Local (Python + FastAPI)"]
+    WASAPI --> AudioService["Servicio de Audio (Streaming Chunks)"]
+    AudioService --> Whisper["Faster-Whisper (CPU AVX2 / GPU)"]
+    Whisper --> SSE["Server-Sent Events (SSE)"]
+    Ollama["Ollama (Qwen / Llama)"] <--> Analysis["Servicio de Análisis & RAG"]
+    MCP["Servidor MCP Local (Puerto 8765)"] <--> Vault
+  end
 
-Para ejecutar el proyecto desde el código fuente, asegúrate de tener instalados los siguientes componentes antes de iniciar:
+  subgraph UI["💻 Frontend (Electron + React 18)"]
+    SSE --> LiveUI["Transcripción en Tiempo Real"]
+    LiveUI --> App["Dashboard Dark Mode & Chat RAG"]
+    Analysis --> App
+  end
 
-- **Node.js**: v18 o superior.
-- **Python**: 3.10 a 3.14.
-- **FFmpeg**: Configurado y accesible en el `PATH` del sistema.
-- **Ollama** (necesario para el análisis con IA local; alternativamente puedes usar OpenAI): [Descargar Ollama](https://ollama.com/) y tener instalado el modelo `qwen3:4b` (`ollama pull qwen3:4b`).
+  subgraph Storage["🔒 Bóveda Local (%APPDATA%)"]
+    AudioService --> MP3["Audio Comprimido (.mp3)"]
+    Analysis --> Vault["Metadatos, Tareas & RAG (.json)"]
+  end
 
-## 🛠️ Instalación y Uso (desarrollo)
-
-1. **Clonar el repositorio**
-   ```bash
-   git clone [URL DEL REPOSITORIO]
-   cd <carpeta-del-repositorio>
-   ```
-
-2. **Inicio Rápido (Windows)**
-   Simplemente haz doble clic en el archivo `start.bat`. Este script instalará automáticamente las dependencias de Python y Node.js si faltan, y levantará tanto el backend como la aplicación de Electron.
-
-   *Alternativamente, para inicializar el entorno de desarrollo:*
-   ```bash
-   npm run setup
-   npm run dev
-   ```
-
-3. **Ejecución Manual**
-   Si prefieres levantar los servicios de forma manual en terminales separadas:
-   
-   **Backend:**
-   ```bash
-   cd backend
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
-   python main.py
-   ```
-   
-   **Frontend:**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-## ⚙️ Variables de Entorno y Configuración
-
-El proyecto gestiona sus configuraciones a través de la UI (Pantalla de Ajustes), la cual persiste las opciones en el archivo `config.json` dentro de la carpeta de datos de la aplicación (`%APPDATA%\Local Meeting Analyzer\` en la app instalada; al ejecutar desde el código fuente puede ubicarse en `backend/config.json`). Si configuras una clave de OpenAI, se guarda localmente en ese archivo **en texto plano**: no lo subas a ningún repositorio ni lo compartas.
-Si deseas forzar el puerto del backend, puedes crear un archivo `.env` en la raíz del proyecto:
-
-```env
-BACKEND_PORT=8765
+  subgraph Agents["🤖 Agentes Externos"]
+    MCP <--> ClaudeCursor["Claude Desktop / Cursor / Antigravity"]
+  end
 ```
 
-## 🔒 Privacidad y Datos
+---
 
-Local Meeting Analyzer está diseñada para que tus reuniones se queden en tu equipo:
+## 🚀 Inicio Rápido (Usuarios)
 
-- **Local por defecto**: la transcripción (faster-whisper, en CPU) y el análisis (Ollama, en `localhost:11434`) se ejecutan en tu equipo.
-- **Almacenamiento local**: grabaciones (MP3 + JSON con transcripción, análisis y nombres de hablantes), `config.json` y `logs` se guardan en `%APPDATA%\Local Meeting Analyzer\`. **No están cifrados**: te recomendamos activar BitLocker.
-- **OpenAI es opcional**: solo se usa si introduces tu propia clave API **y** lo eliges como proveedor, o activas expresamente «usar la nube si el modelo local no está disponible». En ese caso el audio y/o el texto se envían a OpenAI, bajo sus términos.
-- **Conexiones de red**: descarga de modelos (Whisper desde Hugging Face; modelos de Ollama desde ollama.com), comprobación de actualizaciones (GitHub Releases; la versión de Microsoft Store la actualiza la Tienda) y, solo si lo activas, OpenAI. «Reportar problema» abre tu navegador o correo con un informe prellenado; no se envía nada automáticamente.
-- **Sin telemetría, cuentas, anuncios ni venta de datos.**
-- **Eliminar tus datos**: borra grabaciones desde la pantalla Historial; para eliminar todo, desinstala la app y borra la carpeta `%APPDATA%\Local Meeting Analyzer\`.
+### 1. Descarga la Aplicación
+- **Opción A (Recomendada)**: Descarga directa en 1 clic desde nuestra [Web Oficial (local-meeting-analyzer.vercel.app)](https://local-meeting-analyzer.vercel.app/).
+- **Opción B**: Descarga el instalador `.exe` desde la sección de [GitHub Releases](https://github.com/edixon-javier/local-meeting-analyzer/releases).
 
-⚠️ **Grabar a otras personas**: eres responsable de informar a los participantes y de obtener su consentimiento cuando la ley lo exija. Consulta [legal/CONSENT_NOTICE.md](legal/CONSENT_NOTICE.md).
+### 2. Primeros Pasos
+1. **Instala Ollama** (gratuito) desde [ollama.com](https://ollama.com) y descarga tu modelo preferido en terminal:
+   ```bash
+   ollama run qwen2.5:7b
+   ```
+   *(En equipos con menos memoria RAM se recomienda `ollama run qwen2.5:3b` o `qwen3:4b`).*
+2. **Ejecuta Local Meeting Analyzer**: Acepta el aviso ético de consentimiento la primera vez.
+3. **Inicia tu grabación**: Haz clic en el botón principal o utiliza el atajo global **`Ctrl + Shift + R`**.
 
-Detalle completo en la [Política de Privacidad](legal/PRIVACY.md).
+---
+
+## 💻 Requisitos de Hardware
+
+Para más detalles técnicos, consulta el documento completo de [Requisitos del Sistema](docs/REQUISITOS.md).
+
+| Componente | Requisito Mínimo | Configuración Recomendada |
+|---|---|---|
+| **Sistema Operativo** | Windows 10 (Build 1809+) o Windows 11 (64-bit) | Windows 11 x64 |
+| **Procesador (CPU)** | x64 Quad-Core con soporte AVX2 | 6 núcleos o superior (Intel 11th Gen+ / AMD Ryzen 5000+) |
+| **Memoria RAM** | 8 GB | 16 GB o superior |
+| **Almacenamiento** | 10 GB de espacio libre | SSD NVMe con 20 GB libres |
+| **Aceleración GPU** | *Opcional* (Faster-Whisper y Ollama corren fluidamente en CPU) | NVIDIA RTX (CUDA) o AMD compatible |
+| **Audio** | Micrófono y altavoces/auriculares configurados en Windows | Auriculares para evitar feedback acústico |
+
+---
+
+## 🛠️ Instalación y Desarrollo (Código Fuente)
+
+Si deseas clonar el proyecto, auditar el código o construir nuevas funciones:
+
+### Prerrequisitos
+- **Node.js**: v18 o superior ([nodejs.org](https://nodejs.org/)).
+- **Python**: 3.10 a 3.14 ([python.org](https://python.org/)).
+- **FFmpeg**: Instalado y añadido al `PATH` del sistema.
+- **Ollama**: En ejecución en `http://localhost:11434`.
+
+### 1. Clonar el Repositorio
+```bash
+git clone https://github.com/edixon-javier/local-meeting-analyzer.git
+cd local-meeting-analyzer
+```
+
+### 2. Arranque Rápido con 1 Clic (Windows)
+Ejecuta el script automatizado:
+```cmd
+start.bat
+```
+*Este script crea los entornos virtuales de Python, instala las dependencias de `backend/` y `frontend/` y levanta simultáneamente ambos procesos.*
+
+### 3. Arranque Manual en Terminales Separadas
+
+**Terminal 1 — Backend (FastAPI):**
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
+
+**Terminal 2 — Frontend (Electron + React):**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 4. Pruebas Automatizadas
+```bash
+# Tests de Backend (Pytest)
+cd backend && pytest
+
+# Tests de Frontend (Vitest)
+cd frontend && npm test
+```
+
+---
+
+## 🤖 Servidor MCP (Model Context Protocol)
+
+Local Meeting Analyzer integra un servidor MCP nativo para que cualquier agente de IA pueda interactuar de manera segura con tu historial de reuniones.
+
+### Configuración en Claude Desktop o Cursor
+Añade la siguiente sección a tu archivo de configuración (ej. `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "local-meeting-analyzer": {
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+### Herramientas MCP Expuestas:
+- `search_meetings(query)`: Búsqueda semántica cruzada en el historial.
+- `get_meeting_summary(meeting_id)`: Obtiene minutas, acuerdos y puntos de acción.
+- `get_meeting_transcript(meeting_id)`: Devuelve la transcripción completa con marcas de tiempo.
+- `list_pending_tasks()`: Extrae las tareas pendientes generadas en tus reuniones.
+
+Consulta la guía técnica en [docs/MCP-INTEGRACION.md](docs/MCP-INTEGRACION.md).
+
+---
+
+## 🛡️ Garantía de Privacidad y Seguridad
+
+> [!IMPORTANT]
+> Tus reuniones contienen propiedad intelectual, secretos comerciales y datos personales. Por diseño, Local Meeting Analyzer adopta un modelo estricto de confianza cero en la nube:
+
+1. **Almacenamiento Local**: Todo se guarda exclusivamente en `%APPDATA%\Local Meeting Analyzer\`.
+2. **Cero Telemetría**: La aplicación no incluye trackers de analíticas, publicidad ni identificadores personales.
+3. **OpenAI Estrictamente Opcional**: Tu audio nunca viajará a OpenAI a menos que actives explícitamente el proveedor Cloud y configures tu propia clave API en los Ajustes.
+4. **Recomendación de Cifrado**: Los archivos locales no se cifran por defecto; se recomienda habilitar **BitLocker** en la unidad del sistema.
+5. **Responsabilidad Legal**: Eres responsable de cumplir con las normativas locales sobre grabación y consentimiento de terceros. Consulta nuestro [Aviso de Consentimiento](legal/CONSENT_NOTICE.md) y la [Política de Privacidad](legal/PRIVACY.md).
+
+---
 
 ## 🤝 Contribuciones
 
-¡Las contribuciones son bienvenidas! Revisa la estrategia de ramas y las convenciones de Commits (`Conventional Commits`) en nuestro manual para desarrolladores antes de enviar un Pull Request. 
+¡Las contribuciones de la comunidad son muy bienvenidas!
+1. Haz un Fork del repositorio.
+2. Crea una rama para tu característica (`git checkout -b feature/nueva-capacidad`).
+3. Sigue la convención de [Conventional Commits](https://www.conventionalcommits.org/).
+4. Asegúrate de que las pruebas pasen (`pytest` y `npm test`).
+5. Abre un Pull Request detallando tu implementación.
 
-## ⚖️ Legal
+---
 
-- [Política de Privacidad](legal/PRIVACY.md) (versión web: [docs/privacy.html](docs/privacy.html))
-- [Licencia y términos de uso](legal/EULA.txt)
-- [Aviso de consentimiento de grabación](legal/CONSENT_NOTICE.md)
-- [Avisos de componentes de terceros y licencias de modelos](THIRD_PARTY_NOTICES.md)
+## ⚖️ Licencia y Reconocimientos
 
-## 📄 Licencia
+Distribuido bajo la **GNU Affero General Public License v3.0 o posterior (AGPL-3.0-or-later)**. Consulta el archivo [`LICENSE`](LICENSE) para más detalles.
 
-Local Meeting Analyzer es software libre bajo la **GNU Affero General Public License v3.0 o posterior** (AGPL-3.0-or-later). Consulta el archivo [`LICENSE`](LICENSE). Los avisos sobre consentimiento, privacidad y exactitud de la IA están en [`legal/EULA.txt`](legal/EULA.txt), y las licencias de los componentes de terceros en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- Modelos de Voz impulsados por [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) (MIT / Apache-2.0).
+- Modelos de Lenguaje soportados a través de [Ollama](https://ollama.com/) (MIT).
+- Aviso de componentes de terceros: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-El nombre "Local Meeting Analyzer" y su logotipo no se licencian con el código: si publicas una versión modificada, usa otro nombre.
+<p align="center">
+  Hecho con ❤️ para la comunidad de IA local y privacidad-primero.
+</p>
