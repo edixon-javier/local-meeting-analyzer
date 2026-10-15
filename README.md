@@ -47,7 +47,7 @@ Esta rama (`website`) aloja la experiencia web interactiva oficial de **Local Me
    - Diagrama de flujo de datos animado con un botón interactivo de *"Probar Bloqueo Cloud"* que ilustra cómo el tráfico externo es bloqueado en favor del almacenamiento local en `%APPDATA%`.
 
 5. **Requisitos de Hardware & Terminal Interactivo**:
-   - Tarjetas comparativas de requisitos mínimos vs. recomendados con bloques de terminal interactivos para copiar comandos de Ollama en un clic (`ollama run qwen2.5:7b`).
+   - Tarjetas comparativas de requisitos mínimos vs. recomendados con bloques de terminal interactivos para copiar comandos de Ollama en un clic (`ollama run qwen3:4b`).
 
 ---
 

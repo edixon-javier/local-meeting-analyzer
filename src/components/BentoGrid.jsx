@@ -12,7 +12,7 @@ import {
 
 export function BentoGrid() {
   const [renamed, setRenamed] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('qwen2.5:7b');
+  const [selectedModel, setSelectedModel] = useState('qwen3:4b');
 
   return (
     <section id="caracteristicas" className="py-24 md:py-32 relative bg-[#070A12] overflow-hidden">
@@ -60,7 +60,7 @@ export function BentoGrid() {
               <div className="pt-2">
                 <div className="text-[10px] font-mono text-slate-400 mb-1.5">Modelos soportados:</div>
                 <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-                  {['qwen2.5:7b', 'phi3:mini', 'llama3.2:3b'].map((m) => (
+                  {['qwen3:4b', 'phi3:mini', 'llama3.2:3b'].map((m) => (
                     <button
                       key={m}
                       onClick={() => setSelectedModel(m)}
@@ -162,8 +162,8 @@ export function BentoGrid() {
                   <div className="bg-emerald-400 h-1 rounded-full w-1/4" />
                 </div>
                 <div className="flex justify-between text-slate-300 pt-0.5">
-                  <span>Latencia streaming:</span>
-                  <span className="text-purple-300 font-medium">&lt; 0.8s en CPU</span>
+                  <span>Streaming en vivo:</span>
+                  <span className="text-purple-300 font-medium">Baja latencia en CPU</span>
                 </div>
               </div>
             </div>
@@ -197,7 +197,7 @@ export function BentoGrid() {
                   <span>Audio Mesh Processing</span>
                 </div>
                 <div className="text-xs text-slate-300 font-mono">
-                  Filtrado digital y cancelación local de eco
+                  Captura dual balanceada (Mic + Audio del sistema)
                 </div>
               </div>
             </div>
@@ -214,10 +214,10 @@ export function BentoGrid() {
                   </span>
                 </div>
                 <h3 className="font-display font-semibold text-base sm:text-lg text-white mb-2">
-                  Diarización Inteligente
+                  Diarización Contextual
                 </h3>
                 <p className="text-slate-200 text-xs leading-relaxed mb-6">
-                  Distingue interlocutores en la llamada. Renombra cualquier hablante en toda la conversación con un solo clic.
+                  Separación de turnos mediante análisis contextual del texto con IA. Renombra cualquier interlocutor en toda la conversación con un clic.
                 </p>
               </div>
 
@@ -256,7 +256,7 @@ export function BentoGrid() {
                   Servidor MCP Local Integrado
                 </h3>
                 <p className="text-slate-300 text-xs leading-relaxed mb-6">
-                  Conecta transcripciones, acuerdos y minutas con Claude Desktop, Cursor y Antigravity stdio/SSE con latencia instantánea.
+                  Conecta transcripciones, acuerdos y minutas con Claude Desktop, Cursor y Antigravity mediante servidor MCP local.
                 </p>
               </div>
 
@@ -266,7 +266,7 @@ export function BentoGrid() {
                   <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-[9px]">
                     LMA
                   </div>
-                  <span className="text-[10px] font-mono text-indigo-300">Servidor MCP stdio</span>
+                  <span className="text-[10px] font-mono text-indigo-300">Servidor MCP Local</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[9px] font-mono">
                   <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-white/10 text-slate-300">Claude</span>
@@ -287,14 +287,14 @@ export function BentoGrid() {
                     <Search className="w-5 h-5" />
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-[10px] font-mono text-emerald-300">
-                    SQLite FTS5
+                    Bóveda Local JSON
                   </span>
                 </div>
                 <h3 className="font-display font-semibold text-base sm:text-lg text-white mb-2">
                   Chat RAG en tu Historial
                 </h3>
                 <p className="text-slate-300 text-xs leading-relaxed mb-5">
-                  Búsqueda e interrogación instantánea sobre todas las reuniones almacenadas en tu disco local.
+                  Búsqueda e interrogación semántica sobre todas las reuniones almacenadas en tu disco local.
                 </p>
               </div>
 
@@ -302,7 +302,7 @@ export function BentoGrid() {
               <div className="p-2.5 rounded-xl bg-black/50 border border-emerald-500/25 flex items-center justify-between gap-2 text-[10px] font-mono">
                 <span className="text-slate-300 truncate">"¿Quién asumió el release?"</span>
                 <span className="px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 text-[10px] shrink-0 border border-emerald-500/40 font-medium">
-                  Encontrado en 2ms
+                  Búsqueda local instantánea
                 </span>
               </div>
             </div>

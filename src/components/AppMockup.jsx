@@ -152,7 +152,7 @@ export function AppMockup() {
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-violet-400" />
-                <span className="font-medium text-white text-xs sm:text-sm">Minuta Ejecutiva Generada por Ollama (qwen2.5:7b)</span>
+                <span className="font-medium text-white text-xs sm:text-sm">Minuta Ejecutiva Generada por Ollama (qwen3:4b)</span>
               </div>
               <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
                 0 Tokens en la Nube
@@ -166,7 +166,7 @@ export function AppMockup() {
                 </h4>
                 <ul className="text-xs text-slate-300 space-y-1 list-disc pl-4 leading-relaxed">
                   <li>Captura de audio vía WASAPI Loopback 100% nativa.</li>
-                  <li>Almacenamiento permanente en SQLite local dentro de <code className="text-cyan-200 bg-cyan-950/40 px-1 py-0.5 rounded text-[11px]">%APPDATA%</code>.</li>
+                  <li>Almacenamiento local en archivos JSON y MP3 dentro de <code className="text-cyan-200 bg-cyan-950/40 px-1 py-0.5 rounded text-[11px]">%APPDATA%</code>.</li>
                   <li>Exposición de herramientas mediante servidor local MCP.</li>
                 </ul>
               </div>
@@ -221,7 +221,7 @@ export function AppMockup() {
                   <span className="px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-[10px] font-mono text-cyan-300 flex items-center gap-1">
                     <Volume2 className="w-3 h-3" /> Cita Verificada: 00:01:38
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Búsqueda SQLite FTS5 (2ms)</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Búsqueda local en metadatos JSON</span>
                 </div>
               </div>
             </div>
@@ -234,7 +234,7 @@ export function AppMockup() {
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#060a17] border border-violet-500/30 font-mono text-xs">
               <div className="flex items-center gap-2 text-violet-300 text-[11px]">
                 <Terminal className="w-3.5 h-3.5" />
-                <span>Local MCP Server • stdio en localhost:8000</span>
+                <span>Local MCP Server • http://127.0.0.1:8765/mcp</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px]">
                 <span className="px-2 py-0.5 rounded bg-violet-950 border border-violet-500/40 text-violet-300">

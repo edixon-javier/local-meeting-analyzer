@@ -39,9 +39,9 @@ export function PrivacySection() {
     },
     {
       feature: "Almacenamiento de transcripciones",
-      local: "Tu disco duro local (%APPDATA% / SQLite)",
+      local: "Tu disco duro local (%APPDATA% / Archivos JSON)",
       cloud: "Bases de datos en la nube del proveedor",
-      detail: "Base de datos SQLite cifrable localmente sin sincronización forzada."
+      detail: "Archivos JSON y audios MP3 en tu equipo, protegibles con BitLocker sin sincronización forzada."
     },
     {
       feature: "Uso de tus datos para entrenar modelos",
@@ -65,7 +65,7 @@ export function PrivacySection() {
       feature: "Integración con asistentes locales",
       local: "Servidor MCP Local (Claude Desktop, Cursor)",
       cloud: "APIs propietarias cerradas en la nube",
-      detail: "Protocolo MCP nativo (stdio/SSE) con latencia menor a 2 milisegundos."
+      detail: "Protocolo MCP nativo (HTTP/SSE en localhost) para consultar tus reuniones desde asistentes externos."
     }
   ];
 
@@ -81,7 +81,7 @@ export function PrivacySection() {
             Tus Secretos Comerciales Pertenecen a tu Empresa
           </h2>
           <p className="text-slate-400 text-xs sm:text-sm md:text-base leading-relaxed">
-            Las herramientas de transcripción convencionales suben el audio confidencial de tus llamadas a servidores ajenos. Local Meeting Analyzer garantiza por arquitectura física que ningún byte sale de tu ordenador.
+            Las herramientas de transcripción convencionales suben el audio confidencial de tus llamadas a servidores ajenos. Local Meeting Analyzer procesa todo en tu máquina por defecto y solo conecta a la nube si tú decides activar proveedores externos con tu propia clave.
           </p>
         </div>
 
@@ -118,7 +118,7 @@ export function PrivacySection() {
             {/* Step 2: Local Processing Engine */}
             <div className="flex flex-col items-center text-center w-full lg:w-1/3 p-5 rounded-xl bg-gradient-to-b from-[#0F1C38] to-[#0A1226] border-2 border-emerald-500/50 shadow-[0_0_35px_-5px_rgba(16,185,129,0.35)] relative">
               <div className="absolute -top-3 px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] font-mono font-bold tracking-wider uppercase">
-                En tu Máquina (100% Offline)
+                En tu Máquina (Local por Defecto)
               </div>
               <div className="w-14 h-14 rounded-xl bg-emerald-500/20 border border-emerald-500/60 flex items-center justify-center text-emerald-300 mb-2 mt-1 shadow-glow-emerald">
                 <Cpu className="w-7 h-7" />
@@ -130,14 +130,14 @@ export function PrivacySection() {
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
                 <span className="bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  0 KB enviados a Internet
+                  0 KB a la nube por defecto
                 </span>
               </div>
             </div>
 
             {/* Connecting Beam 2 */}
             <div className="flex flex-col items-center text-emerald-400 font-mono text-xs">
-              <span className="text-[10px] text-slate-400 mb-0.5">SQLite FTS5</span>
+              <span className="text-[10px] text-slate-400 mb-0.5">Metadatos JSON</span>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
@@ -153,7 +153,7 @@ export function PrivacySection() {
               </div>
               <h4 className="font-medium text-white text-xs sm:text-sm mb-1">Bóveda en Disco</h4>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Minutas, RAG y transcripciones guardadas únicamente en tu directorio local.
+                Minutas, búsquedas y transcripciones guardadas en archivos JSON locales.
               </p>
               <span className="mt-2 text-[10px] font-mono text-violet-300 bg-violet-950/60 px-2 py-0.5 rounded border border-violet-500/20">
                 %APPDATA%

@@ -61,7 +61,7 @@ export function InformationGatheringVisual() {
     },
     {
       id: 4,
-      label: "Diarización de voces",
+      label: "Diarización por contexto",
       icon: Users,
       color: "border-indigo-500/40 text-indigo-300 bg-indigo-950/40",
       glow: "shadow-[0_0_15px_rgba(99,102,241,0.35)]",
@@ -69,7 +69,7 @@ export function InformationGatheringVisual() {
       x: 12,
       y: 50,
       delay: "3.6s",
-      desc: "Separación y renombrado en 1 clic"
+      desc: "Separación por diálogo y renombrado en 1 clic"
     },
     {
       id: 5,
@@ -85,7 +85,7 @@ export function InformationGatheringVisual() {
     },
     {
       id: 6,
-      label: "Búsqueda RAG en 2ms",
+      label: "Búsqueda RAG en Bóveda",
       icon: Search,
       color: "border-cyan-400/40 text-cyan-200 bg-cyan-950/40",
       glow: "shadow-[0_0_15px_rgba(6,182,212,0.3)]",
@@ -135,7 +135,7 @@ export function InformationGatheringVisual() {
     },
     {
       id: 10,
-      label: "Servidor MCP (stdio)",
+      label: "Servidor MCP Local",
       icon: Terminal,
       color: "border-violet-400/40 text-violet-200 bg-violet-950/40",
       glow: "shadow-[0_0_15px_rgba(139,92,246,0.3)]",
@@ -147,7 +147,7 @@ export function InformationGatheringVisual() {
     },
     {
       id: 11,
-      label: "Bóveda SQLite %APPDATA%",
+      label: "Bóveda Local JSON %APPDATA%",
       icon: HardDrive,
       color: "border-emerald-500/40 text-emerald-300 bg-emerald-950/40",
       glow: "shadow-[0_0_15px_rgba(16,185,129,0.35)]",
@@ -161,7 +161,7 @@ export function InformationGatheringVisual() {
     // --- Lóbulo Inferior Central ---
     {
       id: 12,
-      label: "0 KB enviados a la Nube",
+      label: "100% Local por defecto",
       icon: ShieldCheck,
       color: "border-emerald-400/40 text-emerald-200 bg-emerald-950/40",
       glow: "shadow-[0_0_15px_rgba(16,185,129,0.35)]",
@@ -169,7 +169,7 @@ export function InformationGatheringVisual() {
       x: 50,
       y: 95,
       delay: "1.2s",
-      desc: "Tus datos nunca salen de tu ordenador"
+      desc: "Tus grabaciones se procesan en tu propio equipo"
     }
   ];
 

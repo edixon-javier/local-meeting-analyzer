@@ -4,7 +4,7 @@ import { SpotlightCard } from './SpotlightCard';
 
 export function RequirementsSection() {
   const [copied, setCopied] = useState(false);
-  const command = "ollama run qwen2.5:7b";
+  const command = "ollama run qwen3:4b";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(command);
@@ -35,7 +35,7 @@ export function RequirementsSection() {
       icon: Terminal,
       title: "Motor de IA (Ollama)",
       spec: "Ollama Local (Gratuito)",
-      detail: "Compatible con modelos abiertos de vanguardia: Qwen 2.5, Phi-3, Llama 3.",
+      detail: "Modelo por defecto qwen3:4b (Apache-2.0). Compatible con Phi-3, Llama y Qwen.",
     },
   ];
 

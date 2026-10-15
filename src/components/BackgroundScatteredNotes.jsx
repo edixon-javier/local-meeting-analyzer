@@ -139,7 +139,7 @@ export function BackgroundScatteredNotes() {
     },
     {
       id: 13,
-      text: "Base de datos local en %APPDATA%",
+      text: "Archivos locales JSON en %APPDATA%",
       icon: FileText,
       pos: "bottom-6 left-[58%] -translate-x-1/2",
       rot: "rotate-1",

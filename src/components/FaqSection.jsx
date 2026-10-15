@@ -10,7 +10,11 @@ export function FaqSection() {
     },
     {
       q: "¿Realmente ningún dato sale a Internet?",
-      a: "Absolutamente ninguno. Faster-Whisper y Ollama corren como binarios locales en tu CPU. Las transcripciones y base de datos RAG residen en %APPDATA%\\MeetingAnalyzer. Cero telemetría ni analítica."
+      a: "Por defecto, absolutamente ninguno. Faster-Whisper y Ollama se ejecutan como procesos locales en tu máquina. Las transcripciones y metadatos se guardan en archivos JSON dentro de %APPDATA%\\Local Meeting Analyzer\\. Cero telemetría ni analíticas. Solo se enviará información a la nube si tú decides activar proveedores externos (OpenAI, Claude o Gemini) con tu propia clave API en los Ajustes."
+    },
+    {
+      q: "¿Cómo distingue a los diferentes interlocutores?",
+      a: "La separación de hablantes la realiza el modelo de lenguaje analizando la estructura textual y los turnos de diálogo (diarización contextual), sin requerir biometría de voz. Puedes renombrar a cualquier interlocutor en toda la reunión con un solo clic."
     },
     {
       q: "¿Necesito tarjeta gráfica dedicada (GPU)?",
@@ -18,7 +22,7 @@ export function FaqSection() {
     },
     {
       q: "¿Cómo se integra con Claude y Cursor?",
-      a: "Incluye un servidor Model Context Protocol (MCP) que corre localmente por stdio o SSE en localhost. Tus asistentes de IA pueden consultar acuerdos y buscar en el historial con total privacidad y latencia sub-milisegundo."
+      a: "Incluye un servidor Model Context Protocol (MCP) que corre localmente en tu equipo (puerto 8765). Tus asistentes de IA pueden consultar acuerdos y buscar en el historial directamente sin exponer tus archivos a servidores externos."
     },
     {
       q: "¿Puedo usarlo libremente en mi empresa?",
