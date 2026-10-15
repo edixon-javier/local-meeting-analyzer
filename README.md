@@ -49,9 +49,9 @@ Las herramientas tradicionales de transcripción (Otter, Fireflies, Zoom AI Comp
 
 - 🎙️ **Captura Invisible por Bucle Invertido (WASAPI Loopback)**: Graba en tiempo real el audio que sale de tus altavoces/auriculares mezclado con tu micrófono. Funciona de inmediato en Google Meet, Microsoft Teams, Zoom, Slack o Discord sin requerir permisos de administrador ni invitar participantes virtuales.
 - ⚡ **Transcripción Ultrarrápida con Faster-Whisper**: Motor optimizado con CTranslate2 para CPU (AVX2) o GPU NVIDIA. Transcribe palabra por palabra en tiempo real con latencia mínima y soporte para múltiples idiomas.
-- 🧠 **Minutas y Extracción Estructurada con Ollama**: Genera resúmenes ejecutivos, acuerdos clave, listas de tareas con responsables y análisis de tono mediante modelos locales abiertos (`qwen2.5`, `qwen3`, `llama3`). *(Opción de respaldo a OpenAI si introduces tu propia clave API).*
-- 👥 **Diarización Contextual**: Identifica y distingue a los participantes de la conversación, permitiendo renombrar interlocutores en un clic ("Hablante A" → "Carlos - Lead Arch").
-- 💬 **Bóveda RAG & Chat Global**: Realiza preguntas sobre una reunión específica o busca información semántica cruzada sobre todo tu historial acumulado de reuniones.
+- 🧠 **Minutas y Extracción Estructurada con Ollama**: Genera resúmenes ejecutivos, acuerdos clave, listas de tareas con responsables y análisis de tono mediante modelos locales abiertos (modelo por defecto: `qwen3:4b`, compatible con `phi3`, `llama3`). *(Opción de conectar OpenAI, Claude, Gemini o Groq si introduces tu propia clave API).*
+- 👥 **Diarización Contextual por Texto**: Separa las intervenciones de los participantes analizando la estructura del diálogo mediante el modelo de lenguaje (sin requerir biometría de voz), permitiendo renombrar interlocutores en un solo clic ("Hablante A" → "Carlos - Lead Arch").
+- 💬 **Bóveda RAG & Chat Global**: Realiza preguntas sobre una reunión específica o busca información semántica cruzada sobre todo tu historial acumulado de reuniones guardadas en JSON local.
 - 🤖 **Servidor MCP Nativo (Model Context Protocol)**: Conecta tus grabaciones locales directamente a entornos como **Claude Desktop**, **Cursor** o **Antigravity** sin exponer tus datos a Internet.
 - 🎧 **Gestión y Exportación Inmediata**: Escucha o exporta grabaciones a MP3 comprimido, genera minutas en PDF o Markdown y abre el directorio local con un solo clic.
 - 🎨 **Interfaz Dark Mode de Nivel Profesional**: Construida con Electron, React 18 y Tailwind CSS, ofreciendo animaciones suaves, atajos de teclado globales y soporte offline continuo.
@@ -74,7 +74,7 @@ flowchart TD
     WASAPI --> AudioService["Servicio de Audio (Streaming Chunks)"]
     AudioService --> Whisper["Faster-Whisper (CPU AVX2 / GPU)"]
     Whisper --> SSE["Server-Sent Events (SSE)"]
-    Ollama["Ollama (Qwen / Llama)"] <--> Analysis["Servicio de Análisis & RAG"]
+    Ollama["Ollama (qwen3:4b / Llama)"] <--> Analysis["Servicio de Análisis & RAG"]
     MCP["Servidor MCP Local (Puerto 8765)"] <--> Vault
   end
 
@@ -103,11 +103,11 @@ flowchart TD
 - **Opción B**: Descarga el instalador `.exe` desde la sección de [GitHub Releases](https://github.com/edixon-javier/local-meeting-analyzer/releases).
 
 ### 2. Primeros Pasos
-1. **Instala Ollama** (gratuito) desde [ollama.com](https://ollama.com) y descarga tu modelo preferido en terminal:
+1. **Instala Ollama** (gratuito) desde [ollama.com](https://ollama.com) y descarga el modelo por defecto en terminal:
    ```bash
-   ollama run qwen2.5:7b
+   ollama run qwen3:4b
    ```
-   *(En equipos con menos memoria RAM se recomienda `ollama run qwen2.5:3b` o `qwen3:4b`).*
+   *(Alternativa para equipos con menos memoria RAM: `ollama run qwen3:1.5b` o `llama3.2:1b`).*
 2. **Ejecuta Local Meeting Analyzer**: Acepta el aviso ético de consentimiento la primera vez.
 3. **Inicia tu grabación**: Haz clic en el botón principal o utiliza el atajo global **`Ctrl + Shift + R`**.
 
@@ -214,7 +214,7 @@ Consulta la guía técnica en [docs/MCP-INTEGRACION.md](docs/MCP-INTEGRACION.md)
 
 1. **Almacenamiento Local**: Todo se guarda exclusivamente en `%APPDATA%\Local Meeting Analyzer\`.
 2. **Cero Telemetría**: La aplicación no incluye trackers de analíticas, publicidad ni identificadores personales.
-3. **OpenAI Estrictamente Opcional**: Tu audio nunca viajará a OpenAI a menos que actives explícitamente el proveedor Cloud y configures tu propia clave API en los Ajustes.
+3. **Nube Estrictamente Opcional**: Ningún audio ni dato sale a Internet por defecto. Solo se conectará a servicios remotos (OpenAI, Claude, Gemini o Groq) si decides activarlos voluntariamente con tu propia clave API en los Ajustes.
 4. **Recomendación de Cifrado**: Los archivos locales no se cifran por defecto; se recomienda habilitar **BitLocker** en la unidad del sistema.
 5. **Responsabilidad Legal**: Eres responsable de cumplir con las normativas locales sobre grabación y consentimiento de terceros. Consulta nuestro [Aviso de Consentimiento](legal/CONSENT_NOTICE.md) y la [Política de Privacidad](legal/PRIVACY.md).
 

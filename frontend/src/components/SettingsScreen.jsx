@@ -41,18 +41,47 @@ function normalizeConfig(cfg = {}) {
     whisper_model: cfg.whisper_model || 'small',
     ai_provider: cfg.ai_provider || 'local',
     openai_model: cfg.openai_model || 'gpt-4o-mini',
+    claude_model: cfg.claude_model || 'claude-3-5-haiku-20241022',
+    gemini_model: cfg.gemini_model || 'gemini-2.0-flash',
     ollama_model: cfg.ollama_model || DEFAULT_OLLAMA_MODEL,
     allow_cloud_fallback: Boolean(cfg.allow_cloud_fallback),
     analysis_focus: cfg.analysis_focus || '',
     record_mode: cfg.record_mode || 'both',
     mic_device_id: cfg.mic_device_id || 'default',
     diarize: Boolean(cfg.diarize),
+    groq_api_key: cfg.groq_api_key || '',
+    dictation_mode: cfg.dictation_mode || 'smart_polish',
+    dictation_provider: cfg.dictation_provider || 'groq',
+    dictation_shortcut: cfg.dictation_shortcut || 'CommandOrControl+Shift+D',
   }
+}
+
+const PRESET_SHORTCUTS = [
+  { value: 'CommandOrControl+Shift+D', label: 'Ctrl + Shift + D (Recomendado - Sin conflictos con Claude)' },
+  { value: 'Alt+Shift+D', label: 'Alt + Shift + D' },
+  { value: 'CommandOrControl+Alt+D', label: 'Ctrl + Alt + D' },
+  { value: 'CommandOrControl+Shift+Space', label: 'Ctrl + Shift + Espacio' },
+  { value: 'F8', label: 'F8 (Tecla de función)' },
+  { value: 'F9', label: 'F9 (Tecla de función)' },
+  { value: 'CommandOrControl+Alt+Space', label: 'Ctrl + Alt + Espacio (⚠️ Ocupado por Claude Desktop)' },
+  { value: 'custom', label: 'Personalizado...' },
+]
+
+function formatShortcutDisplay(sc) {
+  if (!sc) return 'Ctrl + Shift + D'
+  return sc
+    .replace(/CommandOrControl/g, 'Ctrl')
+    .replace(/Control/g, 'Ctrl')
+    .replace(/Shift/g, 'Shift')
+    .replace(/Alt/g, 'Alt')
+    .replace(/Space/g, 'Espacio')
+    .replace(/\+/g, ' + ')
 }
 
 const SETTINGS_SECTIONS = [
   { id: 'settings-audio', label: 'Audio', icon: 'mic' },
   { id: 'settings-ai', label: 'Motor de IA', icon: 'cpu' },
+  { id: 'settings-dictation', label: 'Dictado en Cursor', icon: 'edit' },
   { id: 'settings-analysis', label: 'Análisis', icon: 'target' },
   { id: 'settings-privacy', label: 'Privacidad', icon: 'lock' },
   { id: 'settings-support', label: 'Ayuda y soporte', icon: 'info' },
@@ -71,19 +100,51 @@ export default function SettingsScreen() {
   const [micDeviceId, setMicDeviceId] = useState('default')
   const [whisperModel, setWhisperModel] = useState('small')
   const [aiProvider, setAiProvider] = useState('local')
-  // Clave de API: el backend nunca la devuelve en claro. `openaiApiKey` es solo lo que el usuario
-  // escribe ahora (vacío = conservar la guardada); `maskedApiKey` es el enmascarado (••••1234).
+  // Claves de API enmascaradas
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [hasApiKey, setHasApiKey] = useState(false)
   const [maskedApiKey, setMaskedApiKey] = useState('')
+
+  const [anthropicApiKey, setAnthropicApiKey] = useState('')
+  const [hasClaudeKey, setHasClaudeKey] = useState(false)
+  const [maskedClaudeKey, setMaskedClaudeKey] = useState('')
+
+  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [hasGeminiKey, setHasGeminiKey] = useState(false)
+  const [maskedGeminiKey, setMaskedGeminiKey] = useState('')
+
+  const [groqApiKey, setGroqApiKey] = useState('')
+  const [hasGroqKey, setHasGroqKey] = useState(false)
+  const [maskedGroqKey, setMaskedGroqKey] = useState('')
+
+  const [dictationMode, setDictationMode] = useState('smart_polish')
+  const [dictationProvider, setDictationProvider] = useState('groq')
+  const [dictationShortcut, setDictationShortcut] = useState('CommandOrControl+Shift+D')
+  const [isCustomShortcut, setIsCustomShortcut] = useState(false)
+
+  // Estados de edición y visibilidad para claves API
+  const [showOpenaiPassword, setShowOpenaiPassword] = useState(false)
+  const [isEditingOpenai, setIsEditingOpenai] = useState(false)
+
+  const [showClaudePassword, setShowClaudePassword] = useState(false)
+  const [isEditingClaude, setIsEditingClaude] = useState(false)
+
+  const [showGeminiPassword, setShowGeminiPassword] = useState(false)
+  const [isEditingGemini, setIsEditingGemini] = useState(false)
+
+  const [showGroqPassword, setShowGroqPassword] = useState(false)
+  const [isEditingGroq, setIsEditingGroq] = useState(false)
+
   const [deletingKey, setDeletingKey] = useState(false)
   const [allowCloudFallback, setAllowCloudFallback] = useState(false)
   const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini')
+  const [claudeModel, setClaudeModel] = useState('claude-3-5-haiku-20241022')
+  const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash')
   const [ollamaModel, setOllamaModel] = useState(DEFAULT_OLLAMA_MODEL)
   const [analysisFocus, setAnalysisFocus] = useState('')
   const [diarize, setDiarize] = useState(false)
 
-  // Estados de prueba de proveedor de IA (OpenAI / Ollama)
+  // Estados de prueba de proveedor de IA (OpenAI / Claude / Gemini / Ollama)
   const [testingAi, setTestingAi] = useState(false)
   const [aiTestResult, setAiTestResult] = useState(null)
 
@@ -103,11 +164,17 @@ export default function SettingsScreen() {
     setAiProvider(values.ai_provider)
     setAllowCloudFallback(values.allow_cloud_fallback)
     setOpenaiModel(values.openai_model)
+    setClaudeModel(values.claude_model)
+    setGeminiModel(values.gemini_model)
     setOllamaModel(values.ollama_model)
     setAnalysisFocus(values.analysis_focus)
     setRecordMode(values.record_mode)
     setMicDeviceId(values.mic_device_id)
     setDiarize(values.diarize)
+    setDictationMode(values.dictation_mode)
+    setDictationProvider(values.dictation_provider)
+    setDictationShortcut(values.dictation_shortcut)
+    setIsCustomShortcut(!PRESET_SHORTCUTS.some(s => s.value === values.dictation_shortcut && s.value !== 'custom'))
   }, [])
 
   const markSaved = useCallback((values) => {
@@ -128,8 +195,20 @@ export default function SettingsScreen() {
       applyConfig(values)
       markSaved(values)
       setOpenaiApiKey('')
-      setHasApiKey(Boolean(cfg.has_api_key))
+      setHasApiKey(Boolean(cfg.has_api_key || cfg.has_openai_key))
       setMaskedApiKey(cfg.openai_api_key || '')
+
+      setAnthropicApiKey('')
+      setHasClaudeKey(Boolean(cfg.has_claude_key))
+      setMaskedClaudeKey(cfg.anthropic_api_key || '')
+
+      setGeminiApiKey('')
+      setHasGeminiKey(Boolean(cfg.has_gemini_key))
+      setMaskedGeminiKey(cfg.gemini_api_key || '')
+
+      setGroqApiKey('')
+      setHasGroqKey(Boolean(cfg.has_groq_key))
+      setMaskedGroqKey(cfg.groq_api_key || '')
 
       setDevices(devicesRes.data.devices || [])
     } catch {
@@ -202,15 +281,30 @@ export default function SettingsScreen() {
       whisper_model: whisperModel,
       ai_provider: aiProvider,
       openai_model: openaiModel,
+      claude_model: claudeModel,
+      gemini_model: geminiModel,
       ollama_model: ollamaModel,
       allow_cloud_fallback: allowCloudFallback,
       analysis_focus: analysisFocus,
       record_mode: recordMode,
       mic_device_id: micDeviceId,
-      diarize: diarize
+      diarize: diarize,
+      dictation_mode: dictationMode,
+      dictation_provider: dictationProvider,
+      dictation_shortcut: dictationShortcut,
     }
     const typedKey = openaiApiKey.trim()
     if (typedKey) payload.openai_api_key = typedKey
+
+    const typedClaude = anthropicApiKey.trim()
+    if (typedClaude) payload.anthropic_api_key = typedClaude
+
+    const typedGemini = geminiApiKey.trim()
+    if (typedGemini) payload.gemini_api_key = typedGemini
+
+    const typedGroq = groqApiKey.trim()
+    if (typedGroq) payload.groq_api_key = typedGroq
+
     return payload
   }
 
@@ -218,15 +312,37 @@ export default function SettingsScreen() {
   const applySavedKeyState = (savedConfig) => {
     if (!savedConfig) return
     setOpenaiApiKey('')
-    setHasApiKey(Boolean(savedConfig.has_api_key))
+    setHasApiKey(Boolean(savedConfig.has_api_key || savedConfig.has_openai_key))
     setMaskedApiKey(savedConfig.openai_api_key || '')
+    setIsEditingOpenai(false)
+
+    setAnthropicApiKey('')
+    setHasClaudeKey(Boolean(savedConfig.has_claude_key))
+    setMaskedClaudeKey(savedConfig.anthropic_api_key || '')
+    setIsEditingClaude(false)
+
+    setGeminiApiKey('')
+    setHasGeminiKey(Boolean(savedConfig.has_gemini_key))
+    setMaskedGeminiKey(savedConfig.gemini_api_key || '')
+    setIsEditingGemini(false)
+
+    setGroqApiKey('')
+    setHasGroqKey(Boolean(savedConfig.has_groq_key))
+    setMaskedGroqKey(savedConfig.groq_api_key || '')
+    setIsEditingGroq(false)
   }
 
-  const handleDeleteKey = async () => {
+  const handleDeleteKey = async (providerToDelete = 'openai') => {
     if (isBackendOffline || deletingKey) return
     setDeletingKey(true)
     try {
-      const res = await updateConfig({ openai_api_key: '' })
+      const deletePayload = {}
+      if (providerToDelete === 'claude') deletePayload.anthropic_api_key = ''
+      else if (providerToDelete === 'gemini') deletePayload.gemini_api_key = ''
+      else if (providerToDelete === 'groq') deletePayload.groq_api_key = ''
+      else deletePayload.openai_api_key = ''
+
+      const res = await updateConfig(deletePayload)
       applySavedKeyState(res.data?.config)
       setAiTestResult(null)
       refreshStatus?.()
@@ -247,6 +363,9 @@ export default function SettingsScreen() {
       const res = await updateConfig(payload)
       applySavedKeyState(res.data?.config)
       markSaved(normalizeConfig(payload))
+      if (window.electronAPI?.dictationSetShortcut && payload.dictation_shortcut) {
+        window.electronAPI.dictationSetShortcut(payload.dictation_shortcut).catch(() => {})
+      }
       refreshStatus?.()
       showToast({ type: 'success', message: 'Configuración guardada correctamente' })
     } catch {
@@ -295,9 +414,20 @@ export default function SettingsScreen() {
     setTestingAi(true)
     setAiTestResult(null)
     try {
-      const activeModel = aiProvider === 'openai' ? openaiModel : ollamaModel
-      // Sin clave escrita, el backend usa la guardada
-      const activeKey = aiProvider === 'openai' ? (openaiApiKey.trim() || null) : null
+      let activeModel = ollamaModel
+      let activeKey = null
+
+      if (aiProvider === 'openai') {
+        activeModel = openaiModel
+        activeKey = openaiApiKey.trim() || null
+      } else if (aiProvider === 'claude') {
+        activeModel = claudeModel
+        activeKey = anthropicApiKey.trim() || null
+      } else if (aiProvider === 'gemini') {
+        activeModel = geminiModel
+        activeKey = geminiApiKey.trim() || null
+      }
+
       const res = await testAiProvider(aiProvider, activeKey, activeModel)
       const data = res.data
       setAiTestResult({
@@ -353,18 +483,36 @@ export default function SettingsScreen() {
     whisper_model: whisperModel,
     ai_provider: aiProvider,
     openai_model: openaiModel,
+    claude_model: claudeModel,
+    gemini_model: geminiModel,
     ollama_model: ollamaModel,
     allow_cloud_fallback: allowCloudFallback,
     analysis_focus: analysisFocus,
     record_mode: recordMode,
     mic_device_id: micDeviceId,
     diarize,
+    dictation_mode: dictationMode,
+    dictation_provider: dictationProvider,
+    dictation_shortcut: dictationShortcut,
   })
-  const isDirty = savedSnapshot !== null && (JSON.stringify(currentValues) !== savedSnapshot || openaiApiKey.trim() !== '')
+  const isDirty = savedSnapshot !== null && (
+    JSON.stringify(currentValues) !== savedSnapshot || 
+    openaiApiKey.trim() !== '' || 
+    anthropicApiKey.trim() !== '' || 
+    geminiApiKey.trim() !== '' ||
+    groqApiKey.trim() !== ''
+  )
 
   const handleDiscard = () => {
     if (savedConfigRef.current) applyConfig(savedConfigRef.current)
     setOpenaiApiKey('')
+    setIsEditingOpenai(false)
+    setAnthropicApiKey('')
+    setIsEditingClaude(false)
+    setGeminiApiKey('')
+    setIsEditingGemini(false)
+    setGroqApiKey('')
+    setIsEditingGroq(false)
     setAiTestResult(null)
   }
 
@@ -377,46 +525,232 @@ export default function SettingsScreen() {
     ? 'Predeterminado de Windows'
     : (devices.find((d) => d.id === micDeviceId)?.name || 'Dispositivo seleccionado')
 
-  // Se muestra dentro del bloque de OpenAI o, si el proveedor es local, en la sección Privacidad
-  const apiKeyField = (
-    <div className="form-group">
-      <label htmlFor="openai-key-input" style={LABEL_STYLE}>
-        <Icon name="lock" size={16} /> OpenAI API Key
-      </label>
-      {hasApiKey && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8, padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="check-circle" size={14} style={{ color: 'var(--green-ok)' }} />
-            Clave guardada ({maskedApiKey})
-          </span>
+  const handleShortcutSelectChange = (newVal) => {
+    if (newVal === 'custom') {
+      setIsCustomShortcut(true)
+    } else {
+      setIsCustomShortcut(false)
+      setDictationShortcut(newVal)
+      if (window.electronAPI?.dictationSetShortcut) {
+        window.electronAPI.dictationSetShortcut(newVal).catch(() => {})
+      }
+      showToast({ type: 'success', message: `Atajo actualizado a ${formatShortcutDisplay(newVal)}` })
+    }
+  }
+
+  const handleCustomShortcutChange = (e) => {
+    const val = e.target.value
+    setDictationShortcut(val)
+    if (val.trim() && window.electronAPI?.dictationSetShortcut) {
+      window.electronAPI.dictationSetShortcut(val.trim()).catch(() => {})
+    }
+  }
+
+  const renderApiKeyControl = ({
+    id,
+    label,
+    hasKey,
+    maskedKey,
+    typedKey,
+    setTypedKey,
+    isEditing,
+    setIsEditing,
+    showPassword,
+    setShowPassword,
+    onDelete,
+    placeholder,
+    helpText,
+  }) => {
+    const isShowingSaved = hasKey && !isEditing
+    return (
+      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <label htmlFor={id} style={LABEL_STYLE}>
+            <Icon name="lock" size={16} /> {label}
+          </label>
+          {hasKey && (
+            <span style={{ fontSize: 12, color: 'var(--green-ok)', display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
+              <Icon name="check-circle" size={13} /> Activa
+            </span>
+          )}
+        </div>
+
+        {hasKey && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            padding: '8px 12px',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            marginBottom: 2
+          }}>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="check-circle" size={14} style={{ color: 'var(--green-ok)' }} />
+              Clave guardada ({maskedKey})
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {!isEditing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(true)
+                    setTypedKey('')
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: 12 }}
+                >
+                  <Icon name="edit" size={12} /> Cambiar clave
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(false)
+                    setTypedKey('')
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: 12 }}
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deletingKey || isBackendOffline}
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: 12 }}
+              >
+                <Icon name="trash" size={12} /> {deletingKey ? 'Borrando...' : 'Borrar clave'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <input
+            id={id}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="off"
+            value={isEditing ? typedKey : (typedKey !== '' ? typedKey : (hasKey ? maskedKey : ''))}
+            onChange={(e) => {
+              setIsEditing(true)
+              setTypedKey(e.target.value)
+              setAiTestResult(null)
+            }}
+            placeholder={hasKey ? 'Escribe una nueva clave para reemplazar la guardada' : placeholder}
+            style={{
+              ...TEXT_INPUT_STYLE,
+              flex: 1,
+              paddingRight: 40,
+              fontFamily: isShowingSaved && !showPassword ? 'monospace' : 'inherit',
+              letterSpacing: isShowingSaved && !showPassword ? '1px' : 'normal',
+            }}
+          />
           <button
             type="button"
-            onClick={handleDeleteKey}
-            disabled={deletingKey || isBackendOffline}
-            className="btn btn-secondary"
-            style={{ padding: '5px 12px', fontSize: 12 }}
+            onClick={() => setShowPassword(!showPassword)}
+            title={showPassword ? 'Ocultar caracteres' : 'Mostrar caracteres'}
+            style={{
+              position: 'absolute',
+              right: 10,
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center'
+            }}
           >
-            <Icon name="trash" size={13} /> {deletingKey ? 'Borrando...' : 'Borrar clave'}
+            <Icon name={showPassword ? 'eye-off' : 'eye'} size={15} />
           </button>
         </div>
-      )}
-      <input
-        id="openai-key-input"
-        type="password"
-        autoComplete="off"
-        value={openaiApiKey}
-        onChange={(e) => {
-          setOpenaiApiKey(e.target.value)
-          setAiTestResult(null)
-        }}
-        placeholder={hasApiKey ? 'Escribe una nueva clave para reemplazar la guardada' : 'sk-...'}
-        style={TEXT_INPUT_STYLE}
-      />
-      <span className="form-hint">
-        La clave se guarda solo en este equipo y nunca se vuelve a mostrar completa. Si dejas el campo vacío se conserva la guardada.
-      </span>
-    </div>
-  )
+
+        {hasKey && !isEditing ? (
+          <span className="form-hint" style={{ color: 'var(--green-ok)' }}>
+            ✓ Tu clave está guardada de forma segura en este equipo. El input muestra tu clave registrada.
+          </span>
+        ) : isEditing ? (
+          <span className="form-hint" style={{ color: 'var(--yellow-warn)' }}>
+            ⚠️ Escribiendo nueva clave. Recuerda hacer clic en "Guardar ajustes" al pie para confirmarla.
+          </span>
+        ) : (
+          <span className="form-hint">
+            {helpText}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const apiKeyField = renderApiKeyControl({
+    id: 'openai-key-input',
+    label: 'OpenAI API Key',
+    hasKey: hasApiKey,
+    maskedKey: maskedApiKey,
+    typedKey: openaiApiKey,
+    setTypedKey: setOpenaiApiKey,
+    isEditing: isEditingOpenai,
+    setIsEditing: setIsEditingOpenai,
+    showPassword: showOpenaiPassword,
+    setShowPassword: setShowOpenaiPassword,
+    onDelete: () => handleDeleteKey('openai'),
+    placeholder: 'sk-...',
+    helpText: 'La clave se guarda solo en este equipo y nunca se vuelve a mostrar completa.',
+  })
+
+  const claudeApiKeyField = renderApiKeyControl({
+    id: 'claude-key-input',
+    label: 'Anthropic (Claude) API Key',
+    hasKey: hasClaudeKey,
+    maskedKey: maskedClaudeKey,
+    typedKey: anthropicApiKey,
+    setTypedKey: setAnthropicApiKey,
+    isEditing: isEditingClaude,
+    setIsEditing: setIsEditingClaude,
+    showPassword: showClaudePassword,
+    setShowPassword: setShowClaudePassword,
+    onDelete: () => handleDeleteKey('claude'),
+    placeholder: 'sk-ant-...',
+    helpText: 'La clave se guarda únicamente en este equipo local y nunca se muestra completa.',
+  })
+
+  const geminiApiKeyField = renderApiKeyControl({
+    id: 'gemini-key-input',
+    label: 'Google Gemini API Key',
+    hasKey: hasGeminiKey,
+    maskedKey: maskedGeminiKey,
+    typedKey: geminiApiKey,
+    setTypedKey: setGeminiApiKey,
+    isEditing: isEditingGemini,
+    setIsEditing: setIsEditingGemini,
+    showPassword: showGeminiPassword,
+    setShowPassword: setShowGeminiPassword,
+    onDelete: () => handleDeleteKey('gemini'),
+    placeholder: 'AIzaSy...',
+    helpText: 'La clave de Google Gemini se almacena de forma local y privada en tu equipo.',
+  })
+
+  const groqApiKeyField = renderApiKeyControl({
+    id: 'groq-key-input',
+    label: 'Clave API de Groq Cloud (Ultra-rápida)',
+    hasKey: hasGroqKey,
+    maskedKey: maskedGroqKey,
+    typedKey: groqApiKey,
+    setTypedKey: setGroqApiKey,
+    isEditing: isEditingGroq,
+    setIsEditing: setIsEditingGroq,
+    showPassword: showGroqPassword,
+    setShowPassword: setShowGroqPassword,
+    onDelete: () => handleDeleteKey('groq'),
+    placeholder: 'gsk_...',
+    helpText: 'Obtén tu clave de alta velocidad sin costo en console.groq.com. Transcribe en ~240ms con Whisper Large v3 Turbo.',
+  })
 
   return (
     <div className="settings-screen glass" style={{ flex: 1, padding: '24px 32px 0', overflowY: 'auto' }}>
@@ -627,11 +961,22 @@ export default function SettingsScreen() {
           >
             <option value="local">En este equipo (Whisper + Ollama) · privado</option>
             <option value="openai">En la nube (OpenAI) · más rápido, envía audio y texto</option>
+            <option value="claude">En la nube (Anthropic Claude) · máxima calidad de análisis</option>
+            <option value="gemini">En la nube (Google Gemini) · multimodal directo, económico</option>
           </select>
           <span className="form-hint">
-            {aiProvider === 'openai'
-              ? <>Se envían <strong>el audio y el texto</strong> a OpenAI: transcribe Whisper-1 y analiza el modelo elegido abajo. No sobrecarga tu equipo.</>
-              : 'Todo se procesa en tu equipo: Whisper transcribe y Ollama analiza. Nada sale de este equipo.'}
+            {aiProvider === 'openai' && (
+              <>Se envían <strong>el audio y el texto</strong> a OpenAI: transcribe Whisper-1 y analiza el modelo elegido abajo. No sobrecarga tu equipo.</>
+            )}
+            {aiProvider === 'claude' && (
+              <>Anthropic Claude analiza y diariza la conversación con gran fidelidad contextual; la transcripción inicial se procesa en tu equipo con Whisper.</>
+            )}
+            {aiProvider === 'gemini' && (
+              <>Google Gemini procesa el audio de forma multimodal directa (hasta varias horas) a bajo costo y alta velocidad.</>
+            )}
+            {aiProvider === 'local' && (
+              'Todo se procesa en tu equipo: Whisper transcribe y Ollama analiza. Nada sale de este equipo.'
+            )}
           </span>
         </div>
 
@@ -660,8 +1005,8 @@ export default function SettingsScreen() {
         </div>
         )}
 
-        {/* Configuraciones Específicas del Proveedor */}
-        {aiProvider === 'local' ? (
+        {/* Configuraciones Específicas del Proveedor: LOCAL */}
+        {aiProvider === 'local' && (
           <div className="form-group" style={{ padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label htmlFor="ollama-model-select" style={LABEL_STYLE}>
@@ -746,7 +1091,10 @@ export default function SettingsScreen() {
               )}
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* Configuraciones Específicas del Proveedor: OPENAI */}
+        {aiProvider === 'openai' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             {apiKeyField}
             <div className="form-group">
@@ -828,6 +1176,272 @@ export default function SettingsScreen() {
           </div>
         )}
 
+        {/* Configuraciones Específicas del Proveedor: CLAUDE */}
+        {aiProvider === 'claude' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+            {claudeApiKeyField}
+            <div className="form-group">
+              <label htmlFor="claude-model-select" style={LABEL_STYLE}>
+                <Icon name="cloud" size={16} /> Modelo de análisis (Anthropic Claude)
+              </label>
+              <select
+                id="claude-model-select"
+                value={claudeModel}
+                onChange={(e) => {
+                  setClaudeModel(e.target.value)
+                  setAiTestResult(null)
+                }}
+                className="input-select"
+                style={TEXT_INPUT_STYLE}
+              >
+                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Rápido, Económico, Diarización Precisa)</option>
+                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Máxima Calidad y Razonamiento)</option>
+              </select>
+            </div>
+
+            {/* Acciones de Prueba de Conexión Claude */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleTestAiConnection}
+                  disabled={testingAi || isBackendOffline}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+                >
+                  <Icon
+                    name={testingAi ? 'refresh' : 'zap'}
+                    size={14}
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--accent-primary)' }}
+                  />
+                  {testingAi ? 'Verificando Claude...' : 'Probar Conexión Claude'}
+                </button>
+
+                {aiTestResult && aiTestResult.provider === 'claude' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      background: aiTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: aiTestResult.success ? '#10B981' : '#EF4444',
+                      border: `1px solid ${aiTestResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                    }}
+                  >
+                    <Icon name={aiTestResult.success ? 'check-circle' : 'alert-triangle'} size={14} />
+                    {aiTestResult.success ? `Latencia: ${aiTestResult.latency_ms} ms` : 'Fallo de Verificación'}
+                  </span>
+                )}
+              </div>
+
+              {aiTestResult && aiTestResult.provider === 'claude' && (
+                <div
+                  role="status"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 12,
+                    background: aiTestResult.success ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    color: aiTestResult.success ? 'var(--text-primary)' : '#FCA5A5',
+                    borderLeft: `3px solid ${aiTestResult.success ? '#10B981' : '#EF4444'}`,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {aiTestResult.message}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Configuraciones Específicas del Proveedor: GEMINI */}
+        {aiProvider === 'gemini' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+            {geminiApiKeyField}
+            <div className="form-group">
+              <label htmlFor="gemini-model-select" style={LABEL_STYLE}>
+                <Icon name="cloud" size={16} /> Modelo de transcripción y análisis (Google Gemini)
+              </label>
+              <select
+                id="gemini-model-select"
+                value={geminiModel}
+                onChange={(e) => {
+                  setGeminiModel(e.target.value)
+                  setAiTestResult(null)
+                }}
+                className="input-select"
+                style={TEXT_INPUT_STYLE}
+              >
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Multimodal, Rápido, Muy Económico - Recomendado)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Gran Contexto, Estable)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Máximo Razonamiento y 2M Tokens)</option>
+              </select>
+            </div>
+
+            {/* Acciones de Prueba de Conexión Gemini */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleTestAiConnection}
+                  disabled={testingAi || isBackendOffline}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7 }}
+                >
+                  <Icon
+                    name={testingAi ? 'refresh' : 'zap'}
+                    size={14}
+                    style={testingAi ? { animation: 'spin 0.8s linear infinite' } : { color: 'var(--accent-primary)' }}
+                  />
+                  {testingAi ? 'Verificando Gemini...' : 'Probar Conexión Gemini'}
+                </button>
+
+                {aiTestResult && aiTestResult.provider === 'gemini' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      background: aiTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: aiTestResult.success ? '#10B981' : '#EF4444',
+                      border: `1px solid ${aiTestResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                    }}
+                  >
+                    <Icon name={aiTestResult.success ? 'check-circle' : 'alert-triangle'} size={14} />
+                    {aiTestResult.success ? `Latencia: ${aiTestResult.latency_ms} ms` : 'Fallo de Verificación'}
+                  </span>
+                )}
+              </div>
+
+              {aiTestResult && aiTestResult.provider === 'gemini' && (
+                <div
+                  role="status"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 12,
+                    background: aiTestResult.success ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    color: aiTestResult.success ? 'var(--text-primary)' : '#FCA5A5',
+                    borderLeft: `3px solid ${aiTestResult.success ? '#10B981' : '#EF4444'}`,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {aiTestResult.message}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        </section>
+
+        {/* Dictado en Cursor y Notas de Voz */}
+        <section id="settings-dictation" className="settings-section" aria-labelledby="settings-dictation-title">
+          <header className="settings-section-head">
+            <h2 id="settings-dictation-title"><Icon name="edit" size={17} /> Dictado en Cursor y Notas de Voz</h2>
+            <p>Escribe con tu voz directamente donde esté colocado el cursor en cualquier aplicación.</p>
+          </header>
+
+          {/* Atajo de teclado global interactivo */}
+          <div className="form-group" style={{ padding: '16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <label htmlFor="dictation-shortcut-select" style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 2, display: 'block' }}>
+                  Atajo Global de Activación
+                </label>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Presiona esta combinación para iniciar o detener el dictado sin perder el foco del cursor.
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="shortcut-chip" style={{ fontSize: 13, padding: '6px 14px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.4)', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                  {formatShortcutDisplay(dictationShortcut)}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                id="dictation-shortcut-select"
+                value={isCustomShortcut ? 'custom' : dictationShortcut}
+                onChange={(e) => handleShortcutSelectChange(e.target.value)}
+                className="input-select"
+                style={{ ...TEXT_INPUT_STYLE, flex: 1, minWidth: 260 }}
+              >
+                {PRESET_SHORTCUTS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+
+              {isCustomShortcut && (
+                <input
+                  type="text"
+                  value={dictationShortcut}
+                  onChange={handleCustomShortcutChange}
+                  placeholder="Ej: Control+Shift+X"
+                  style={{ ...TEXT_INPUT_STYLE, width: 180 }}
+                />
+              )}
+            </div>
+
+            <span className="form-hint" style={{ color: 'var(--text-muted)' }}>
+              💡 <strong>Nota:</strong> <code>Ctrl + Alt + Espacio</code> suele estar ocupado por Claude Desktop. El atajo recomendado por defecto es <code>Ctrl + Shift + D</code> (D de Dictado) para evitar conflictos.
+            </span>
+          </div>
+
+          {/* Proveedor de Dictado */}
+          <div className="form-group">
+            <label htmlFor="dictation-provider-select" style={LABEL_STYLE}>
+              <Icon name="zap" size={16} /> Motor de Transcripción (STT) para Dictado
+            </label>
+            <select
+              id="dictation-provider-select"
+              value={dictationProvider}
+              onChange={(e) => setDictationProvider(e.target.value)}
+              className="input-select"
+              style={TEXT_INPUT_STYLE}
+            >
+              <option value="groq">Groq Cloud (Whisper Large v3 Turbo) · Ultra-rápido (~250ms, Recomendado)</option>
+              <option value="openai">OpenAI Cloud (Whisper-1) · ~2.5s de latencia</option>
+              <option value="local">Faster-Whisper Local (Base CPU int8) · 100% Offline</option>
+            </select>
+            <span className="form-hint">
+              Groq Cloud LPU ofrece inmediatez perceptible (&lt;300ms) para que el texto aparezca casi instantáneamente en tu cursor.
+            </span>
+          </div>
+
+          {/* Clave de Groq si está seleccionado o para tenerla configurada */}
+          {groqApiKeyField}
+
+          {/* Modo de Dictado: Ideas Claras vs Literal */}
+          <div className="form-group">
+            <label htmlFor="dictation-mode-select" style={LABEL_STYLE}>
+              <Icon name="lightbulb" size={16} /> Modo de Redacción y Procesamiento
+            </label>
+            <select
+              id="dictation-mode-select"
+              value={dictationMode}
+              onChange={(e) => setDictationMode(e.target.value)}
+              className="input-select"
+              style={TEXT_INPUT_STYLE}
+            >
+              <option value="smart_polish">✨ Ideas Claras (Pulido con LLM - Elimina muletillas, autocorrige titubeos y formatea)</option>
+              <option value="literal">📝 Literal (Inyecta el texto exacto tal cual fue pronunciado)</option>
+            </select>
+            <span className="form-hint">
+              En modo <strong>Ideas Claras</strong>, el modelo de lenguaje elimina los "eh, o sea, bueno", convierte dudas ("vamos a enviar tres, no, cuatro") en la redacción final, y soporta comandos como "punto y aparte" o "nueva línea".
+            </span>
+          </div>
         </section>
 
         <section id="settings-analysis" className="settings-section" aria-labelledby="settings-analysis-title">
@@ -896,7 +1510,7 @@ export default function SettingsScreen() {
               type="checkbox"
               id="cloud-fallback-chk"
               checked={allowCloudFallback}
-              disabled={aiProvider === 'openai'}
+              disabled={aiProvider !== 'local'}
               onChange={(e) => setAllowCloudFallback(e.target.checked)}
               style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2 }}
             />
@@ -911,17 +1525,17 @@ export default function SettingsScreen() {
                   y se aplicarán sus condiciones. Requiere una clave de API. Está desactivado por defecto.
                 </span>
               </span>
-              {aiProvider === 'openai' && (
-                <span className="form-hint">No aplica: ya usas OpenAI como proveedor principal.</span>
+              {aiProvider !== 'local' && (
+                <span className="form-hint">No aplica: ya usas un proveedor en la nube ({aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'claude' ? 'Claude' : 'Gemini'}) como motor principal.</span>
               )}
-              {aiProvider !== 'openai' && allowCloudFallback && !hasApiKey && !openaiApiKey.trim() && (
+              {aiProvider === 'local' && allowCloudFallback && !hasApiKey && !openaiApiKey.trim() && (
                 <span className="form-hint">Añade una clave de API abajo para que el respaldo funcione.</span>
               )}
             </div>
           </div>
 
-          {/* Con proveedor OpenAI la clave se gestiona en su propio bloque (arriba) */}
-          {aiProvider !== 'openai' && apiKeyField}
+          {/* Con proveedores de nube la clave se gestiona en su propio bloque; en local se muestra aquí para respaldo */}
+          {aiProvider === 'local' && apiKeyField}
         </section>
       </form>
 
@@ -1034,20 +1648,35 @@ function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
     container?.dispatchEvent(new Event('scroll'))
   }
 
-  const isCloud = values.ai_provider === 'openai'
   const usesMic = values.record_mode !== 'system'
-  const privacy = isCloud
-    ? { icon: 'cloud', tone: 'warn', title: 'Se procesa en la nube', text: 'El audio y el texto de tus reuniones se envían a OpenAI.' }
-    : values.allow_cloud_fallback
-      ? { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'Si Ollama no responde, el texto se enviará a OpenAI (respaldo activado).' }
-      : { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'El audio y el texto nunca salen de tu equipo.' }
+
+  let privacy = { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'El audio y el texto nunca salen de tu equipo.' }
+  if (values.ai_provider === 'openai') {
+    privacy = { icon: 'cloud', tone: 'warn', title: 'Se procesa en la nube (OpenAI)', text: 'El audio y el texto de tus reuniones se envían a OpenAI.' }
+  } else if (values.ai_provider === 'claude') {
+    privacy = { icon: 'cloud', tone: 'warn', title: 'Híbrido (Whisper + Claude)', text: 'El audio se transcribe en tu equipo; el texto se envía a Anthropic Claude.' }
+  } else if (values.ai_provider === 'gemini') {
+    privacy = { icon: 'cloud', tone: 'warn', title: 'Se procesa en la nube (Google Gemini)', text: 'El audio y el texto se envían a Google Gemini.' }
+  } else if (values.allow_cloud_fallback) {
+    privacy = { icon: 'lock', tone: 'ok', title: 'Se procesa en este equipo', text: 'Si Ollama no responde, el texto se enviará a la nube (respaldo activado).' }
+  }
+
+  let transcriptionLabel = `Whisper ${values.whisper_model}`
+  if (values.ai_provider === 'openai') transcriptionLabel = 'Whisper-1 (OpenAI)'
+  else if (values.ai_provider === 'claude') transcriptionLabel = `Whisper ${values.whisper_model} + Claude`
+  else if (values.ai_provider === 'gemini') transcriptionLabel = `${values.gemini_model || 'Gemini 2.0 Flash'} (Google)`
+
+  let analysisLabel = `${values.ollama_model} (Ollama)`
+  if (values.ai_provider === 'openai') analysisLabel = `${values.openai_model} (OpenAI)`
+  else if (values.ai_provider === 'claude') analysisLabel = `${values.claude_model} (Claude)`
+  else if (values.ai_provider === 'gemini') analysisLabel = `${values.gemini_model} (Gemini)`
 
   const rows = [
     { label: 'Grabación', value: RECORD_MODE_LABELS[values.record_mode] || values.record_mode },
     usesMic ? { label: 'Micrófono', value: micName } : null,
-    { label: 'Transcripción', value: isCloud ? 'Whisper-1 (OpenAI)' : `Whisper ${values.whisper_model}` },
-    { label: 'Análisis', value: isCloud ? `${values.openai_model} (OpenAI)` : `${values.ollama_model} (Ollama)` },
-    { label: 'Hablantes', value: values.diarize ? 'Se separan por voz' : 'Sin separar' },
+    { label: 'Transcripción', value: transcriptionLabel },
+    { label: 'Análisis', value: analysisLabel },
+    { label: 'Hablantes', value: values.diarize ? 'Separados por contexto (IA)' : 'Sin separar' },
     { label: 'Enfoque', value: values.analysis_focus.trim() ? 'Personalizado' : 'Estándar' },
   ].filter(Boolean)
 
