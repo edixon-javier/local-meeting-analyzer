@@ -248,11 +248,16 @@ export function InformationGatheringVisual() {
         })}
       </svg>
 
-      {/* Central Memory Core: Nucleus of the brain cluster */}
+      {/* Central Memory Core: Nucleus of the brain cluster with official logo */}
       <div className="relative z-20 flex flex-col items-center justify-center p-5 rounded-2xl bg-[#091226]/90 border border-cyan-400/45 backdrop-blur-2xl shadow-[0_0_40px_-5px_rgba(6,182,212,0.5)] text-center max-w-[210px] transition-transform duration-300 hover:scale-105">
-        <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-600 flex items-center justify-center text-white mb-2 shadow-glow-cyan">
-          <Cpu className="w-6 h-6 animate-pulse" />
-          <span className="absolute -inset-1 rounded-xl bg-cyan-400/30 blur-sm animate-ping opacity-60" />
+        <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-600 p-[1.5px] flex items-center justify-center mb-2 shadow-glow-cyan overflow-hidden">
+          <img
+            src="/icon.png"
+            alt="Local Meeting Analyzer"
+            className="w-full h-full object-cover rounded-[10px]"
+            onError={(e) => { e.currentTarget.src = '/assets/icon.png'; }}
+          />
+          <span className="absolute -inset-1 rounded-xl bg-cyan-400/30 blur-sm animate-ping opacity-60 pointer-events-none" />
         </div>
         <span className="font-display font-semibold text-white text-xs tracking-tight">
           Memoria Local
@@ -266,7 +271,7 @@ export function InformationGatheringVisual() {
         </div>
       </div>
 
-      {/* Floating dispersed elements forming the brain lobes */}
+      {/* Floating dispersed elements forming the brain lobes with dynamic hover elevation */}
       {tokens.map((token) => {
         const Icon = token.icon;
         const isHovered = activeToken === token.id;
@@ -278,11 +283,15 @@ export function InformationGatheringVisual() {
             style={{
               animationDelay: token.delay,
             }}
-            className={`absolute ${token.pos} z-30 animate-float cursor-pointer transition-all duration-300`}
+            className={`absolute ${token.pos} z-30 animate-float cursor-pointer transition-all duration-300 ease-out ${
+              isHovered ? '-translate-y-3.5 scale-110 z-50' : 'hover:-translate-y-2'
+            }`}
           >
             <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md transition-all duration-300 ${token.color} ${token.glow} ${
-                isHovered ? 'scale-110 brightness-125 z-40' : 'hover:scale-105'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md transition-all duration-300 ${token.color} ${
+                isHovered
+                  ? 'brightness-125 shadow-[0_0_25px_rgba(6,182,212,0.65)] ring-1 ring-white/40'
+                  : `${token.glow} hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]`
               }`}
             >
               <Icon className="w-3.5 h-3.5 shrink-0" />

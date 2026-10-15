@@ -9,10 +9,15 @@ export function Footer() {
           {/* Logo & Manifesto */}
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <div className="flex items-center gap-2.5 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center text-white">
-                <Mic className="w-4 h-4" />
+              <div className="relative w-8 h-8 rounded-xl overflow-hidden border border-white/10 shadow-sm shrink-0">
+                <img
+                  src="/icon.png"
+                  alt="Local Meeting Analyzer Logo"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.src = '/assets/icon.png'; }}
+                />
               </div>
-              <span className="font-display font-bold text-lg text-white">Local Meeting Analyzer</span>
+              <span className="font-display font-semibold text-lg text-white">Local Meeting Analyzer</span>
             </div>
             <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
               La alternativa de código abierto, sin bots y 100% privada para transcribir y analizar reuniones con IA en Windows.
