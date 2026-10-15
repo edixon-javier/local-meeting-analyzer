@@ -19,17 +19,17 @@ export function PrimaryShimmerButton({
         href={href}
         download="Meeting-Analyzer.exe"
         onClick={handleClick}
-        className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl p-[1.5px] h-[52px] transition-all duration-300 hover:scale-[1.01] active:scale-[0.98] shadow-glow-cyan hover:shadow-glow-violet ${className}`}
+        className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl p-[1.5px] h-[52px] transition-all duration-300 hover:scale-[1.01] active:scale-[0.98] shadow-[0_0_35px_-5px_rgba(16,185,129,0.45)] hover:shadow-[0_0_45px_-5px_rgba(16,185,129,0.7)] ${className}`}
       >
-        {/* Animated gradient border */}
-        <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-600 animate-gradient-flow rounded-xl" />
+        {/* Animated emerald/teal gradient border */}
+        <span className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500 animate-gradient-flow rounded-xl" />
 
         {/* Button content surface */}
-        <span className="relative flex items-center justify-center gap-2.5 h-full px-6 rounded-[10px] bg-gradient-to-r from-[#09152e] to-[#120d2c] border border-white/20 transition-all duration-300 group-hover:bg-opacity-80">
+        <span className="relative flex items-center justify-center gap-2.5 h-full px-6 rounded-[10px] bg-gradient-to-r from-[#07191d] to-[#071322] border border-emerald-400/25 transition-all duration-300 group-hover:bg-opacity-80">
           {/* Shimmer sweep effect */}
           <span className="pointer-events-none absolute inset-0 -translate-x-full animate-shimmer-sweep bg-gradient-to-r from-transparent via-white/25 to-transparent w-1/2" />
 
-          <Download className="w-4 h-4 text-cyan-300 transition-transform duration-300 group-hover:translate-y-0.5" />
+          <Download className="w-4 h-4 text-emerald-300 transition-transform duration-300 group-hover:translate-y-0.5" />
           <span className="font-medium text-white tracking-normal text-sm whitespace-nowrap">
             {label}
           </span>
@@ -58,12 +58,12 @@ export function SecondaryGitHubButton({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`group relative inline-flex items-center justify-center gap-2.5 px-6 h-[52px] rounded-xl border border-white/10 bg-slate-900/80 backdrop-blur-md text-slate-300 font-medium text-sm transition-all duration-300 hover:border-cyan-400/40 hover:bg-slate-800/90 hover:text-white hover:shadow-[0_0_20px_-5px_rgba(6,182,212,0.25)] active:scale-[0.98] ${className}`}
+      className={`group relative inline-flex items-center justify-center gap-2.5 px-6 h-[52px] rounded-xl border border-white/10 bg-slate-900/80 backdrop-blur-md text-slate-300 font-medium text-sm transition-all duration-300 hover:border-emerald-400/50 hover:bg-slate-800/90 hover:text-white hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] active:scale-[0.98] ${className}`}
     >
-      <Github className="w-4 h-4 text-slate-400 transition-colors group-hover:text-cyan-300" />
+      <Github className="w-4 h-4 text-slate-400 transition-colors group-hover:text-emerald-300" />
       <span className="whitespace-nowrap">{label}</span>
       {badge && (
-        <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+        <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/30 text-[10px] font-mono text-emerald-300">
           {badge}
         </span>
       )}
