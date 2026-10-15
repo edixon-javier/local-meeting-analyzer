@@ -3,19 +3,23 @@ import { ShieldCheck, Check, Laptop } from 'lucide-react';
 import { PrimaryShimmerButton, SecondaryGitHubButton } from './Buttons';
 import { AppMockup } from './AppMockup';
 import { InformationGatheringVisual } from './InformationGatheringVisual';
+import { BackgroundScatteredNotes } from './BackgroundScatteredNotes';
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
-      {/* Background ambient lighting */}
-      <div className="pointer-events-none absolute inset-0 bg-grid-pattern bg-radial-mask opacity-40 z-0" />
+      {/* Background ambient lighting & grid */}
+      <div className="pointer-events-none absolute inset-0 bg-grid-pattern bg-radial-mask opacity-30 z-0" />
       <div className="pointer-events-none absolute top-16 left-1/4 w-[650px] h-[380px] bg-gradient-to-tr from-cyan-500/15 via-blue-600/10 to-violet-600/15 blur-[140px] rounded-full z-0" />
 
-      {/* Primer Giro / First Viewport Fold */}
+      {/* Scattered notes and fragments floating in the background across the entire hero */}
+      <BackgroundScatteredNotes />
+
+      {/* Primer Giro / First Viewport Fold (Foreground Order & Structure) */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[85vh] lg:min-h-[90vh] flex flex-col justify-center pt-24 pb-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
           
-          {/* Left Column (Clear, direct, non-generic copy with working staggered entrance animations) */}
+          {/* Left Column (Clear, structured copy with entrance animations) */}
           <div className="lg:col-span-7 text-left space-y-6">
             <h1 className="animate-enter-1 font-display font-semibold text-3xl sm:text-5xl lg:text-6xl tracking-tight text-white leading-[1.14]">
               Transcribe tus reuniones y llamadas en tiempo real.<br />
@@ -58,7 +62,7 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Right Column (Memory Core organizing dispersed thoughts with entrance animation) */}
+          {/* Right Column (Memory Core organizing dispersed thoughts) */}
           <div className="animate-enter-4 lg:col-span-5 w-full">
             <InformationGatheringVisual />
           </div>
