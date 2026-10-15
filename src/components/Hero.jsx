@@ -62,8 +62,8 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Right Column (Memory Core organizing dispersed thoughts) */}
-          <div className="animate-enter-4 lg:col-span-5 w-full">
+          {/* Right Column (Memory Core organizing dispersed thoughts - aligned towards the green X on large screens) */}
+          <div className="animate-enter-4 lg:col-span-5 w-full flex justify-center lg:justify-end xl:translate-x-8 2xl:translate-x-16">
             <InformationGatheringVisual />
           </div>
         </div>
