@@ -66,7 +66,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 # Importar routers refactorizados
-from api.routers import recording, analysis, history, system, setup
+from api.routers import recording, analysis, history, system, setup, dictation
 
 # ─────────────────────────────────────────
 # App Setup
@@ -133,6 +133,7 @@ app.include_router(recording.router, prefix="/recording", tags=["Recording"])
 app.include_router(analysis.router, tags=["Analysis"])
 app.include_router(history.router, prefix="/recordings", tags=["History"])
 app.include_router(setup.router, tags=["Setup"])
+app.include_router(dictation.router, prefix="/dictation", tags=["Dictation"])
 
 # ─────────────────────────────────────────
 # Punto de entrada

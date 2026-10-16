@@ -253,11 +253,20 @@ class MetadataRepository(IMetadataRepository):
             return None
 
         task_item = action_items[task_index]
-        if not isinstance(task_item, dict):
+        if isinstance(task_item, str):
+            task_item = {
+                "task": task_item,
+                "completed": bool(completed),
+                "assignee": "Sin asignar",
+                "deadline": "Sin fecha",
+                "updated_at": time_module.time()
+            }
+            action_items[task_index] = task_item
+        elif isinstance(task_item, dict):
+            task_item["completed"] = bool(completed)
+            task_item["updated_at"] = time_module.time()
+        else:
             return None
-
-        task_item["completed"] = bool(completed)
-        task_item["updated_at"] = time_module.time()
 
         try:
             with open(json_path, "w", encoding="utf-8") as f:

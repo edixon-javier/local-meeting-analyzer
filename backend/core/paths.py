@@ -75,6 +75,11 @@ def get_recordings_dir() -> str:
     return _ensure_dir(os.path.join(get_data_dir(), "recordings"))
 
 
+def get_dictations_dir() -> str:
+    """Carpeta para audios y metadatos de dictados en cursor."""
+    return _ensure_dir(os.path.join(get_recordings_dir(), "dictations"))
+
+
 def get_logs_dir() -> str:
     return _ensure_dir(os.path.join(get_data_dir(), "logs"))
 

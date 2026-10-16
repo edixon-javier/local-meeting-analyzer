@@ -87,6 +87,61 @@ class TestHistoryNaming(unittest.TestCase):
                 if os.path.exists(path):
                     os.remove(path)
 
+    def test_list_recordings_includes_task_counts(self):
+        rec_dir = get_recordings_dir()
+        os.makedirs(rec_dir, exist_ok=True)
+        audio = os.path.join(rec_dir, "meeting_with_tasks.wav")
+        meta = os.path.join(rec_dir, "meeting_with_tasks.json")
+        with open(audio, "wb") as f:
+            f.write(b"RIFF0000WAVE")
+        with open(meta, "w", encoding="utf-8") as f:
+            json.dump({
+                "analysis": {
+                    "summary": ["Resumen"],
+                    "action_items": [
+                        {"task": "Tarea 1", "completed": False},
+                        {"task": "Tarea 2", "completed": True},
+                        {"task": "Tarea 3", "completed": False}
+                    ]
+                }
+            }, f)
+        try:
+            recs = self.client.get("/recordings/").json()["recordings"]
+            target = next(r for r in recs if r["filename"] == "meeting_with_tasks.wav")
+            self.assertEqual(target["tasks_count"], 3)
+            self.assertEqual(target["pending_tasks_count"], 2)
+        finally:
+            for path in (audio, meta):
+                if os.path.exists(path):
+                    os.remove(path)
+
+    def test_list_recordings_handles_string_action_items(self):
+        rec_dir = get_recordings_dir()
+        os.makedirs(rec_dir, exist_ok=True)
+        audio = os.path.join(rec_dir, "meeting_with_string_tasks.wav")
+        meta = os.path.join(rec_dir, "meeting_with_string_tasks.json")
+        with open(audio, "wb") as f:
+            f.write(b"RIFF0000WAVE")
+        with open(meta, "w", encoding="utf-8") as f:
+            json.dump({
+                "analysis": {
+                    "summary": ["Resumen"],
+                    "action_items": [
+                        "Tarea en formato texto 1",
+                        "Tarea en formato texto 2"
+                    ]
+                }
+            }, f)
+        try:
+            recs = self.client.get("/recordings/").json()["recordings"]
+            target = next(r for r in recs if r["filename"] == "meeting_with_string_tasks.wav")
+            self.assertEqual(target["tasks_count"], 2)
+            self.assertEqual(target["pending_tasks_count"], 2)
+        finally:
+            for path in (audio, meta):
+                if os.path.exists(path):
+                    os.remove(path)
+
 
 class TestMicNames(unittest.TestCase):
     def test_clean_mic_name_no_duplicate_prefix(self):

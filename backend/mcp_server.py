@@ -23,6 +23,7 @@ if _BACKEND_DIR not in sys.path:
 
 from core.paths import get_recordings_dir
 from services.metadata_repository import MetadataRepository
+from services.task_export_service import TaskExportService, normalize_action_item
 from mcp.server.mcpserver import MCPServer
 
 # Inicializar servidor MCP
@@ -113,12 +114,22 @@ def list_meetings() -> List[Dict[str, Any]]:
             tone = None
             preview = None
             bookmarks_count = 0
+            tasks_count = 0
+            pending_tasks_count = 0
 
             if meta:
                 analysis = meta.get("analysis") or {}
-                category = analysis.get("category")
-                tone = analysis.get("tone")
-                preview = _get_summary_preview(analysis)
+                if isinstance(analysis, dict):
+                    category = analysis.get("category")
+                    tone = analysis.get("tone")
+                    preview = _get_summary_preview(analysis)
+                    action_items = analysis.get("action_items") or []
+                    if isinstance(action_items, list):
+                        tasks_count = len(action_items)
+                        pending_tasks_count = sum(
+                            1 for t in action_items
+                            if (isinstance(t, dict) and not t.get("completed")) or isinstance(t, str)
+                        )
                 bookmarks = meta.get("bookmarks")
                 if isinstance(bookmarks, list):
                     bookmarks_count = len(bookmarks)
@@ -132,7 +143,9 @@ def list_meetings() -> List[Dict[str, Any]]:
                 "category": category,
                 "tone": tone,
                 "summary_preview": preview,
-                "bookmarks_count": bookmarks_count
+                "bookmarks_count": bookmarks_count,
+                "tasks_count": tasks_count,
+                "pending_tasks_count": pending_tasks_count
             })
 
     return meetings
@@ -227,22 +240,67 @@ def get_all_action_items(filter_completed: Optional[bool] = None) -> List[Dict[s
             analysis = meta.get("analysis") or {}
             items = analysis.get("action_items") or []
             filename = meta.get("filename") or f
+            base_title = os.path.splitext(os.path.basename(filename))[0]
 
-            for idx, item in enumerate(items):
-                is_completed = bool(item.get("completed", False))
+            for idx, raw_item in enumerate(items):
+                norm = normalize_action_item(raw_item, default_meeting_title=base_title)
+                is_completed = norm["completed"]
                 if filter_completed is not None and is_completed != filter_completed:
                     continue
 
                 all_tasks.append({
                     "meeting_filename": filename,
                     "task_index": idx,
-                    "task": item.get("task", ""),
-                    "assignee": item.get("assignee", "Sin asignar"),
-                    "deadline": item.get("deadline", "Sin fecha"),
+                    "task": norm["task"],
+                    "assignee": norm["assignee"],
+                    "deadline": norm["deadline"],
                     "completed": is_completed
                 })
 
     return all_tasks
+
+
+@mcp.tool()
+def export_action_items(
+    format: str = "csv",
+    filter_completed: Optional[bool] = None,
+    meeting_identifier: Optional[str] = None
+) -> str:
+    """
+    Exporta compromisos en formato iCalendar (.ics conforme a RFC 5545) o CSV (con BOM UTF-8 para Excel).
+    Puede exportar para una reunión específica o consolidado para todo el historial.
+
+    Args:
+        format: Formato de exportación: 'csv' o 'ics' (por defecto 'csv').
+        filter_completed: True para solo completadas, False para solo pendientes, None para todas.
+        meeting_identifier: Nombre o ruta de reunión para exportar sólo esa reunión. Si es None, exporta consolidado.
+    """
+    recordings_dir = get_recordings_dir()
+    status_filter = "all"
+    if filter_completed is True:
+        status_filter = "completed"
+    elif filter_completed is False:
+        status_filter = "pending"
+
+    if meeting_identifier:
+        json_path = _resolve_json_path(meeting_identifier)
+        if not json_path:
+            return f"Error: No se encontró la reunión '{meeting_identifier}'."
+        meta = _repo.get_metadata(json_path) or {}
+        base_name = os.path.splitext(os.path.basename(json_path))[0]
+        tasks = TaskExportService.get_meeting_tasks_for_export(meta, meeting_title=base_name, status_filter=status_filter)
+        if format.lower() == "ics":
+            return TaskExportService.export_to_ics(tasks, meeting_title=base_name, is_consolidated=False)
+        return TaskExportService.export_to_csv(tasks, meeting_title=base_name, is_consolidated=False)
+
+    tasks = TaskExportService.get_consolidated_tasks_for_export(
+        recordings_dir=recordings_dir,
+        metadata_repo=_repo,
+        status_filter=status_filter
+    )
+    if format.lower() == "ics":
+        return TaskExportService.export_to_ics(tasks, is_consolidated=True, calendar_name="Compromisos Consolidados")
+    return TaskExportService.export_to_csv(tasks, is_consolidated=True)
 
 
 @mcp.tool()
@@ -286,6 +344,21 @@ def search_meetings(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
             category_text = (analysis.get("category") or "").lower()
             filename_text = f.lower()
 
+            # Extraer compromisos/tareas
+            action_items = analysis.get("action_items") or []
+            action_texts = []
+            if isinstance(action_items, list):
+                for t_obj in action_items:
+                    if isinstance(t_obj, dict):
+                        action_texts.append(f"{t_obj.get('task', '')} {t_obj.get('assignee', '')} {t_obj.get('deadline', '')}")
+                    elif isinstance(t_obj, str):
+                        action_texts.append(t_obj)
+            tasks_text = " ".join(action_texts).lower()
+
+            # Extraer notas de marcadores
+            bookmarks = meta.get("bookmarks") or []
+            bm_notes = " ".join([b.get("note", "") for b in bookmarks if isinstance(b, dict)]).lower() if isinstance(bookmarks, list) else ""
+
             score = 0.0
             matched_terms = []
 
@@ -296,6 +369,12 @@ def search_meetings(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
                     term_matches += 1
                 if term in category_text:
                     score += 4.0
+                    term_matches += 1
+                if term in tasks_text:
+                    score += 4.0
+                    term_matches += 1
+                if term in bm_notes:
+                    score += 3.0
                     term_matches += 1
                 if term in decisions_text:
                     score += 3.0

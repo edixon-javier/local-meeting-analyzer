@@ -39,13 +39,21 @@ class Config:
             "ai_provider": "local",
             "openai_api_key": "",
             "openai_model": "gpt-4o",
-            # Privacidad: solo se usa OpenAI si el usuario lo eligió (ai_provider = "openai")
+            "anthropic_api_key": "",
+            "claude_model": "claude-3-5-haiku-20241022",
+            "gemini_api_key": "",
+            "gemini_model": "gemini-2.0-flash",
+            # Privacidad: solo se usa la nube si el usuario lo eligió (ai_provider in ["openai", "claude", "gemini"])
             # o activó explícitamente este respaldo cuando Ollama no está disponible.
             "allow_cloud_fallback": False,
             "analysis_focus": "",
             "record_mode": "both",
             "mic_device_id": "default",
-            "diarize": False
+            "diarize": False,
+            "groq_api_key": "",
+            "dictation_mode": "smart_polish",
+            "dictation_shortcut": "CommandOrControl+Shift+D",
+            "dictation_provider": "groq",
         }
         self.settings: Dict[str, Any] = self._load_config()
 
@@ -85,11 +93,25 @@ class Config:
         self._save_to_disk(self.settings)
 
     def public_settings(self) -> Dict[str, Any]:
-        """Copia de la configuración apta para enviar a la UI: la clave de API va enmascarada."""
+        """Copia de la configuración apta para enviar a la UI: las claves de API van enmascaradas."""
         public = dict(self.settings)
-        key = public.get("openai_api_key", "")
-        public["has_api_key"] = bool(key)
-        public["openai_api_key"] = mask_api_key(key)
+        # OpenAI
+        open_key = public.get("openai_api_key", "")
+        public["has_api_key"] = bool(open_key)
+        public["has_openai_key"] = bool(open_key)
+        public["openai_api_key"] = mask_api_key(open_key)
+        # Claude (Anthropic)
+        claude_key = public.get("anthropic_api_key", "")
+        public["has_claude_key"] = bool(claude_key)
+        public["anthropic_api_key"] = mask_api_key(claude_key)
+        # Gemini (Google)
+        gemini_key = public.get("gemini_api_key", "")
+        public["has_gemini_key"] = bool(gemini_key)
+        public["gemini_api_key"] = mask_api_key(gemini_key)
+        # Groq
+        groq_key = public.get("groq_api_key", "")
+        public["has_groq_key"] = bool(groq_key)
+        public["groq_api_key"] = mask_api_key(groq_key)
         return public
 
 # Singleton instance for app-wide configuration

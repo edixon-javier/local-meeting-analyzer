@@ -86,6 +86,8 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(found["tone"], "Formal y estratégico")
         self.assertIn("presupuesto", found["summary_preview"].lower())
         self.assertEqual(found["bookmarks_count"], 1)
+        self.assertEqual(found["tasks_count"], 2)
+        self.assertEqual(found["pending_tasks_count"], 1)
 
     def test_get_meeting_summary_by_wav(self):
         summary = mcp_server.get_meeting_summary("mcp_test_meeting.wav")
@@ -138,6 +140,16 @@ class TestMCPServer(unittest.TestCase):
         top = results[0]
         self.assertEqual(top["filename"], "mcp_test_meeting.wav")
         self.assertGreater(top["score"], 0)
+
+        # Búsqueda por término exclusivo en tareas (action_items)
+        results_task = mcp_server.search_meetings("reporte consolidado", max_results=3)
+        self.assertGreaterEqual(len(results_task), 1)
+        self.assertEqual(results_task[0]["filename"], "mcp_test_meeting.wav")
+
+        # Búsqueda por término exclusivo en notas de marcadores (bookmarks)
+        results_bm = mcp_server.search_meetings("Inicio revisión", max_results=3)
+        self.assertGreaterEqual(len(results_bm), 1)
+        self.assertEqual(results_bm[0]["filename"], "mcp_test_meeting.wav")
         self.assertIn("presupuesto", top["matched_terms"])
 
     def test_search_meetings_no_match(self):

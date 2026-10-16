@@ -3,11 +3,12 @@ import re
 import json
 import shutil
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from domain.interfaces import IMetadataRepository
 from services.metadata_repository import MetadataRepository
+from services.task_export_service import TaskExportService
 from core.paths import get_recordings_dir
 
 
@@ -86,6 +87,7 @@ def _is_safe_recording_path(path: str) -> bool:
     except Exception:
         return False
 
+@router.get("")
 @router.get("/")
 def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
     """Lista todos los archivos de grabación guardados y sus metadatos si existen."""
@@ -105,11 +107,21 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
             category = None
             tone = None
             preview = None
+            tasks_count = 0
+            pending_tasks_count = 0
             if meta:
                 analysis = meta.get("analysis") or {}
-                category = analysis.get("category")
-                tone = analysis.get("tone")
-                preview = _summary_preview(analysis)
+                if isinstance(analysis, dict):
+                    category = analysis.get("category")
+                    tone = analysis.get("tone")
+                    preview = _summary_preview(analysis)
+                    action_items = analysis.get("action_items") or []
+                    if isinstance(action_items, list):
+                        tasks_count = len(action_items)
+                        pending_tasks_count = sum(
+                            1 for t in action_items
+                            if (isinstance(t, dict) and not t.get("completed")) or isinstance(t, str)
+                        )
             
             files.append({
                 "filename": f,
@@ -121,7 +133,9 @@ def list_recordings(repo: IMetadataRepository = Depends(get_metadata_repo)):
                 "tone": tone,
                 "summary_preview": preview,
                 "duration": _get_audio_duration(path),
-                "bookmarks_count": len(meta.get("bookmarks", [])) if (meta and isinstance(meta.get("bookmarks"), list)) else 0
+                "bookmarks_count": len(meta.get("bookmarks", [])) if (meta and isinstance(meta.get("bookmarks"), list)) else 0,
+                "tasks_count": tasks_count,
+                "pending_tasks_count": pending_tasks_count
             })
 
     return {"recordings": files}
@@ -136,6 +150,66 @@ def get_recording_metadata(path: str, repo: IMetadataRepository = Depends(get_me
     if meta is None:
         return {"exists": False}
     return meta
+
+@router.get("/tasks")
+def list_consolidated_tasks(
+    status: str = Query("all", pattern="^(all|pending|completed)$"),
+    category: Optional[str] = Query(None),
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """
+    Retorna la lista consolidada de compromisos de todas las reuniones guardadas.
+    Permite filtrar por estado ('all', 'pending', 'completed') y categoría.
+    """
+    recordings_dir = _get_recordings_dir()
+    tasks = TaskExportService.get_consolidated_tasks_for_export(
+        recordings_dir=recordings_dir,
+        metadata_repo=repo,
+        status_filter=status,
+        category_filter=category
+    )
+    return {
+        "status": "ok",
+        "total": len(tasks),
+        "pending": sum(1 for t in tasks if not t.get("completed")),
+        "completed": sum(1 for t in tasks if t.get("completed")),
+        "tasks": tasks
+    }
+
+@router.get("/tasks/export")
+def export_consolidated_tasks(
+    format: str = Query("csv", pattern="^(csv|ics)$"),
+    status: str = Query("all", pattern="^(all|pending|completed)$"),
+    category: Optional[str] = Query(None),
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """
+    Descarga los compromisos consolidados del historial en formato CSV (con UTF-8 BOM para Excel)
+    o en formato iCalendar (.ics conforme a RFC 5545).
+    """
+    recordings_dir = _get_recordings_dir()
+    tasks = TaskExportService.get_consolidated_tasks_for_export(
+        recordings_dir=recordings_dir,
+        metadata_repo=repo,
+        status_filter=status,
+        category_filter=category
+    )
+
+    fmt = format.lower()
+    if fmt == "csv":
+        content = TaskExportService.export_to_csv(tasks, is_consolidated=True)
+        media_type = "text/csv; charset=utf-8"
+        filename = "compromisos_consolidados.csv"
+    else:
+        content = TaskExportService.export_to_ics(tasks, is_consolidated=True, calendar_name="Compromisos Consolidados")
+        media_type = "text/calendar; charset=utf-8"
+        filename = "compromisos_consolidados.ics"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @router.delete("/{filename}")
 def delete_recording(filename: str):
@@ -323,6 +397,55 @@ def update_meeting_task(
         "metadata": updated_meta,
         "action_items": action_items
     }
+
+@router.get("/{filename}/tasks/export")
+def export_meeting_tasks(
+    filename: str,
+    format: str = Query("csv", pattern="^(csv|ics)$"),
+    status: str = Query("all", pattern="^(all|pending|completed)$"),
+    title: Optional[str] = Query(None),
+    repo: IMetadataRepository = Depends(get_metadata_repo)
+):
+    """
+    Descarga los compromisos de una reunión individual en formato .csv o .ics (iCalendar).
+    """
+    safe_filename = os.path.basename(filename)
+    recordings_dir = _get_recordings_dir()
+    audio_path = os.path.join(recordings_dir, safe_filename)
+    json_path = _get_json_path(audio_path)
+    target_path = json_path if os.path.exists(json_path) else audio_path
+
+    if not os.path.exists(json_path) and not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Grabación o metadatos no encontrados.")
+
+    meta = repo.get_metadata(target_path)
+    if not meta or not isinstance(meta, dict):
+        raise HTTPException(status_code=404, detail="Metadatos no encontrados para la reunión.")
+
+    base_name = os.path.splitext(safe_filename)[0]
+    display_title = title.strip() if title and title.strip() else base_name
+    tasks = TaskExportService.get_meeting_tasks_for_export(
+        metadata=meta,
+        meeting_title=display_title,
+        status_filter=status
+    )
+
+    clean_slug = re.sub(r'[^a-zA-Z0-9_\-]', '_', base_name).strip('_') or "reunion"
+    fmt = format.lower()
+    if fmt == "csv":
+        content = TaskExportService.export_to_csv(tasks, meeting_title=display_title, is_consolidated=False)
+        media_type = "text/csv; charset=utf-8"
+        download_name = f"compromisos_{clean_slug}.csv"
+    else:
+        content = TaskExportService.export_to_ics(tasks, meeting_title=display_title, is_consolidated=False)
+        media_type = "text/calendar; charset=utf-8"
+        download_name = f"compromisos_{clean_slug}.ics"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{download_name}"'}
+    )
 
 @router.get("/audio")
 def get_audio_file(

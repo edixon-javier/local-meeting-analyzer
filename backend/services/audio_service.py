@@ -463,7 +463,10 @@ class AudioService(IAudioCapture):
                 mp3_path = self._output_path.replace(".wav", ".mp3")
                 print(f"[AudioService] Comprimiendo a MP3 con FFmpeg...")
                 cmd = [_get_ffmpeg_path(), "-y", "-i", self._output_path, "-b:a", "64k", mp3_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=60)
+                kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "check": True, "timeout": 60}
+                if os.name == "nt":
+                    kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                subprocess.run(cmd, **kwargs)
                 
                 if os.path.exists(self._output_path):
                     os.remove(self._output_path)
