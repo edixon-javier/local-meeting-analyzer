@@ -33,6 +33,7 @@ export function Footer() {
             <a href="#privacidad" className="hover:text-emerald-300 transition-colors">Privacidad</a>
             <a href="#requisitos" className="hover:text-cyan-300 transition-colors">Requisitos</a>
             <a href="#faq" className="hover:text-cyan-300 transition-colors">FAQ</a>
+            <a href="/privacy" className="hover:text-emerald-300 transition-colors">Política de privacidad</a>
             <a
               href={downloadHref}
               className="text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1"
