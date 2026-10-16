@@ -13,7 +13,25 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 El historial anterior al 1.6.0 se reconstruyó a partir de las etiquetas y de los commits del repositorio.
 
-## [1.6.0] - Sin publicar
+## [1.6.1] - 2026-10-16
+
+### Añadido
+
+- **Conectar OpenAI desde la bienvenida.** En el paso "Motor de IA", la opción "Usar mi clave de OpenAI" guía en
+  tres pasos: abrir la página de claves, pegar la clave (botón Pegar y aviso si no empieza por `sk-`) y probarla.
+  Solo se guarda si la prueba funciona; los errores se explican (clave no válida, cuenta sin saldo con enlace a
+  facturación) y se indica qué se envía a OpenAI.
+- **Configuración:** enlace "Conseguir una clave" para OpenAI, Claude, Gemini y Groq; se eliminan los espacios al
+  pegar una clave y se avisa si su formato no es el esperado.
+- Notas de cada versión con instrucciones de instalación para quien descarga.
+
+### Corregido
+
+- El botón para mostrar u ocultar una clave de API aparecía vacío (faltaban sus iconos).
+- Los documentos legales (licencia y términos de uso, política de privacidad) ya no muestran marcadores ni la nota
+  para el desarrollador en el instalador.
+
+## [1.6.0] - 2026-10-16
 
 Primera versión preparada para su distribución pública en Windows x64.
 

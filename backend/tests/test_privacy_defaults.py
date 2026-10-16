@@ -325,7 +325,10 @@ class TestConfigEndpoint(unittest.TestCase):
 
     def test_status_exposes_version(self):
         self.assertEqual(self.client.get("/status").json()["version"], APP_VERSION)
-        self.assertEqual(APP_VERSION, "1.6.0")
+        # La versión del backend debe coincidir con la de la app (frontend/package.json, la que publica el CI)
+        pkg_path = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "package.json")
+        with open(pkg_path, encoding="utf-8") as f:
+            self.assertEqual(APP_VERSION, json.load(f)["version"])
 
     def test_fallback_model_list(self):
         from api.routers.system import _models_cache

@@ -2,7 +2,7 @@
   "name": "local-meeting-analyzer",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Grabación y análisis de reuniones 100% local con IA",
   "author": "Local Meeting Analyzer",
   "main": "electron/main.js",

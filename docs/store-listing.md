@@ -18,7 +18,7 @@ Idioma principal de la ficha: **Español**. Se recomienda crear también una fic
 | **Subcategoría** | La que ofrezca Partner Center más cercana a «Productividad personal» o «Negocios» |
 | **Sitio web** | https://local-meeting-analyzer.vercel.app |
 | **Correo de soporte** | [CORREO DE CONTACTO] |
-| **URL de la política de privacidad** (obligatoria: usa el micrófono) | https://local-meeting-analyzer.vercel.app/privacy (copia de `docs/privacy.html` servida desde la web; publícala cuando rellenes titular, correo y fecha) |
+| **URL de la política de privacidad** (obligatoria: usa el micrófono) | https://local-meeting-analyzer.vercel.app/privacy (copia de `docs/privacy.html` servida desde la web) |
 | **Copyright** | © 2026 [NOMBRE DEL TITULAR] |
 | **Términos de licencia** | Enlaza `LICENSE` (AGPL-3.0-or-later) y `legal/EULA.txt` (sin el bloque de nota para el desarrollador). Añade a la descripción: "Software libre (AGPL-3.0). Código fuente: https://github.com/edixon-javier/local-meeting-analyzer". |
 

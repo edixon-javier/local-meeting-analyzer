@@ -1,16 +1,12 @@
 <!--
-NOTA PARA EL DESARROLLADOR (eliminar antes de publicar):
-Este documento es un borrador redactado de buena fe. NO constituye asesoría legal.
-Debe ser revisado por un abogado antes de cualquier uso comercial o de su publicación definitiva.
-Reemplaza TODOS los marcadores entre corchetes: [NOMBRE DEL TITULAR], [CORREO DE CONTACTO],
-[PAÍS/JURISDICCIÓN], [FECHA DE ENTRADA EN VIGOR].
-Mantén sincronizado este archivo con docs/privacy.html (versión web que se publica en GitHub Pages
-y se usa como URL de privacidad en Microsoft Store).
+Borrador redactado de buena fe; no constituye asesoría legal. Los datos del Titular usan la identidad
+pública del proyecto en GitHub. Mantén sincronizado este archivo con docs/privacy.html (versión web
+publicada en https://local-meeting-analyzer.vercel.app/privacy y URL de privacidad de Microsoft Store).
 -->
 
 # Política de Privacidad de Local Meeting Analyzer
 
-**Entrada en vigor y última actualización:** [FECHA DE ENTRADA EN VIGOR]
+**Entrada en vigor y última actualización:** 16 de octubre de 2026
 
 ## Resumen en pocas líneas
 
@@ -26,7 +22,7 @@ y se usa como URL de privacidad en Microsoft Store).
 
 ## 1. Quién es el responsable
 
-Local Meeting Analyzer (la «App») es publicada por **[NOMBRE DEL TITULAR]** (el «Titular», «nosotros»). Contacto: **[CORREO DE CONTACTO]**. Jurisdicción de referencia: **[PAÍS/JURISDICCIÓN]**.
+Local Meeting Analyzer (la «App») es publicada por **edixon-javier**, autor del proyecto (<https://github.com/edixon-javier>) (el «Titular», «nosotros»). Contacto: a través de GitHub Issues (<https://github.com/edixon-javier/local-meeting-analyzer/issues>).
 
 La App funciona **en tu equipo**. El Titular **no recibe, no almacena y no tiene acceso** a tus grabaciones, transcripciones, análisis, nombres de participantes ni ajustes. En la práctica, respecto del contenido de tus reuniones, quien decide qué se graba, con qué finalidad y durante cuánto tiempo eres **tú**.
 
@@ -161,5 +157,5 @@ Podemos actualizar esta política, por ejemplo si cambian las funciones de la Ap
 
 ## 13. Contacto
 
-Para preguntas sobre esta política: **[CORREO DE CONTACTO]**.
+Para preguntas sobre esta política: abre una consulta en GitHub Issues (<https://github.com/edixon-javier/local-meeting-analyzer/issues>).
 Repositorio del proyecto: **<https://github.com/edixon-javier/local-meeting-analyzer>**.

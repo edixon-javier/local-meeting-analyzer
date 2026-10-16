@@ -1,13 +1,7 @@
-﻿[NOTA PARA EL DESARROLLADOR - ELIMINAR ESTE BLOQUE ANTES DE PUBLICAR: borrador de buena fe, no es
-asesoria legal; debe ser revisado por un abogado antes de cualquier uso comercial. Reemplaza los
-marcadores [NOMBRE DEL TITULAR], [CORREO DE CONTACTO], [URL DEL REPOSITORIO], [PAÍS/JURISDICCIÓN]
-y [FECHA DE ENTRADA EN VIGOR]. Este archivo debe guardarse como UTF-8 con BOM para que el
-instalador NSIS muestre bien las tildes. Lineas de 100 caracteres como maximo, sin Markdown.]
-
-LICENCIA Y TÉRMINOS DE USO
+﻿LICENCIA Y TÉRMINOS DE USO
 LOCAL MEETING ANALYZER
 
-Fecha de entrada en vigor: [FECHA DE ENTRADA EN VIGOR]
+Fecha de entrada en vigor: 16 de octubre de 2026
 
 LEA ESTE DOCUMENTO CON ATENCIÓN. Local Meeting Analyzer es software libre distribuido bajo la
 GNU Affero General Public License, versión 3 o posterior (AGPL-3.0-or-later). Este documento le
@@ -19,8 +13,8 @@ en caso de conflicto, prevalece la AGPL.
 
 a) "Software": la aplicación Local Meeting Analyzer, sus actualizaciones y la documentación que
    la acompaña, en forma de instalador o paquete ejecutable.
-b) "Titular": [NOMBRE DEL TITULAR], titular de los derechos del Software. Contacto:
-   [CORREO DE CONTACTO].
+b) "Titular": edixon-javier (autor del proyecto), titular de los derechos del Software. Contacto:
+   GitHub Issues, https://github.com/edixon-javier/local-meeting-analyzer/issues
 c) "Usted": la persona física o jurídica que instala o usa el Software.
 d) "Componentes de Terceros": software de código abierto o de terceros incluido en el Software
    o utilizado por este, y los modelos de inteligencia artificial que se descargan para usarlo.
@@ -31,7 +25,7 @@ f) "Resultados de IA": transcripciones, resúmenes, tareas, decisiones, atribuci
 
 2. LICENCIA
 
-Copyright (C) 2026 [NOMBRE DEL TITULAR].
+Copyright (C) 2026 edixon-javier y colaboradores de Local Meeting Analyzer.
 
 Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los términos de la
 GNU Affero General Public License publicada por la Free Software Foundation, ya sea la versión 3
@@ -39,8 +33,9 @@ de la licencia o (a su elección) cualquier versión posterior. El texto complet
 incluye en el archivo LICENSE y está disponible en https://www.gnu.org/licenses/agpl-3.0.html.
 
 El código fuente completo y correspondiente de cada versión está disponible en el repositorio del
-proyecto: [URL DEL REPOSITORIO]. Si modifica el Software y permite que otras personas interactúen
-con él a través de una red, la AGPL le obliga a ofrecerles el código fuente de su versión.
+proyecto: https://github.com/edixon-javier/local-meeting-analyzer. Si modifica el Software y
+permite que otras personas interactúen con él a través de una red, la AGPL le obliga a
+ofrecerles el código fuente de su versión.
 
 3. USO RESPONSABLE
 
@@ -186,8 +181,8 @@ e) Idioma: este documento se redacta en español. Cualquier traducción se ofrec
 
 14. LEY APLICABLE Y JURISDICCIÓN
 
-Este documento se rige por las leyes de [PAÍS/JURISDICCIÓN], sin tener en cuenta sus normas sobre
-conflicto de leyes. Las partes se someten a los tribunales competentes de [PAÍS/JURISDICCIÓN] para
+Este documento se rige por las leyes del país de residencia del Titular, sin tener en cuenta sus
+normas sobre conflicto de leyes. Las partes se someten a los tribunales competentes de ese país para
 resolver cualquier controversia derivada de este documento, sin perjuicio de los derechos
 irrenunciables que, como consumidor, Usted pueda tener de acudir a los tribunales de su lugar de
 residencia o de que se aplique la legislación imperativa de protección al consumidor que
@@ -195,8 +190,9 @@ corresponda.
 
 15. CONTACTO
 
-Para cualquier consulta sobre este documento: [CORREO DE CONTACTO]
-Repositorio del proyecto: [URL DEL REPOSITORIO]
+Para cualquier consulta sobre este documento, abra una consulta en GitHub Issues:
+https://github.com/edixon-javier/local-meeting-analyzer/issues
+Repositorio del proyecto: https://github.com/edixon-javier/local-meeting-analyzer
 
 AL HACER CLIC EN "ACEPTO" O AL INSTALAR EL SOFTWARE, USTED RECONOCE QUE HA LEÍDO ESTE DOCUMENTO
 Y LOS AVISOS SOBRE CONSENTIMIENTO, PRIVACIDAD Y EXACTITUD DE LA IA.
