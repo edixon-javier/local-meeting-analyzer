@@ -1,15 +1,33 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import Icon from '../Icon'
+import { downloadMeetingTasks } from '../../utils/tasksExport'
 
 export default function InsightsPanel({ 
   analysis, 
   bookmarks = [], 
   onSeekAudio, 
   onToggleTask,
-  meetingTitle = 'Reunión'
+  meetingTitle = 'Reunión',
+  filename = null,
+  audioPath = null,
+  showToast = null
 }) {
   const [taskFilter, setTaskFilter] = useState('all') // 'all' | 'pending' | 'completed'
   const [copiedTasks, setCopiedTasks] = useState(false)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef(null)
+
+  // Cerrar menú de exportación al hacer clic fuera
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const handleClickOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [exportMenuOpen])
 
   if (!analysis) {
     return (
@@ -23,7 +41,20 @@ export default function InsightsPanel({
     )
   }
 
-  const rawTasks = analysis.action_items || []
+  const rawTasks = (analysis.action_items || []).map((t) => {
+    if (typeof t === 'string') {
+      return { task: t, completed: false, assignee: 'Sin asignar', deadline: 'Sin fecha' }
+    }
+    if (t && typeof t === 'object') {
+      return {
+        task: t.task || '',
+        completed: Boolean(t.completed),
+        assignee: t.assignee || 'Sin asignar',
+        deadline: t.deadline || 'Sin fecha'
+      }
+    }
+    return { task: String(t || ''), completed: false, assignee: 'Sin asignar', deadline: 'Sin fecha' }
+  })
   const totalTasks = rawTasks.length
   const completedTasks = rawTasks.filter(t => Boolean(t.completed)).length
   const pendingTasks = totalTasks - completedTasks
@@ -58,6 +89,16 @@ export default function InsightsPanel({
     } catch (err) {
       console.error('Error al copiar tareas:', err)
     }
+  }
+
+  // Exportar compromisos en formato calendario (.ics) o tabla (.csv)
+  const handleExportTasks = async (format) => {
+    if (totalTasks === 0) return
+    const safeFilename = filename || (audioPath ? audioPath.split(/[/\\]/).pop() : null)
+    const exportTasksList = taskFilter === 'all' ? rawTasks : filteredTasks
+    await downloadMeetingTasks(safeFilename, format, exportTasksList, meetingTitle, showToast, {
+      status: taskFilter
+    })
   }
 
   return (
@@ -146,23 +187,9 @@ export default function InsightsPanel({
           </div>
 
           {totalTasks > 0 && (
-            <div className="insights-tasks-tools">
-              {/* Badge de Progreso */}
-              <span className={`insights-progress-badge ${percentDone === 100 ? 'is-complete' : ''}`}>
-                {completedTasks}/{totalTasks} ({percentDone}%)
-              </span>
-
-              {/* Botón Copiar Checklist */}
-              <button
-                type="button"
-                className={`btn btn-secondary btn-sm insights-copy-btn ${copiedTasks ? 'is-copied' : ''}`}
-                onClick={handleCopyTaskChecklist}
-                title="Copiar lista de tareas en formato Markdown con checkboxes para Slack, Notion o Trello"
-              >
-                <Icon name={copiedTasks ? 'check-circle' : 'copy'} size={12} />
-                <span>{copiedTasks ? '¡Copiadas!' : 'Copiar Checklist'}</span>
-              </button>
-            </div>
+            <span className={`insights-progress-badge ${percentDone === 100 ? 'is-complete' : ''}`}>
+              {completedTasks}/{totalTasks} ({percentDone}%)
+            </span>
           )}
         </div>
 
@@ -176,33 +203,121 @@ export default function InsightsPanel({
           </div>
         )}
 
-        {/* Filtros de estado de tareas */}
-        {totalTasks > 1 && (
-          <div className="insights-filters">
-            <button
-              type="button"
-              className={`insights-filter-btn ${taskFilter === 'all' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('all')}
-              aria-pressed={taskFilter === 'all'}
-            >
-              Todas ({totalTasks})
-            </button>
-            <button
-              type="button"
-              className={`insights-filter-btn ${taskFilter === 'pending' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('pending')}
-              aria-pressed={taskFilter === 'pending'}
-            >
-              Pendientes ({pendingTasks})
-            </button>
-            <button
-              type="button"
-              className={`insights-filter-btn ${taskFilter === 'completed' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('completed')}
-              aria-pressed={taskFilter === 'completed'}
-            >
-              Completadas ({completedTasks})
-            </button>
+        {/* Barra de herramientas y filtros de compromisos */}
+        {totalTasks > 0 && (
+          <div className="insights-tasks-toolbar">
+            {/* Filtros de estado: solo cuando hay más de 1 tarea para evitar saturación visual */}
+            {totalTasks > 1 ? (
+              <div className="insights-filters" role="group" aria-label="Filtrar compromisos por estado">
+                <button
+                  type="button"
+                  className={`insights-filter-btn ${taskFilter === 'all' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('all')}
+                  aria-pressed={taskFilter === 'all'}
+                >
+                  Todas ({totalTasks})
+                </button>
+                <button
+                  type="button"
+                  className={`insights-filter-btn ${taskFilter === 'pending' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('pending')}
+                  aria-pressed={taskFilter === 'pending'}
+                >
+                  Pendientes ({pendingTasks})
+                </button>
+                <button
+                  type="button"
+                  className={`insights-filter-btn ${taskFilter === 'completed' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('completed')}
+                  aria-pressed={taskFilter === 'completed'}
+                >
+                  Completadas ({completedTasks})
+                </button>
+              </div>
+            ) : <div />}
+
+            {/* Acciones de exportación de compromisos */}
+            <div className="insights-tasks-actions">
+              <button
+                type="button"
+                className={`btn btn-secondary btn-sm insights-copy-btn ${copiedTasks ? 'is-copied' : ''}`}
+                onClick={handleCopyTaskChecklist}
+                title="Copiar lista de tareas en Markdown con checkboxes"
+                aria-label="Copiar checklist de tareas"
+              >
+                <Icon name={copiedTasks ? 'check-circle' : 'copy'} size={12} />
+                <span>{copiedTasks ? '¡Copiado!' : 'Copiar'}</span>
+              </button>
+
+              <div className="insights-export-dropdown" ref={exportMenuRef}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm insights-action-btn"
+                  onClick={() => setExportMenuOpen(prev => !prev)}
+                  title="Descargar compromisos en formato texto, calendario o Excel"
+                  aria-expanded={exportMenuOpen}
+                  aria-haspopup="true"
+                  aria-label="Descargar compromisos"
+                >
+                  <Icon name="download" size={12} />
+                  <span>Descargar</span>
+                  <Icon name="chevron-down" size={10} />
+                </button>
+
+                {exportMenuOpen && (
+                  <div className="insights-dropdown-menu" role="menu">
+                    <button
+                      type="button"
+                      className="insights-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false)
+                        handleExportTasks('txt')
+                      }}
+                      aria-label="Exportar compromisos a Texto (.txt)"
+                    >
+                      <Icon name="file-text" size={13} />
+                      <div className="insights-dropdown-item-text">
+                        <span className="insights-dropdown-label">Lista de tareas (.txt)</span>
+                        <span className="insights-dropdown-desc">Checklist universal en texto</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="insights-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false)
+                        handleExportTasks('ics')
+                      }}
+                      aria-label="Exportar compromisos a iCalendar (.ics)"
+                    >
+                      <Icon name="calendar" size={13} />
+                      <div className="insights-dropdown-item-text">
+                        <span className="insights-dropdown-label">Calendario (.ics)</span>
+                        <span className="insights-dropdown-desc">Google Calendar / Outlook</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="insights-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false)
+                        handleExportTasks('csv')
+                      }}
+                      aria-label="Exportar compromisos a CSV (.csv)"
+                    >
+                      <Icon name="download" size={13} />
+                      <div className="insights-dropdown-item-text">
+                        <span className="insights-dropdown-label">Hoja de cálculo (.csv)</span>
+                        <span className="insights-dropdown-desc">Excel / Google Sheets</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

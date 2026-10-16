@@ -5,17 +5,21 @@ import { renameSpeaker, addRecordingBookmark, deleteRecordingBookmark, updateRec
 import {
   copyExecutiveMinutes,
   downloadExecutiveMarkdown,
+  downloadFullDocumentMarkdown,
+  downloadTranscriptFile,
+  copyTranscript,
   exportExecutivePdf
 } from '../utils/minutesExport'
 import TranscriptPanel from './analysis/TranscriptPanel'
 import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
 import SpeakerRenameModal from './SpeakerRenameModal'
+import Modal from './Modal'
 import Icon from './Icon'
 import '../styles/analysis.css'
 import { getRecordingTitle } from '../utils/recordingName'
 
-export default function AnalysisScreen({ audioPath, onBack }) {
+export default function AnalysisScreen({ audioPath, onBack, onNavigate }) {
   const { showToast, systemStatus } = useSystem()
 
   const {
@@ -51,6 +55,8 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   // Speaker Rename Modal State
   const [speakerModalOpen, setSpeakerModalOpen] = useState(false)
   const [selectedSpeaker, setSelectedSpeaker] = useState('')
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [pdfPrintMode, setPdfPrintMode] = useState('full')
 
   const handleOpenRenameSpeaker = (speakerName) => {
     setSelectedSpeaker(speakerName)
@@ -153,9 +159,16 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     downloadExecutiveMarkdown(getMinutesData(), exportFileName, showToast)
   }
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (mode = 'full') => {
     if (!analysis) return
-    await exportExecutivePdf(getMinutesData(), exportFileName, showToast)
+    setPdfPrintMode(mode)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    await exportExecutivePdf(getMinutesData(), exportFileName, showToast, mode)
+  }
+
+  const handleDownloadTranscript = (format = 'txt') => {
+    if (!analysis) return
+    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, format)
   }
 
   const handleTimeUpdate = () => {
@@ -173,7 +186,15 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   const handleSegmentClick = (start) => {
     if (audioRef.current) {
       audioRef.current.currentTime = start
-      audioRef.current.play()
+      audioRef.current.play?.()
+    }
+    if (segments && segments.length > 0) {
+      const startNum = typeof start === 'number' ? start : parseFloat(start)
+      const exactIndex = segments.findIndex(seg => startNum >= seg.start && startNum <= (seg.end + 0.5))
+      const targetIndex = exactIndex !== -1 ? exactIndex : segments.reduce((closest, seg, idx) => {
+        return Math.abs(seg.start - startNum) < Math.abs(segments[closest].start - startNum) ? idx : closest
+      }, 0)
+      setActiveSegmentIndex(targetIndex)
     }
   }
 
@@ -194,6 +215,10 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           const topPos = activeEl.offsetTop - container.offsetTop - (container.clientHeight / 2) + (activeEl.clientHeight / 2)
           container.scrollTo({ top: Math.max(0, topPos), behavior: 'smooth' })
         }
+        // Aplicar pulso visual para sincronizar visualmente el transcript con el timestamp del chat
+        activeEl.classList.remove('chat-timestamp-pulse')
+        void activeEl.offsetWidth
+        activeEl.classList.add('chat-timestamp-pulse')
       }
     }
   }, [activeSegmentIndex])
@@ -428,31 +453,40 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           </div>
 
           {activeTab === 'insights' && (
-            <div className="analysis-export-actions" role="group" aria-label="Exportar minuta">
+            <div className="analysis-export-actions" role="group" aria-label="Opciones de exportación">
               <button
                 type="button"
                 onClick={handleCopyMinutes}
                 className="btn btn-secondary btn-square"
-                title="Copiar minuta (lista para Slack / Email)"
+                title="Copiar minuta ejecutiva al portapapeles (lista para Slack / Email)"
                 aria-label="Copiar minuta al portapapeles"
               >
                 <Icon name="copy" size={14} />
               </button>
               <button
                 type="button"
-                onClick={handleDownloadMarkdown}
+                onClick={() => handleDownloadTranscript('txt')}
                 className="btn btn-secondary btn-square"
-                title="Descargar minuta en Markdown (.md)"
-                aria-label="Descargar minuta en Markdown"
+                title="Descargar conversación completa en texto (.txt)"
+                aria-label="Descargar conversación completa"
+              >
+                <Icon name="chat" size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setExportModalOpen(true)}
+                className="btn btn-secondary btn-square"
+                title="Opciones de exportación: Documento Completo, Minuta o Conversación"
+                aria-label="Opciones de exportación"
               >
                 <Icon name="download" size={14} />
               </button>
               <button
                 type="button"
-                onClick={handleExportPDF}
+                onClick={() => handleExportPDF('full')}
                 className="btn btn-secondary btn-square"
-                title="Exportar minuta en PDF"
-                aria-label="Exportar minuta en PDF"
+                title="Exportar Documento Completo en PDF"
+                aria-label="Exportar documento en PDF"
               >
                 <Icon name="file-text" size={14} />
               </button>
@@ -467,7 +501,11 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           aria-labelledby={activeTab === 'chat' ? 'chat-tab' : 'insights-tab'}
         >
           {activeTab === 'chat' ? (
-            <ChatPanel audioPath={audioPath} />
+            <ChatPanel
+              audioPath={audioPath}
+              onSeekAudio={handleSegmentClick}
+              onNavigate={onNavigate}
+            />
           ) : (
             <InsightsPanel
               analysis={analysis}
@@ -475,6 +513,9 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               onSeekAudio={handleSegmentClick}
               onToggleTask={handleToggleTaskStatus}
               meetingTitle={cleanTitle}
+              audioPath={audioPath}
+              filename={audioPath ? audioPath.split(/[/\\]/).pop() : null}
+              showToast={showToast}
             />
           )}
         </div>
@@ -489,12 +530,177 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         onClose={() => setSpeakerModalOpen(false)}
       />
 
+      {/* Modal de Exportación y Descargas Estructuradas */}
+      {exportModalOpen && (
+        <Modal
+          titleId="export-dialog-title"
+          onClose={() => setExportModalOpen(false)}
+          maxWidth={480}
+        >
+          <div className="modal-header" style={{ marginBottom: 12 }}>
+            <h3 id="export-dialog-title" className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 16 }}>
+              <Icon name="download" size={18} /> Exportar Reunión y Documentos
+            </h3>
+            <button
+              type="button"
+              className="btn btn-secondary btn-square"
+              onClick={() => setExportModalOpen(false)}
+              aria-label="Cerrar diálogo de exportación"
+              style={{ width: 28, height: 28, padding: 0 }}
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Selecciona el tipo de documento que deseas generar para <strong>{cleanTitle}</strong>:
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Opción 1: Documento Completo */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="file-text" size={15} style={{ color: 'var(--accent-primary)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Documento Completo</strong>
+                <span className="pill" style={{ fontSize: 10, padding: '1px 6px' }}>Recomendado</span>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Informe exhaustivo: resumen ejecutivo, decisiones clave, compromisos y la transcripción íntegra de la conversación.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    downloadFullDocumentMarkdown(getMinutesData(), exportFileName, showToast)
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Descargar .md
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    setExportModalOpen(false)
+                    await handleExportPDF('full')
+                  }}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="file-text" size={13} /> Exportar PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Opción 2: Minuta Ejecutiva */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="target" size={15} style={{ color: 'var(--green-ok)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Minuta Ejecutiva</strong>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Resumen ejecutivo de 1 página con decisiones y compromisos clave para compartir en Slack, Teams o Email.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    await handleCopyMinutes()
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="copy" size={13} /> Copiar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    handleDownloadMarkdown()
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Descargar .md
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    setExportModalOpen(false)
+                    await handleExportPDF('executive')
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="file-text" size={13} /> Exportar PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Opción 3: Conversación Completa */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="chat" size={15} style={{ color: 'var(--amber)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Conversación Completa</strong>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Diálogo íntegro segmentado por interlocutor con marcas de tiempo en formato texto universal.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, 'txt')
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Texto (.txt)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, 'md')
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Diálogo (.md)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    await copyTranscript(getMinutesData(), showToast)
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="copy" size={13} /> Copiar Diálogo
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Plantilla invisible en pantalla para impresión / PDF formal */}
       {analysis && (
         <div className="executive-print-report" aria-hidden="true">
           <div className="print-header">
-            <div className="print-badge-header">MEETING ANALYZER &bull; MINUTA EJECUTIVA OFICIAL</div>
-            <h1 className="print-title">📋 Minuta Ejecutiva: {cleanTitle}</h1>
+            <div className="print-badge-header">
+              {pdfPrintMode === 'executive'
+                ? 'MEETING ANALYZER • MINUTA EJECUTIVA OFICIAL'
+                : 'MEETING ANALYZER • DOCUMENTO COMPLETO DE REUNIÓN'}
+            </div>
+            <h1 className="print-title">
+              {pdfPrintMode === 'executive' ? '📋 Minuta Ejecutiva: ' : '📄 Documento Completo: '}
+              {cleanTitle}
+            </h1>
             <div className="print-meta-row">
               <span>📅 {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
               <span>🏷️ <strong>Categoría:</strong> {analysis.category || 'General'}</span>
@@ -572,24 +778,26 @@ export default function AnalysisScreen({ audioPath, onBack }) {
             </table>
           </div>
 
-          <div className="print-section print-page-break">
-            <h2 className="print-section-title">📝 Transcripción Completa</h2>
-            <div className="print-transcript-list">
-              {segments && segments.length > 0 ? (
-                segments.map((seg, idx) => (
-                  <div key={idx} className="print-transcript-item">
-                    <div className="print-transcript-speaker">
-                      <strong>👥 {seg.speaker || 'Hablante'}</strong>
-                      <span className="print-transcript-time">⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
+          {pdfPrintMode === 'full' && (
+            <div className="print-section print-page-break">
+              <h2 className="print-section-title">📝 Transcripción Completa</h2>
+              <div className="print-transcript-list">
+                {segments && segments.length > 0 ? (
+                  segments.map((seg, idx) => (
+                    <div key={idx} className="print-transcript-item">
+                      <div className="print-transcript-speaker">
+                        <strong>👥 {seg.speaker || 'Hablante'}</strong>
+                        <span className="print-transcript-time">⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
+                      </div>
+                      <p className="print-transcript-text">{seg.text}</p>
                     </div>
-                    <p className="print-transcript-text">{seg.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p style={{ whiteSpace: 'pre-wrap' }}>{transcript || 'Sin transcripción.'}</p>
-              )}
+                  ))
+                ) : (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{transcript || 'Sin transcripción.'}</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

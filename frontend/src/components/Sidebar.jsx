@@ -202,6 +202,15 @@ export default function Sidebar({ currentView, currentAudioPath, onNavigate }) {
           </button>
           <button
             type="button"
+            className={`sidebar-nav-item ${currentView === 'dictations' ? 'active' : ''}`}
+            onClick={() => onNavigate('dictations')}
+            aria-current={currentView === 'dictations' ? 'page' : undefined}
+          >
+            <span className="nav-icon"><Icon name="edit" size={17} /></span>
+            Notas de Voz / Dictados
+          </button>
+          <button
+            type="button"
             className={`sidebar-nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => onNavigate('settings')}
             aria-current={currentView === 'settings' ? 'page' : undefined}

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   show: () => ipcRenderer.send('window:show'),
+  reload: () => ipcRenderer.send('window:reload'),
   // Solo http(s) y mailto: (validado en el proceso principal)
   openExternal: (url) => ipcRenderer.send('open:external', url),
   
@@ -33,5 +34,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (_event, ...args) => callback(...args)
     ipcRenderer.on('shortcut:toggle-recording', subscription)
     return () => ipcRenderer.off('shortcut:toggle-recording', subscription)
+  },
+
+  // Dictado interactivo y micro-píldora
+  dictationToggle: () => ipcRenderer.invoke('dictation:toggle'),
+  dictationStart: () => ipcRenderer.invoke('dictation:start'),
+  dictationStop: (opts) => ipcRenderer.invoke('dictation:stop', opts),
+  dictationCancel: () => ipcRenderer.invoke('dictation:cancel'),
+  dictationSetShortcut: (shortcut) => ipcRenderer.invoke('dictation:set-shortcut', shortcut),
+  dictationDragStart: (coords) => ipcRenderer.send('dictation:drag-start', coords),
+  dictationDragMove: (coords) => ipcRenderer.send('dictation:drag-move', coords),
+  dictationDragEnd: () => ipcRenderer.send('dictation:drag-end'),
+  onDictationStateChanged: (callback) => {
+    const subscription = (_event, ...args) => callback(...args)
+    ipcRenderer.on('dictation:state-changed', subscription)
+    return () => ipcRenderer.off('dictation:state-changed', subscription)
   }
 })

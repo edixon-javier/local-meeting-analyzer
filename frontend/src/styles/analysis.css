@@ -104,6 +104,31 @@
   min-width: 45px;
   background: var(--bg-elevated);
 }
+.btn.transcript-skip-btn {
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+.btn.transcript-skip-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.btn.transcript-autoscroll-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+.btn.transcript-autoscroll-btn.is-active {
+  color: var(--accent-primary-hover);
+  border-color: var(--accent-primary);
+  background: var(--accent-subtle);
+}
 .btn.transcript-bookmark-btn {
   padding: 6px 10px;
   font-size: 12px;
@@ -501,12 +526,20 @@
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .insights-progress-fill.is-complete { background: var(--green-ok); }
-.insights-filters {
+.insights-tasks-toolbar {
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-subtle);
+}
+.insights-filters {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .insights-filter-btn {
   font-size: 11px;
@@ -522,6 +555,69 @@
 .insights-filter-btn.is-active {
   background: var(--accent-primary);
   color: #FFF;
+}
+.insights-tasks-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  margin-left: auto;
+}
+.btn.insights-action-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.insights-export-dropdown {
+  position: relative;
+}
+.insights-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 210px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.insights-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+  width: 100%;
+}
+.insights-dropdown-item:hover {
+  background: var(--bg-elevated);
+}
+.insights-dropdown-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.insights-dropdown-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.insights-dropdown-desc {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 .insights-task-list {
   display: flex;
@@ -694,4 +790,22 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+/* ─── Resaltado visual interactivo de segmentos sincronizados con el chat ─── */
+.chat-bubble.active-segment.chat-timestamp-pulse {
+  animation: transcriptHighlightPulse 1.8s ease-out;
+}
+
+@keyframes transcriptHighlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.75);
+    border-color: var(--accent-primary) !important;
+  }
+  40% {
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+  }
 }

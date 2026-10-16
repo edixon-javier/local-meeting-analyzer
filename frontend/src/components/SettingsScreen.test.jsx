@@ -186,4 +186,30 @@ describe('SettingsScreen: privacidad, soporte y legal', () => {
     // Un único campo de clave visible (no se duplica en Privacidad)
     expect(screen.getAllByLabelText(/OpenAI API Key/)).toHaveLength(1);
   });
+
+  it('con proveedor Claude muestra el campo de clave de Anthropic y selector de modelo de Claude', async () => {
+    await renderSettings({
+      ai_provider: 'claude',
+      anthropic_api_key: '••••••••5678',
+      has_claude_key: true,
+      claude_model: 'claude-3-5-haiku-20241022'
+    });
+    expect(screen.getByLabelText(/Anthropic \(Claude\) API Key/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Modelo de análisis \(Anthropic Claude\)/)).toBeInTheDocument();
+    expect(screen.getByText('Clave guardada (••••••••5678)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Usar la nube \(OpenAI\)/)).toBeDisabled();
+  });
+
+  it('con proveedor Gemini muestra el campo de clave de Google Gemini y selector de modelo', async () => {
+    await renderSettings({
+      ai_provider: 'gemini',
+      gemini_api_key: '••••••••9012',
+      has_gemini_key: true,
+      gemini_model: 'gemini-2.0-flash'
+    });
+    expect(screen.getByLabelText(/Google Gemini API Key/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Modelo de transcripción y análisis \(Google Gemini\)/)).toBeInTheDocument();
+    expect(screen.getByText('Clave guardada (••••••••9012)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Usar la nube \(OpenAI\)/)).toBeDisabled();
+  });
 });

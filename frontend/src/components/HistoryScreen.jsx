@@ -9,10 +9,14 @@ import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName
 import {
   copyExecutiveMinutes,
   downloadExecutiveMarkdown,
+  downloadFullDocumentMarkdown,
+  downloadTranscriptFile,
+  copyTranscript,
   exportExecutivePdf,
   formatTime
 } from '../utils/minutesExport'
 import { downloadAudioRecording, revealAudioRecording } from '../utils/audioExport'
+import { downloadMeetingTasks } from '../utils/tasksExport'
 
 export default function HistoryScreen({ onNavigate }) {
   const { isBackendOffline, showToast } = useSystem()
@@ -30,9 +34,21 @@ export default function HistoryScreen({ onNavigate }) {
   } = useRecordings()
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('all') // all | analyzed | pending | with_tasks
   const [dateSort, setDateSort] = useState('newest') // newest | oldest
   const [exportingMeeting, setExportingMeeting] = useState(null)
+  const [historyPdfMode, setHistoryPdfMode] = useState('full')
   const [loadingExportFor, setLoadingExportFor] = useState(null) // filename mientras se cargan los metadatos
+
+  const handleHistoryExportPDF = async (data, title, mode = 'full') => {
+    setHistoryPdfMode(mode)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    try {
+      await exportExecutivePdf(data, title, showToast, mode)
+    } finally {
+      setExportingMeeting(null)
+    }
+  }
 
   useEffect(() => {
     if (!isBackendOffline) {
@@ -47,13 +63,25 @@ export default function HistoryScreen({ onNavigate }) {
     const matchesSearch = !normalizedQuery || [rec.filename, getRecordingTitle(rec.filename), rec.summary_preview, rec.category]
       .some((text) => (text || '').toLowerCase().includes(normalizedQuery))
     const matchesCategory = categoryFilter === 'All' || rec.category === categoryFilter
-    return matchesSearch && matchesCategory
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'analyzed'
+          ? Boolean(rec.has_metadata)
+          : statusFilter === 'pending'
+            ? !rec.has_metadata
+            : statusFilter === 'with_tasks'
+              ? Number(rec.pending_tasks_count) > 0
+              : true
+    return matchesSearch && matchesCategory && matchesStatus
   }).sort((a, b) => {
     return dateSort === 'newest' ? b.created - a.created : a.created - b.created
   })
 
   // Resumen de la cabecera: cuántas reuniones, cuánto tiempo grabado y cuántas están analizadas
   const analyzedCount = recordings.filter((r) => r.has_metadata).length
+  const totalPendingTasks = recordings.reduce((acc, r) => acc + (Number(r.pending_tasks_count) || 0), 0)
+  const totalTasksCount = recordings.reduce((acc, r) => acc + (Number(r.tasks_count) || 0), 0)
   const totalSeconds = recordings.reduce((acc, r) => acc + (Number(r.duration) || 0), 0)
   const totalDuration = totalSeconds >= 3600
     ? `${Math.floor(totalSeconds / 3600)} h ${Math.round((totalSeconds % 3600) / 60)} min`
@@ -146,6 +174,18 @@ export default function HistoryScreen({ onNavigate }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Historial de Reuniones</h1>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => loadRecordings()}
+              disabled={loading || isRefreshing}
+              title="Recargar historial de reuniones y compromisos (F5)"
+              aria-label="Recargar historial de reuniones"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '4px 9px' }}
+            >
+              <Icon name="refresh" size={12} className={isRefreshing ? 'spinner-small' : ''} />
+              <span>Actualizar</span>
+            </button>
             {isRefreshing && (
               <span style={{ fontSize: 11, color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
                 <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} aria-hidden="true" /> Actualizando…
@@ -159,6 +199,11 @@ export default function HistoryScreen({ onNavigate }) {
                   `${recordings.length} ${recordings.length === 1 ? 'reunión' : 'reuniones'}`,
                   totalDuration ? `${totalDuration} grabadas` : null,
                   `${analyzedCount} ${analyzedCount === 1 ? 'analizada' : 'analizadas'}`,
+                  totalTasksCount > 0
+                    ? (totalPendingTasks > 0
+                        ? `${totalPendingTasks} ${totalPendingTasks === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
+                        : `${totalTasksCount} tareas listas`)
+                    : null
                 ].filter(Boolean).join(' · ')}
           </p>
         </div>
@@ -191,6 +236,20 @@ export default function HistoryScreen({ onNavigate }) {
           {categories.map(c => (
             <option key={c} value={c}>{c === 'All' ? 'Todas las Categorías' : c}</option>
           ))}
+        </select>
+
+        {/* Filtro de Estado de Análisis / Compromisos */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="filter-control input-select"
+          aria-label="Filtrar por estado"
+          style={{ minWidth: 160 }}
+        >
+          <option value="all">Todos los estados</option>
+          <option value="analyzed">Solo analizadas</option>
+          <option value="pending">Sin analizar</option>
+          <option value="with_tasks">Con tareas pendientes</option>
         </select>
 
         {/* Ordenar por Fecha */}
@@ -227,7 +286,7 @@ export default function HistoryScreen({ onNavigate }) {
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => { setSearchQuery(''); setCategoryFilter('All') }}
+                  onClick={() => { setSearchQuery(''); setCategoryFilter('All'); setStatusFilter('all') }}
                 >
                   <Icon name="x" size={13} /> Limpiar filtros
                 </button>
@@ -259,6 +318,24 @@ export default function HistoryScreen({ onNavigate }) {
                     {rec.bookmarks_count > 0 && (
                       <span className="meeting-card-bookmarks">
                         <Icon name="bookmark" size={12} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
+                      </span>
+                    )}
+                    {rec.tasks_count > 0 && (
+                      <span
+                        className="meeting-card-tasks"
+                        title={`${rec.tasks_count} tareas (${rec.pending_tasks_count} pendientes)`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          color: rec.pending_tasks_count > 0 ? 'var(--accent-primary)' : 'var(--green-ok)',
+                          fontWeight: 500
+                        }}
+                      >
+                        <Icon name="check-circle" size={12} />
+                        {rec.pending_tasks_count > 0
+                          ? `${rec.pending_tasks_count}/${rec.tasks_count} pend.`
+                          : `${rec.tasks_count} listas`}
                       </span>
                     )}
                   </div>
@@ -295,6 +372,7 @@ export default function HistoryScreen({ onNavigate }) {
                         className="btn btn-secondary btn-sm meeting-card-export"
                         disabled={loadingExportFor === rec.filename}
                         aria-busy={loadingExportFor === rec.filename || undefined}
+                        aria-label="Exportar minuta y documentos de la reunión"
                         title="Exportar minuta ejecutiva (PDF, Markdown o copiar)"
                       >
                         {loadingExportFor === rec.filename
@@ -368,9 +446,9 @@ export default function HistoryScreen({ onNavigate }) {
         <Modal titleId="export-minutes-title" onClose={() => setExportingMeeting(null)} maxWidth={480}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="file-text" size={20} style={{ color: 'var(--accent-primary-hover)' }} />
+                <Icon name="download" size={20} style={{ color: 'var(--accent-primary-hover)' }} />
                 <h3 id="export-minutes-title" className="modal-title" style={{ margin: 0 }}>
-                  Minuta Ejecutiva
+                  Exportar Reunión y Documentos
                 </h3>
               </div>
               <button
@@ -411,78 +489,283 @@ export default function HistoryScreen({ onNavigate }) {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                className="btn btn-secondary"
-                onClick={async () => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  await copyExecutiveMinutes(data, showToast)
-                  setExportingMeeting(null)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="copy" size={15} /> Copiar Minuta (Slack / Email)
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Sección 1: Documento Completo */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="file-text" size={15} style={{ color: 'var(--accent-primary)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Documento Completo</strong>
+                  <span className="pill" style={{ fontSize: 10, padding: '1px 6px' }}>Recomendado</span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Minuta ejecutiva, decisiones, compromisos y la conversación íntegra con hablantes.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      downloadFullDocumentMarkdown(data, exportingMeeting.title, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Descargar .md
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      handleHistoryExportPDF(data, exportingMeeting.title, 'full')
+                    }}
+                    style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="file-text" size={13} /> Exportar PDF
+                  </button>
+                </div>
+              </div>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  downloadExecutiveMarkdown(data, exportingMeeting.title, showToast)
-                  setExportingMeeting(null)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="download" size={15} /> Descargar Markdown (.md)
-              </button>
+              {/* Sección 2: Minuta Ejecutiva */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="target" size={15} style={{ color: 'var(--green-ok)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Minuta Ejecutiva</strong>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Resumen ejecutivo de 1 página con decisiones y compromisos clave para Slack o Email.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      await copyExecutiveMinutes(data, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="copy" size={13} /> Copiar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      downloadExecutiveMarkdown(data, exportingMeeting.title, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Descargar .md
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      handleHistoryExportPDF(data, exportingMeeting.title, 'executive')
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="file-text" size={13} /> Exportar PDF
+                  </button>
+                </div>
+              </div>
 
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  await exportExecutivePdf(data, exportingMeeting.title, showToast)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="file-text" size={15} /> Exportar / Imprimir PDF
-              </button>
+              {/* Sección 3: Conversación Completa */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="chat" size={15} style={{ color: 'var(--amber)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Conversación Completa</strong>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Transcripción literal con hablantes y marcas de tiempo en formato texto universal.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      downloadTranscriptFile(data, exportingMeeting.title, showToast, 'txt')
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Texto (.txt)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      downloadTranscriptFile(data, exportingMeeting.title, showToast, 'md')
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Diálogo (.md)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      await copyTranscript(data, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="copy" size={13} /> Copiar Diálogo
+                  </button>
+                </div>
+              </div>
 
+              {/* Sección 4: Compromisos de esta reunión si existen */}
+              {exportingMeeting.analysis?.action_items && exportingMeeting.analysis.action_items.length > 0 && (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Icon name="check-circle" size={15} style={{ color: 'var(--green-ok)' }} />
+                    <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Compromisos ({exportingMeeting.analysis.action_items.length})</strong>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                    Exportar tareas y acuerdos de esta reunión individual.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'txt',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar lista de tareas en texto (.txt)"
+                    >
+                      <Icon name="file-text" size={13} /> Lista (.txt)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'ics',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar compromisos en formato calendario (.ics)"
+                    >
+                      <Icon name="calendar" size={13} /> Calendario (.ics)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'csv',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar compromisos en formato tabla CSV (.csv)"
+                    >
+                      <Icon name="download" size={13} /> Excel (.csv)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sección 5: Archivo de Audio Original */}
               <div style={{ display: 'flex', gap: 10, marginTop: 4, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
                 <button
                   type="button"
@@ -511,8 +794,15 @@ export default function HistoryScreen({ onNavigate }) {
       {exportingMeeting && (
         <div className="executive-print-report" aria-hidden="true">
           <div className="print-header">
-            <div className="print-badge-header">MEETING ANALYZER &bull; MINUTA EJECUTIVA OFICIAL</div>
-            <h1 className="print-title">📋 Minuta Ejecutiva: {exportingMeeting.title}</h1>
+            <div className="print-badge-header">
+              {historyPdfMode === 'executive'
+                ? 'MEETING ANALYZER • MINUTA EJECUTIVA OFICIAL'
+                : 'MEETING ANALYZER • DOCUMENTO COMPLETO DE REUNIÓN'}
+            </div>
+            <h1 className="print-title">
+              {historyPdfMode === 'executive' ? '📋 Minuta Ejecutiva: ' : '📄 Documento Completo: '}
+              {exportingMeeting.title}
+            </h1>
             <div className="print-meta-row">
               {exportingMeeting.createdDate && <span>📅 {exportingMeeting.createdDate}</span>}
               <span>🏷️ <strong>Categoría:</strong> {exportingMeeting.analysis?.category || 'General'}</span>
@@ -540,7 +830,7 @@ export default function HistoryScreen({ onNavigate }) {
             <div className="print-section">
               <h2 className="print-section-title">🎯 Decisiones Clave</h2>
               <ul className="print-decisions-list">
-                {exportingMeeting.analysis.key_decisions.map((dec, idx) => <li key={idx}>{dec}</li>)}
+                {exportingMeeting.analysis?.key_decisions.map((dec, idx) => <li key={idx}>{dec}</li>)}
               </ul>
             </div>
           )}
@@ -577,24 +867,26 @@ export default function HistoryScreen({ onNavigate }) {
             </table>
           </div>
 
-          <div className="print-section print-page-break">
-            <h2 className="print-section-title">📝 Transcripción Completa</h2>
-            <div className="print-transcript-list">
-              {exportingMeeting.segments && exportingMeeting.segments.length > 0 ? (
-                exportingMeeting.segments.map((seg, idx) => (
-                  <div key={idx} className="print-transcript-item">
-                    <div className="print-transcript-speaker">
-                      <strong>👥 {seg.speaker || 'Hablante'}</strong>
-                      <span className="print-transcript-time">⏱️ {formatTime(seg.start)} - {formatTime(seg.end)}</span>
+          {historyPdfMode === 'full' && (
+            <div className="print-section print-page-break">
+              <h2 className="print-section-title">📝 Transcripción Completa</h2>
+              <div className="print-transcript-list">
+                {exportingMeeting.segments && exportingMeeting.segments.length > 0 ? (
+                  exportingMeeting.segments.map((seg, idx) => (
+                    <div key={idx} className="print-transcript-item">
+                      <div className="print-transcript-speaker">
+                        <strong>👥 {seg.speaker || 'Hablante'}</strong>
+                        <span className="print-transcript-time">⏱️ {formatTime(seg.start)} - {formatTime(seg.end)}</span>
+                      </div>
+                      <p className="print-transcript-text">{seg.text}</p>
                     </div>
-                    <p className="print-transcript-text">{seg.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p style={{ whiteSpace: 'pre-wrap' }}>{exportingMeeting.transcript || 'Sin transcripción.'}</p>
-              )}
+                  ))
+                ) : (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{exportingMeeting.transcript || 'Sin transcripción.'}</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

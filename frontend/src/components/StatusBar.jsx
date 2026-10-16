@@ -25,7 +25,7 @@ export default function StatusBar({ onNavigate }) {
         aria-label={`Motor: ${engine.providerLabel}. ${engine.headline}. Abrir configuración`}
       >
         <span className="status-dot-indicator" aria-hidden="true" />
-        <Icon name={engine.provider === 'openai' ? 'cloud' : 'cpu'} size={13} />
+        <Icon name={engine.isCloud ? 'cloud' : 'cpu'} size={13} />
         <span className="status-engine-label">{engine.providerLabel}</span>
         <span className="status-engine-state">{engine.headline}</span>
       </button>

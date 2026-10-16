@@ -247,6 +247,16 @@ const ICON_PATHS = {
       <path d="M9 2v2" />
       <path d="M9 20v2" />
     </>
+  ),
+  'grip-vertical': (
+    <>
+      <circle cx="9" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="19" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="19" r="1.5" fill="currentColor" stroke="none" />
+    </>
   )
 }
 

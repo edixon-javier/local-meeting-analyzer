@@ -17,6 +17,13 @@ export default function TitleBar({ currentView, audioPath }) {
   const handleMinimize = () => window.electronAPI?.minimize()
   const handleMaximize = () => window.electronAPI?.maximize()
   const handleClose = () => window.electronAPI?.close()
+  const handleReload = () => {
+    if (window.electronAPI?.reload) {
+      window.electronAPI.reload()
+    } else {
+      window.location.reload()
+    }
+  }
 
   return (
     <div className="title-bar">
@@ -27,6 +34,16 @@ export default function TitleBar({ currentView, audioPath }) {
           : (viewLabels[currentView] || '')}
       </span>
       <div className="title-bar-controls">
+        <button
+          className="title-bar-btn reload"
+          onClick={handleReload}
+          title="Recargar interfaz (F5 / Ctrl+R)"
+          aria-label="Recargar interfaz de la aplicación"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
         <button className="title-bar-btn minimize" onClick={handleMinimize} title="Minimizar" aria-label="Minimizar ventana">
           <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="10" height="1" fill="currentColor"/>

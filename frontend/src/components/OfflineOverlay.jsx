@@ -106,6 +106,30 @@ export default function OfflineOverlay() {
             </>
           )}
         </button>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          {window.electronAPI?.reload && (
+            <button
+              type="button"
+              onClick={() => window.electronAPI.reload()}
+              className="btn btn-secondary"
+              style={{ flex: 1, padding: '10px 14px', fontSize: 13, justifyContent: 'center' }}
+            >
+              <Icon name="refresh" size={14} /> Recargar
+            </button>
+          )}
+          {window.electronAPI?.openLogsFolder && (
+            <button
+              type="button"
+              onClick={() => window.electronAPI.openLogsFolder()}
+              className="btn btn-secondary"
+              style={{ flex: 1, padding: '10px 14px', fontSize: 13, justifyContent: 'center' }}
+              title="Abrir registros para diagnóstico"
+            >
+              <Icon name="file-text" size={14} /> Ver registros
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

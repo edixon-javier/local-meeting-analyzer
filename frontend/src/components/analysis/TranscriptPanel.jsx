@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { getAudioUrl } from '../../api'
 import { useSystem } from '../../hooks/useSystem'
 import { downloadAudioRecording, revealAudioRecording } from '../../utils/audioExport'
+import { downloadTranscriptFile, copyTranscript } from '../../utils/minutesExport'
 import Icon from '../Icon'
 
 export default function TranscriptPanel({ 
@@ -57,8 +58,28 @@ export default function TranscriptPanel({
 
   const totalMatches = matchingSegments.length
   const isFilteringActive = cleanQuery.length > 0 || speakerFilter !== 'all'
+  const [autoScrollFollow, setAutoScrollFollow] = useState(true)
 
-  // Ajustar puntero si cambia el resultado de búsqueda
+  // Auto-scroll suave al segmento activo durante la reproducción
+  useEffect(() => {
+    if (activeSegmentIndex >= 0 && autoScrollFollow && !isFilteringActive) {
+      const el = document.getElementById(`segment-${activeSegmentIndex}`)
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        const isOutOfView = rect.top < 120 || rect.bottom > (window.innerHeight - 80)
+        if (isOutOfView) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }
+    }
+  }, [activeSegmentIndex, autoScrollFollow, isFilteringActive])
+
+  const handleSkipTime = (deltaSeconds) => {
+    if (audioRef?.current) {
+      const newTime = Math.max(0, (audioRef.current.currentTime || 0) + deltaSeconds)
+      audioRef.current.currentTime = newTime
+    }
+  }
   useEffect(() => {
     setCurrentMatchPointer(0)
   }, [cleanQuery, speakerFilter])
@@ -141,6 +162,33 @@ export default function TranscriptPanel({
   const segmentsToRender = onlyShowMatches && isFilteringActive ? matchingSegments : indexedSegments
   const activeMatchingOriginalIndex = matchingSegments[currentMatchPointer]?.originalIndex
 
+  const handleDownloadTranscript = () => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : 'conversacion'
+    downloadTranscriptFile(
+      {
+        title: meetingTitle || 'Reunión',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        segments: segments || [],
+        transcript: transcript || ''
+      },
+      filename,
+      showToast,
+      'txt'
+    )
+  }
+
+  const handleCopyTranscript = async () => {
+    await copyTranscript(
+      {
+        title: meetingTitle || 'Reunión',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        segments: segments || [],
+        transcript: transcript || ''
+      },
+      showToast
+    )
+  }
+
   return (
     <div className="transcript-panel">
       <div className="panel-header transcript-header">
@@ -155,6 +203,24 @@ export default function TranscriptPanel({
             </div>
           </div>
           <div className="transcript-header-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleDownloadTranscript}
+              title="Descargar conversación completa con marcas de tiempo y hablantes (.txt)"
+              aria-label="Descargar conversación completa"
+            >
+              <Icon name="download" size={14} /> <span className="btn-label-collapsible">Descargar Conversación</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyTranscript}
+              title="Copiar diálogo completo al portapapeles"
+              aria-label="Copiar conversación completa"
+            >
+              <Icon name="copy" size={14} />
+            </button>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -180,11 +246,31 @@ export default function TranscriptPanel({
         {audioPath && step === 'done' && (
           <div className="audio-player-container">
             <button
+              type="button"
               onClick={changeSpeed}
               className="btn btn-secondary btn-sm transcript-speed-btn"
               title="Velocidad de reproducción"
+              aria-label={`Velocidad de reproducción actual: ${playbackSpeed}x`}
             >
               {playbackSpeed}x
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSkipTime(-5)}
+              className="btn btn-secondary btn-sm transcript-skip-btn"
+              title="Retroceder 5 segundos"
+              aria-label="Retroceder 5 segundos"
+            >
+              -5s
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSkipTime(5)}
+              className="btn btn-secondary btn-sm transcript-skip-btn"
+              title="Avanzar 5 segundos"
+              aria-label="Avanzar 5 segundos"
+            >
+              +5s
             </button>
             <audio
               ref={audioRef}
@@ -193,6 +279,16 @@ export default function TranscriptPanel({
               className="custom-audio-player"
               onTimeUpdate={handleTimeUpdate}
             />
+            <button
+              type="button"
+              onClick={() => setAutoScrollFollow(prev => !prev)}
+              className={`btn btn-secondary btn-sm transcript-autoscroll-btn ${autoScrollFollow ? 'is-active' : ''}`}
+              title={autoScrollFollow ? 'Seguimiento de audio activo: se desplaza al reproducir' : 'Seguimiento de audio pausado: clic para activar'}
+              aria-label="Alternar seguimiento de audio sincronizado"
+            >
+              <Icon name="target" size={13} />
+              <span className="btn-label-collapsible">{autoScrollFollow ? 'Seguir audio' : 'Fijar vista'}</span>
+            </button>
             {onAddBookmark && (
               <button
                 type="button"

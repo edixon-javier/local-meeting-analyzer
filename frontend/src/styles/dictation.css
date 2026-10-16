@@ -1,0 +1,544 @@
+/* frontend/src/styles/dictation.css
+   Estilos para la Micro-Píldora flotante y la pantalla de Historial de Dictados. */
+
+/* ─── Micro-Píldora Flotante ─── */
+html.pill-mode,
+body.pill-mode,
+body.pill-mode #root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.pill-mode::before,
+body.pill-mode::after {
+  display: none !important;
+}
+
+.dictation-pill-standalone {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+}
+
+.dictation-pill-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(14, 16, 22, 0.68);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  height: 38px;
+  padding: 0 7px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.dictation-pill-container.recording {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.12);
+}
+
+.dictation-pill-container.processing {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.25);
+}
+
+.dictation-pill-container.finished {
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(52, 211, 153, 0.25);
+}
+
+/* Canvas de olas fluidas amplias en toda la caja */
+.pill-wave-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.95;
+}
+
+/* Manija de arrastre */
+.pill-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 22px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: grab;
+  transition: all 0.15s ease;
+  -webkit-app-region: drag;
+  user-select: none;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.pill-drag-handle:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.pill-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Divisor sutil vertical */
+.pill-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+/* Micro-indicador REC + Cronómetro interactivo */
+.pill-rec-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 9999px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  outline: none;
+  z-index: 2;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.pill-rec-trigger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.25);
+  transform: scale(1.02);
+}
+
+.pill-rec-trigger:active {
+  transform: scale(0.97);
+}
+
+.pill-rec-indicator {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pill-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #EF4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.9);
+  z-index: 2;
+}
+
+.pill-rec-pulse-ring {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  animation: pill-pulse-ring 1.5s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+  z-index: 1;
+}
+
+@keyframes pill-pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  60% { transform: scale(1.4); opacity: 0.15; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+.pill-timer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.4px;
+}
+
+/* Badge de modo (Literal vs Ideas) */
+.pill-mode-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+  outline: none;
+  z-index: 2;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.pill-mode-badge:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.pill-waves-spacer {
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  z-index: 1;
+}
+
+/* Botón Aceptar: Solo icono (Verde Esmeralda Flotante) */
+.pill-btn-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  color: #FFFFFF;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  z-index: 2;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.pill-btn-confirm:hover {
+  background: linear-gradient(135deg, #34D399 0%, #059669 100%);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.7);
+  transform: scale(1.08);
+}
+
+.pill-btn-confirm:active {
+  transform: scale(0.96);
+}
+
+/* Botón Cancelar: Solo icono (Flotante neutro con hover rojo) */
+.pill-btn-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+  z-index: 2;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.pill-btn-cancel:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #F87171;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+  transform: scale(1.08);
+}
+
+.pill-btn-cancel:active {
+  transform: scale(0.96);
+}
+
+/* Compatibilidad genérica para botones píldora */
+.pill-btn {
+  border: none;
+}
+
+.pill-btn-stop {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+  color: #FFFFFF !important;
+}
+
+/* Clusters de retroalimentación */
+.pill-feedback-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+
+.pill-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #38BDF8;
+  border-radius: 50%;
+  animation: pill-spin 0.8s linear infinite;
+}
+
+@keyframes pill-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pill-feedback-text {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pill-feedback-text.processing {
+  color: #BAE6FD;
+}
+
+.pill-feedback-text.finished {
+  color: #6EE7B7;
+}
+
+.pill-idle-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  z-index: 2;
+}
+
+/* ─── Pantalla Historial de Dictados ─── */
+.dictation-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 32px;
+  box-sizing: border-box;
+}
+
+.dictation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+.dictation-title-group h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dictation-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0;
+}
+
+.shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-primary-hover);
+}
+
+.dictation-controls-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.dictation-search-box {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dictation-search-input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.dictation-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.dictation-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.dictation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dictation-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dictation-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+
+.dictation-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dictation-app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #A5B4FC;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.dictation-time-badge {
+  color: var(--text-muted);
+}
+
+.dictation-metric-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--green-ok);
+}
+
+.dictation-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dictation-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.dictation-tab-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.dictation-tab-btn.active {
+  color: var(--accent-primary-hover);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.dictation-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dictation-audio-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 320px;
+}
+
+.dictation-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dictation-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.dictation-empty-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
