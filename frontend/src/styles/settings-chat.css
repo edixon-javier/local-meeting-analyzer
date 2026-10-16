@@ -453,3 +453,19 @@ button.chat-inline-timestamp-btn:focus-visible {
 }
 
 
+
+/* Bloque de configuración MCP para copiar */
+.mcp-snippet {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  user-select: text;
+}

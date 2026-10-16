@@ -570,6 +570,25 @@ function resolveLegalDoc(id) {
 
 ipcMain.handle('app:get-info', () => getAppInfo())
 
+// Configuración para conectar asistentes de IA (Claude Desktop, Cursor...) al servidor MCP local.
+// Instalada: el propio backend congelado en modo "--mcp", con la misma carpeta de datos que usa la app.
+// Desarrollo: python.exe del venv (no pythonw: el protocolo MCP necesita stdin/stdout).
+ipcMain.handle('app:get-mcp-config', () => {
+  if (app.isPackaged) {
+    return {
+      command: path.join(process.resourcesPath, 'backend', 'meeting-backend.exe'),
+      args: ['--mcp'],
+      env: { MEETING_ANALYZER_DATA_DIR: app.getPath('userData') },
+    }
+  }
+  const backendDir = path.join(__dirname, '../../backend')
+  return {
+    command: path.join(backendDir, 'venv', 'Scripts', 'python.exe'),
+    args: [path.join(backendDir, 'main.py'), '--mcp'],
+    env: {},
+  }
+})
+
 ipcMain.handle('app:open-logs-folder', async () => {
   try {
     fs.mkdirSync(logsDir, { recursive: true })

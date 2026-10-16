@@ -5,7 +5,7 @@ export const CONSENT_TEXT = {
   'consent.modal.title': 'Antes de grabar tu primera reunión',
   'consent.modal.body.p1': 'Esta app graba el audio de tu micrófono y del sistema para transcribirlo y analizarlo en tu equipo.',
   'consent.modal.body.p2': 'En muchos lugares la ley exige avisar a los participantes y obtener su consentimiento antes de grabar. Esa responsabilidad es tuya.',
-  'consent.modal.body.p3': 'Tus grabaciones y transcripciones se quedan en este equipo, salvo que elijas usar OpenAI en Ajustes.',
+  'consent.modal.body.p3': 'Tus grabaciones y transcripciones se quedan en este equipo, salvo que elijas un servicio en la nube (OpenAI, Claude o Gemini) en Ajustes.',
   'consent.modal.checkbox': 'Entiendo que debo informar a los participantes y obtener su consentimiento cuando la ley lo exija',
   'consent.modal.confirm': 'Entendido, continuar',
   'consent.modal.cancel': 'Ahora no',

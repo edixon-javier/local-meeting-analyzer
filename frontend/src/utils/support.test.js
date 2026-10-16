@@ -3,12 +3,15 @@ import { isPlaceholder } from '../appInfo';
 
 const INFO = { version: '1.6.0', os: '10.0.26100', arch: 'x64', isStore: false };
 
+// Canales sin configurar (marcadores): cada test indica los que quiere activar
+const UNCONFIGURED = { ISSUES_URL: '[URL DEL REPOSITORIO]/issues', SUPPORT_EMAIL: '[CORREO DE SOPORTE]' };
+
 // Carga support.js con valores de appInfo simulados (el módulo lee las constantes al importarse)
 async function loadSupport(overrides = {}) {
   vi.resetModules();
   vi.doMock('../appInfo', async () => {
     const actual = await vi.importActual('../appInfo');
-    return { ...actual, ...overrides };
+    return { ...actual, ...UNCONFIGURED, ...overrides };
   });
   return import('./support');
 }

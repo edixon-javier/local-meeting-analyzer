@@ -72,10 +72,12 @@ def _safe_metadata(*dists):
 hiddenimports = (
     _local_modules("api", "core", "domain", "services")
     + collect_submodules("uvicorn")
+    + collect_submodules("mcp")  # servidor MCP integrado ("meeting-backend.exe --mcp")
     + [
         "python_multipart",
         "onnxruntime",  # VAD de faster-whisper (import perezoso)
         "hf_xet",       # descargas de Hugging Face más rápidas si está instalado
+        "mcp_server",   # modo --mcp de main.py
     ]
 )
 
@@ -85,7 +87,7 @@ datas = (
     + _safe_metadata(
         "fastapi", "starlette", "pydantic", "uvicorn", "openai", "httpx", "requests",
         "numpy", "tqdm", "huggingface_hub", "tokenizers", "filelock", "packaging",
-        "ctranslate2", "faster_whisper", "av", "onnxruntime", "python_multipart",
+        "ctranslate2", "faster_whisper", "av", "onnxruntime", "python_multipart", "mcp",
     )
 )
 

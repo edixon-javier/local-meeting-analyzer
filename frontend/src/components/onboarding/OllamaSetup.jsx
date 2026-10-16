@@ -365,9 +365,9 @@ export default function OllamaSetup({ recommendations, onSkip }) {
           </div>
         )}
 
-        {info?.ai_provider === 'openai' && state !== 'ready' && (
+        {['openai', 'claude', 'gemini'].includes(info?.ai_provider) && state !== 'ready' && (
           <p className="onb-inline-note">
-            <Icon name="cloud" size={14} /> Ahora mismo tu proveedor de IA es OpenAI (nube). Ollama solo se usará si
+            <Icon name="cloud" size={14} /> Ahora mismo usas un proveedor de IA en la nube. Ollama solo se usará si
             eliges IA local en Ajustes.
           </p>
         )}
@@ -379,8 +379,8 @@ export default function OllamaSetup({ recommendations, onSkip }) {
             Configurar después
           </button>
           <span>
-            Puedes instalar Ollama más tarde o usar OpenAI con tu propia clave API en Ajustes. Si eliges OpenAI, el audio
-            o el texto de tus reuniones se enviará a ese servicio.
+            Puedes instalar Ollama más tarde o usar un servicio en la nube (OpenAI, Claude o Gemini) con tu propia
+            clave API en Ajustes. En ese caso, el audio o el texto de tus reuniones se enviará a ese servicio.
           </span>
         </p>
       )}

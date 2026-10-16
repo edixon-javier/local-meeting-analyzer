@@ -58,7 +58,8 @@ function WelcomeStep() {
           <strong>Local por defecto</strong>
           <span>
             Con la IA local, la transcripción y el análisis se hacen en tu equipo y tus grabaciones no salen de él. Solo
-            si eliges OpenAI en Ajustes, el audio o el texto de tus reuniones se enviará a ese servicio. Necesitarás
+            si eliges un servicio en la nube en Ajustes (OpenAI, Claude o Gemini), el audio o el texto de tus reuniones
+            se enviará a ese servicio. Necesitarás
             internet únicamente para descargar modelos.
           </span>
         </div>

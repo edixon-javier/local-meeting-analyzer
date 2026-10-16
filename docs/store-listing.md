@@ -16,11 +16,11 @@ Idioma principal de la ficha: **Español**. Se recomienda crear también una fic
 | **Nombre de la app** (reservar en Partner Center) | Local Meeting Analyzer |
 | **Categoría** | Productividad |
 | **Subcategoría** | La que ofrezca Partner Center más cercana a «Productividad personal» o «Negocios» |
-| **Sitio web** | [URL DEL REPOSITORIO] |
+| **Sitio web** | https://local-meeting-analyzer.vercel.app |
 | **Correo de soporte** | [CORREO DE CONTACTO] |
 | **URL de la política de privacidad** (obligatoria: usa el micrófono) | [URL PÚBLICA DE docs/privacy.html], por ejemplo `https://[USUARIO].github.io/[REPOSITORIO]/privacy.html` (publica `docs/privacy.html` con GitHub Pages) |
 | **Copyright** | © 2026 [NOMBRE DEL TITULAR] |
-| **Términos de licencia** | Enlaza `LICENSE` (AGPL-3.0-or-later) y `legal/EULA.txt` (sin el bloque de nota para el desarrollador). Añade a la descripción: "Software libre (AGPL-3.0). Código fuente: [URL DEL REPOSITORIO]". |
+| **Términos de licencia** | Enlaza `LICENSE` (AGPL-3.0-or-later) y `legal/EULA.txt` (sin el bloque de nota para el desarrollador). Añade a la descripción: "Software libre (AGPL-3.0). Código fuente: https://github.com/edixon-javier/local-meeting-analyzer". |
 
 ## 2. Descripción corta (máx. 100 caracteres)
 

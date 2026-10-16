@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ayuda y soporte (todo local: no se envía nada a ningún servidor)
   // -> { version, electron, chrome, node, os, arch, isPackaged, isStore, dataDir, logsDir }
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+  // Comando para conectar asistentes de IA al servidor MCP local -> { command, args, env }
+  getMcpConfig: () => ipcRenderer.invoke('app:get-mcp-config'),
   // Abre la carpeta de registros en el Explorador -> boolean
   openLogsFolder: () => ipcRenderer.invoke('app:open-logs-folder'),
   // Copia al portapapeles un diagnóstico sin claves y devuelve el texto -> string

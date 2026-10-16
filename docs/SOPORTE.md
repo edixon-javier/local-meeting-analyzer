@@ -9,7 +9,7 @@ Cómo pedir ayuda, qué información incluir y dónde están los registros de la
 
 | Canal | Para qué | Dónde |
 |---|---|---|
-| **GitHub Issues** (principal, gratuito) | Errores, dudas de uso y sugerencias | `[URL DEL REPOSITORIO]/issues` |
+| **GitHub Issues** (principal, gratuito) | Errores, dudas de uso y sugerencias | `https://github.com/edixon-javier/local-meeting-analyzer/issues` |
 | **Correo** (secundario) | Si no tienes cuenta de GitHub o el asunto es sensible | `[CORREO DE SOPORTE]` |
 | **Discord** (opcional, más adelante) | Comunidad y consultas rápidas | Aún no disponible |
 

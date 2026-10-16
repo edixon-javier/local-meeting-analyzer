@@ -102,6 +102,20 @@ Cierre transitivo de `backend/requirements.txt` (`faster-whisper`, `fastapi`, `u
 | tqdm | 4.68.3 | MPL-2.0 AND MIT | tqdm developers | https://tqdm.github.io |
 | PyYAML | 6.0.3 | MIT | Kirill Simonov | https://pyyaml.org/ |
 | packaging | 26.2 | Apache-2.0 OR BSD-2-Clause | Donald Stufft y colaboradores | https://github.com/pypa/packaging |
+| mcp (SDK de Model Context Protocol) | 2.3.0 | MIT | Anthropic, PBC | https://github.com/modelcontextprotocol/python-sdk |
+| mcp-types | 2.3.0 | MIT | Anthropic, PBC | https://github.com/modelcontextprotocol/python-sdk |
+| sse-starlette | 3.5.0 | BSD-3-Clause | sysid | https://github.com/sysid/sse-starlette |
+| httpx2 | 2.13.1 | BSD-3-Clause | Encode OSS Ltd. | https://github.com/encode/httpx |
+| httpcore2 | 2.13.1 | BSD-3-Clause | Encode OSS Ltd. | https://github.com/encode/httpcore |
+| jsonschema | 4.26.0 | MIT | Julian Berman | https://github.com/python-jsonschema/jsonschema |
+| jsonschema-specifications | 2025.9.1 | MIT | Julian Berman | https://github.com/python-jsonschema/jsonschema-specifications |
+| referencing | 0.37.0 | MIT | Julian Berman | https://github.com/python-jsonschema/referencing |
+| rpds-py | 2026.9.1 | MIT | Julian Berman | https://github.com/crate-py/rpds |
+| attrs | 26.1.0 | MIT | Hynek Schlawack | https://www.attrs.org |
+| PyJWT | 2.15.1 | MIT | José Padilla | https://github.com/jpadilla/pyjwt |
+| truststore | 0.10.4 | MIT | Seth Michael Larson, David Glick | https://github.com/sethmlarson/truststore |
+| opentelemetry-api | 1.45.1 | Apache-2.0 | OpenTelemetry Authors | https://github.com/open-telemetry/opentelemetry-python |
+| pywin32 | 312 | PSF-2.0 | Mark Hammond y colaboradores | https://github.com/mhammond/pywin32 |
 | flatbuffers | 25.12.19 | Apache-2.0 | Google / Derek Bailey | https://google.github.io/flatbuffers/ |
 | protobuf | 7.35.1 | BSD-3-Clause | Google LLC | https://developers.google.com/protocol-buffers/ |
 | numpy | 2.4.6 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | NumPy Developers | https://numpy.org |

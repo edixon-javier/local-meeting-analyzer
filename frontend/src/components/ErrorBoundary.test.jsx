@@ -3,6 +3,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ErrorBoundary from './ErrorBoundary';
 
+// Canales de soporte sin configurar (marcadores) para probar el estado deshabilitado
+vi.mock('../appInfo', async () => ({
+  ...(await vi.importActual('../appInfo')),
+  ISSUES_URL: '[URL DEL REPOSITORIO]/issues',
+  SUPPORT_EMAIL: '[CORREO DE SOPORTE]',
+}));
+
 // Componente que siempre lanza un error
 const ProblemChild = () => {
   throw new Error('Test error');

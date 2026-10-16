@@ -33,12 +33,40 @@ Local Meeting Analyzer incluye un servidor nativo **Model Context Protocol (MCP)
 
 ## ⚙️ Configuración en Clientes de IA
 
+### Con la aplicación instalada (recomendado)
+
+No necesitas Python: el ejecutable del backend incluye el servidor MCP (`meeting-backend.exe --mcp`).
+
+1. Abre la app → **Configuración → Asistentes de IA (MCP)**.
+2. Pulsa **Copiar configuración**. El bloque ya trae la ruta exacta de tu instalación y la carpeta de datos, por ejemplo:
+
+```json
+{
+  "mcpServers": {
+    "local-meeting-analyzer": {
+      "command": "C:\\Users\\TU_USUARIO\\AppData\\Local\\Programs\\Local Meeting Analyzer\\resources\\backend\\meeting-backend.exe",
+      "args": ["--mcp"],
+      "env": { "MEETING_ANALYZER_DATA_DIR": "C:\\Users\\TU_USUARIO\\AppData\\Roaming\\Local Meeting Analyzer" }
+    }
+  }
+}
+```
+
+3. Pégalo en la configuración de tu asistente y reinícialo:
+   - **Claude Desktop (Windows):** `%APPDATA%\Claude\claude_desktop_config.json`
+   - **Cursor / Antigravity / VS Code:** su archivo de configuración MCP (`mcpServers`).
+
+> **Privacidad:** el servidor MCP solo funciona en tu equipo, pero el asistente que lo usa puede enviar a su
+> proveedor en la nube la información que consulte.
+
+### Desde el código fuente (desarrollo)
+
 ### 1. Claude Desktop
 
 Abre tu archivo de configuración de Claude Desktop:
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-Agrega el servidor dentro de `mcpServers`:
+Agrega el servidor dentro de `mcpServers` (también puedes usar `main.py --mcp` en lugar de `mcp_server.py`):
 
 ```json
 {

@@ -1,11 +1,10 @@
 # Configuración del selector de plantillas de incidencias.
-# ANTES DE PUBLICAR: sustituir REEMPLAZAR-usuario-github y REEMPLAZAR-repositorio por los valores reales
-# (los mismos que build.publish en frontend/package.json).
+# Enlaces al repositorio (los mismos que build.publish en frontend/package.json).
 blank_issues_enabled: false
 contact_links:
   - name: Guía de soporte y dónde están los registros
-    url: https://github.com/REEMPLAZAR-usuario-github/REEMPLAZAR-repositorio/blob/main/docs/SOPORTE.md
+    url: https://github.com/edixon-javier/local-meeting-analyzer/blob/main/docs/SOPORTE.md
     about: Cómo copiar el diagnóstico y qué incluir en un reporte.
   - name: Política de privacidad
-    url: https://github.com/REEMPLAZAR-usuario-github/REEMPLAZAR-repositorio/blob/main/legal/PRIVACY.md
+    url: https://github.com/edixon-javier/local-meeting-analyzer/blob/main/legal/PRIVACY.md
     about: Qué datos trata la aplicación (todo es local por defecto).

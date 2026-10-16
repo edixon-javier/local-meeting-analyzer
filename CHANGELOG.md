@@ -40,8 +40,28 @@ Primera versión preparada para su distribución pública en Windows x64.
 - Plantillas de incidencias de GitHub (error y sugerencia) y guía de soporte en `docs/SOPORTE.md`.
 - Pruebas de interfaz con Vitest y Testing Library (`npm test`).
 - La versión de la aplicación se expone en `GET /status` (`version`) y en Ajustes.
+- **Servidor MCP (Model Context Protocol).** Claude Desktop, Cursor y otros asistentes compatibles pueden consultar
+  reuniones, resúmenes, transcripciones y tareas. Funciona con la app instalada (`meeting-backend.exe --mcp`, sin
+  Python) y Ajustes > Asistentes de IA (MCP) genera la configuración lista para copiar.
+- **Dictado en cualquier aplicación.** Atajo global para dictar e insertar el texto en el cursor de otros programas,
+  con modo literal o "Ideas claras" (pulido) e historial de dictados. Local por defecto; Groq u OpenAI opcionales.
+- **Más proveedores de IA (opcionales, con tu clave):** Anthropic Claude (transcribe en local y envía solo texto) y
+  Google Gemini, además de OpenAI.
+- **Exportación de tareas** a calendario (`.ics`) y hoja de cálculo (`.csv`), y recuento de tareas pendientes.
+- **Chat mejorado:** respuestas en streaming con Markdown, conversaciones guardadas y preguntas sugeridas.
+- **Acceso rápido** en la barra lateral: reuniones fijadas, pendientes de analizar y recientes.
+- **Nombres legibles** ("Reunión · 6 oct, 19:56"), duración real y tema de cada reunión en Historial; al renombrar
+  se sugiere el tema.
+- Descargar el audio de una reunión y mostrarlo en el Explorador.
 
 ### Cambiado
+
+- **Configuración reorganizada** en secciones con un panel de resumen (incluido adónde van tus datos), aviso de
+  cambios sin guardar e índice de secciones.
+- **Estado del motor unificado** en la barra inferior (modelo que transcribe y que analiza según el proveedor real),
+  con avisos en la barra lateral solo cuando algo requiere atención.
+- Pulido general de interfaz y accesibilidad: foco visible, diálogos con teclado (Esc, foco atrapado),
+  notificaciones accesibles y estados de carga.
 
 - **Licencia.** El proyecto pasa a ser software libre bajo **AGPL-3.0-or-later** (`LICENSE`). El antiguo EULA
   se convierte en "Licencia y términos de uso", compatible con la AGPL.
@@ -70,6 +90,10 @@ Primera versión preparada para su distribución pública en Windows x64.
 - Los errores internos del backend devuelven una respuesta JSON 500 con un mensaje claro (y cabeceras CORS) en lugar
   de hacer creer a la interfaz que el servidor está caído; el detalle técnico queda solo en el registro.
 - El toast al perder la conexión con Ollama ya no promete un respaldo en la nube que no esté activado.
+- Renombrar una grabación conserva todos sus metadatos y acepta títulos con caracteres no válidos en Windows.
+- Los micrófonos ya no aparecen con el nombre duplicado ("Micrófono - Micrófono (…)").
+- El dictado ya no envía audio a un servicio en la nube distinto del elegido ni cae a la nube cuando se eligió el
+  modo local.
 
 ### Eliminado
 

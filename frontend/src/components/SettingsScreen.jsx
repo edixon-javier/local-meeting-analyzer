@@ -84,6 +84,7 @@ const SETTINGS_SECTIONS = [
   { id: 'settings-dictation', label: 'Dictado en Cursor', icon: 'edit' },
   { id: 'settings-analysis', label: 'Análisis', icon: 'target' },
   { id: 'settings-privacy', label: 'Privacidad', icon: 'lock' },
+  { id: 'settings-mcp', label: 'Asistentes de IA (MCP)', icon: 'chat' },
   { id: 'settings-support', label: 'Ayuda y soporte', icon: 'info' },
   { id: 'settings-legal', label: 'Acerca de / Legal', icon: 'file-text' },
 ]
@@ -1737,6 +1738,65 @@ function SettingsSummary({ values, micName, isDirty, engine, onJump }) {
 // Ayuda y soporte + Acerca de / Legal
 // Todo es local: el diagnóstico se copia al portapapeles y el usuario decide si lo comparte.
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// Conectar asistentes de IA (Claude Desktop, Cursor...) al servidor MCP local.
+// Muestra el bloque JSON listo para pegar en la configuración del asistente, con la ruta real
+// del ejecutable (app instalada) o del venv (desarrollo).
+// ─────────────────────────────────────────
+function McpConnectSection() {
+  const { showToast } = useSystem()
+  const [mcpConfig, setMcpConfig] = useState(null)
+  const electron = typeof window !== 'undefined' ? window.electronAPI : undefined
+
+  useEffect(() => {
+    let alive = true
+    electron?.getMcpConfig?.()
+      .then((cfg) => { if (alive) setMcpConfig(cfg || null) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [electron])
+
+  const server = mcpConfig
+    ? { command: mcpConfig.command, args: mcpConfig.args, ...(mcpConfig.env && Object.keys(mcpConfig.env).length ? { env: mcpConfig.env } : {}) }
+    : { command: 'C:\\ruta\\a\\Local Meeting Analyzer\\resources\\backend\\meeting-backend.exe', args: ['--mcp'] }
+  const snippet = JSON.stringify({ mcpServers: { 'local-meeting-analyzer': server } }, null, 2)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet)
+      showToast({ type: 'success', message: 'Configuración MCP copiada. Pégala en el archivo de configuración de tu asistente.' })
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo copiar al portapapeles.' })
+    }
+  }
+
+  return (
+    <section id="settings-mcp" className="settings-section" aria-labelledby="mcp-section-title">
+      <h2 id="mcp-section-title" style={SECTION_TITLE_STYLE}>
+        <Icon name="chat" size={17} /> Asistentes de IA (MCP)
+      </h2>
+      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.55 }}>
+        Permite que Claude Desktop, Cursor u otro asistente compatible con MCP consulte tus reuniones (resúmenes,
+        transcripciones y tareas). El servidor corre en tu equipo; añade este bloque a la configuración del asistente
+        (por ejemplo, <code>claude_desktop_config.json</code>) y reinícialo.
+      </p>
+      <pre className="mcp-snippet" aria-label="Configuración MCP para pegar en tu asistente">{snippet}</pre>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" className="btn btn-secondary" onClick={handleCopy} style={{ padding: '8px 14px', fontSize: 13 }}>
+          <Icon name="copy" size={15} /> Copiar configuración
+        </button>
+        {!mcpConfig && (
+          <span className="form-hint" style={{ margin: 0 }}>Abre la aplicación de escritorio para ver la ruta exacta de tu instalación.</span>
+        )}
+      </div>
+      <p className="form-hint" style={{ margin: 0, color: 'var(--yellow-warn)' }}>
+        <Icon name="alert-triangle" size={12} /> El asistente que conectes puede enviar a su propio proveedor en la nube la
+        información que consulte. Revisa su política de privacidad.
+      </p>
+    </section>
+  )
+}
+
 function HelpAndLegal() {
   const { showToast, systemStatus } = useSystem()
   const [info, setInfo] = useState(null)
@@ -1820,6 +1880,8 @@ function HelpAndLegal() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <McpConnectSection />
+
       {/* Ayuda y soporte */}
       <section id="settings-support" className="settings-section" aria-labelledby="support-section-title">
         <h2 id="support-section-title" style={SECTION_TITLE_STYLE}>

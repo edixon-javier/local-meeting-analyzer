@@ -28,6 +28,16 @@ if sys.platform == "win32":
     except ImportError:
         pass
 
+# ─────────────────────────────────────────
+# Modo servidor MCP (stdio): "meeting-backend.exe --mcp" expone las reuniones a asistentes de IA
+# (Claude Desktop, Cursor...) desde la app instalada, sin necesidad de Python. Va antes de configurar
+# los registros porque el protocolo MCP usa stdout y no debe mezclarse con otros mensajes.
+# ─────────────────────────────────────────
+if __name__ == "__main__" and "--mcp" in sys.argv:
+    import mcp_server
+    mcp_server.mcp.run(transport="stdio")
+    sys.exit(0)
+
 # Rutas centralizadas (datos de usuario en MEETING_ANALYZER_DATA_DIR, binarios empaquetados)
 from core.paths import get_root_dir, get_bin_dir
 from core.version import APP_VERSION

@@ -138,8 +138,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "REEMPLAZAR-usuario-github",
-      "repo": "REEMPLAZAR-repositorio",
+      "owner": "edixon-javier",
+      "repo": "local-meeting-analyzer",
       "releaseType": "draft"
     }
   }

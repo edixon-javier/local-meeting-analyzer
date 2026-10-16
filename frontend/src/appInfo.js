@@ -11,13 +11,13 @@ export const APP_NAME = 'Local Meeting Analyzer'
 export const SUPPORT_EMAIL = '[CORREO DE SOPORTE]'
 
 // Repositorio público en GitHub, p. ej. 'https://github.com/usuario/local-meeting-analyzer'
-export const REPO_URL = '[URL DEL REPOSITORIO]'
+export const REPO_URL = 'https://github.com/edixon-javier/local-meeting-analyzer'
 
 // Canal principal de soporte: GitHub Issues del repositorio
 export const ISSUES_URL = `${REPO_URL.replace(/\/+$/, '')}/issues`
 
 // Política de privacidad publicada (docs/privacy.html servida por GitHub Pages u otro host)
-export const PRIVACY_URL = '[URL PÚBLICA DE docs/privacy.html]'
+export const PRIVACY_URL = 'https://local-meeting-analyzer.vercel.app/privacy.html'
 
 // Ficha de la app en Microsoft Store
 export const STORE_URL = '[URL DE LA FICHA EN MICROSOFT STORE]'

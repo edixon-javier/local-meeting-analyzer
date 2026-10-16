@@ -21,6 +21,15 @@ vi.mock('../api', () => ({
   getAudioUrl: vi.fn(),
 }));
 
+// Canales públicos sin configurar (marcadores) para probar los estados deshabilitados
+vi.mock('../appInfo', async () => ({
+  ...(await vi.importActual('../appInfo')),
+  REPO_URL: '[URL DEL REPOSITORIO]',
+  ISSUES_URL: '[URL DEL REPOSITORIO]/issues',
+  PRIVACY_URL: '[URL PÚBLICA DE docs/privacy.html]',
+  SUPPORT_EMAIL: '[CORREO DE SOPORTE]',
+}));
+
 vi.mock('../hooks/useSystem', () => ({
   useSystem: () => ({ showToast: mocks.showToast, isBackendOffline: false, systemStatus: mocks.systemStatus }),
 }));
