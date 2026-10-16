@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import shutil
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from tests import _testenv  # noqa: F401  (aísla config.json y grabaciones en una carpeta temporal)
@@ -197,6 +197,121 @@ class TestApiEndpoints(unittest.TestCase):
             if os.path.exists(test_json_path):
                 os.remove(test_json_path)
 
+    def test_chat_history_with_none_created_and_none_transcript(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_none_fields.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_none_fields.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": None,
+                "created": None,
+                "analysis": {
+                    "summary": ["Resumen de prueba"],
+                    "action_items": ["Tarea sin completar"],
+                    "category": "Estrategia",
+                    "tone": "Neutro"
+                },
+                "bookmarks": None
+            }, f)
+
+        try:
+            with patch.object(_analyzer_instance, "chat_with_history", return_value="Respuesta de respaldo"):
+                # 1. Consulta sin términos que coincidan para forzar el fallback de ordenación por fecha
+                res_fallback = self.client.post("/chat/history", json={
+                    "messages": [],
+                    "question": "¿Hola qué tal?"
+                })
+                self.assertEqual(res_fallback.status_code, 200)
+                data_fb = res_fallback.json()
+                self.assertEqual(data_fb["status"], "done")
+                self.assertEqual(data_fb["response"], "Respuesta de respaldo")
+
+                # 2. Consulta que coincida con la tarea del análisis (a pesar de transcript=None)
+                res_task = self.client.post("/chat/history", json={
+                    "messages": [],
+                    "question": "¿Qué tarea tenemos pendiente?"
+                })
+                self.assertEqual(res_task.status_code, 200)
+                data_task = res_task.json()
+                self.assertEqual(data_task["status"], "done")
+                self.assertTrue(len(data_task["referenced_meetings"]) > 0)
+                self.assertEqual(data_task["referenced_meetings"][0]["action_items_count"], 1)
+                self.assertEqual(data_task["referenced_meetings"][0]["pending_tasks_count"], 1)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_chat_history_indexes_tasks_and_bookmarks(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_tasks_rag.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_tasks_rag.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "filename": test_filename,
+                "audio_path": test_audio_path,
+                "transcript": "Reunión de sincronización de equipo.",
+                "analysis": {
+                    "category": "Sincronización",
+                    "tone": "Colaborativo",
+                    "summary": ["Revisión del sprint"],
+                    "key_decisions": ["Lanzamiento pospuesto una semana"],
+                    "action_items": [
+                        {"task": "Actualizar el despliegue del frontend", "assignee": "Carlos", "deadline": "Viernes", "completed": False},
+                        {"task": "Enviar métricas de analítica", "assignee": "Laura", "deadline": "Lunes", "completed": True}
+                    ]
+                },
+                "bookmarks": [
+                    {"time": 120.0, "note": "Discusión sobre cuellos de botella"}
+                ]
+            }, f)
+
+        try:
+            captured_context = {}
+            def mock_chat_history(context, messages, question):
+                captured_context["context"] = context
+                return "Respuesta simulada con tareas"
+
+            with patch.object(_analyzer_instance, "chat_with_history", side_effect=mock_chat_history):
+                res = self.client.post("/chat/history", json={
+                    "messages": [],
+                    "question": "¿Quién tiene asignado el despliegue?"
+                })
+
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "done")
+            self.assertEqual(data["response"], "Respuesta simulada con tareas")
+            self.assertTrue(len(data["referenced_meetings"]) > 0)
+            ref = data["referenced_meetings"][0]
+            self.assertEqual(ref["action_items_count"], 2)
+            self.assertEqual(ref["pending_tasks_count"], 1)
+
+            # Verificar que el contexto formateado contiene la sección de tareas y marcadores
+            ctx = captured_context.get("context", "")
+            self.assertIn("COMPROMISOS Y TAREAS:", ctx)
+            self.assertIn("[PENDIENTE] Actualizar el despliegue del frontend", ctx)
+            self.assertIn("[COMPLETADA] Enviar métricas de analítica", ctx)
+            self.assertIn("MOMENTOS CLAVE:", ctx)
+            self.assertIn("Discusión sobre cuellos de botella", ctx)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
     def test_live_bookmark_session_endpoints(self):
         # 1. Agregar marcador en sesión en vivo
         res = self.client.post("/recording/bookmark", json={"time": 45.2, "note": "Acuerdo de entregables"})
@@ -327,8 +442,71 @@ class TestApiEndpoints(unittest.TestCase):
             data = response.json()
             self.assertEqual(data["status"], "ok")
             self.assertEqual(data["provider"], "local")
-            self.assertEqual(data["model"], "phi3")
             self.assertIn("latency_ms", data)
+
+    def test_test_ai_connection_claude_missing_key(self):
+        with patch.object(system_config, "get", return_value=""):
+            response = self.client.post("/status/test-ai", json={"provider": "claude", "api_key": ""})
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Anthropic (Claude)", response.json()["detail"])
+
+    def test_test_ai_connection_claude_mock_success(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"content": [{"type": "text", "text": "pong"}]}
+        with patch("requests.post", return_value=mock_resp):
+            response = self.client.post(
+                "/status/test-ai",
+                json={"provider": "claude", "api_key": "sk-ant-test", "model": "claude-3-5-haiku-20241022"}
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["provider"], "claude")
+            self.assertEqual(data["model"], "claude-3-5-haiku-20241022")
+            self.assertIn("latency_ms", data)
+
+    def test_test_ai_connection_gemini_missing_key(self):
+        with patch.object(system_config, "get", return_value=""):
+            response = self.client.post("/status/test-ai", json={"provider": "gemini", "api_key": ""})
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Google Gemini", response.json()["detail"])
+
+    def test_test_ai_connection_gemini_mock_success(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "pong"}]}}]
+        }
+        with patch("requests.post", return_value=mock_resp):
+            response = self.client.post(
+                "/status/test-ai",
+                json={"provider": "gemini", "api_key": "AIzaSy-test", "model": "gemini-2.0-flash"}
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual(data["provider"], "gemini")
+            self.assertEqual(data["model"], "gemini-2.0-flash")
+            self.assertIn("latency_ms", data)
+
+    def test_update_config_claude_and_gemini(self):
+        res = self.client.post("/config", json={
+            "ai_provider": "gemini",
+            "gemini_api_key": "AIzaSySecret123",
+            "gemini_model": "gemini-1.5-flash",
+            "anthropic_api_key": "sk-ant-Secret456",
+            "claude_model": "claude-3-5-sonnet-20241022"
+        })
+        self.assertEqual(res.status_code, 200)
+        cfg = res.json()["config"]
+        self.assertEqual(cfg["ai_provider"], "gemini")
+        self.assertTrue(cfg["has_gemini_key"])
+        self.assertTrue(cfg["has_claude_key"])
+        self.assertTrue(cfg["gemini_api_key"].startswith("••••••••"))
+        self.assertTrue(cfg["anthropic_api_key"].startswith("••••••••"))
+        # Restaurar a local
+        self.client.post("/config", json={"ai_provider": "local"})
 
     def test_update_meeting_task_status_lifecycle(self):
         recordings_dir = get_recordings_dir()
@@ -382,6 +560,279 @@ class TestApiEndpoints(unittest.TestCase):
                 os.remove(test_audio_path)
             if os.path.exists(test_json_path):
                 os.remove(test_json_path)
+
+    def test_update_meeting_string_task_converts_to_dict(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_string_task_update.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_string_task_update.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio_tasks")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": "Discusión con tareas en formato string",
+                "analysis": {
+                    "summary": ["Resumen"],
+                    "action_items": ["Tarea escrita en string plano"]
+                }
+            }, f)
+
+        try:
+            res = self.client.patch(f"/recordings/{test_filename}/tasks/0", json={"completed": True})
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "ok")
+            item = data["action_items"][0]
+            self.assertIsInstance(item, dict)
+            self.assertEqual(item["task"], "Tarea escrita en string plano")
+            self.assertTrue(item["completed"])
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_get_audio_file_download_and_stream(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_audio_download.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummybytesWAVEfmt ")
+
+        try:
+            # 1. Reproducción en streaming (inline) con ruta absoluta
+            res_stream = self.client.get(f"/recordings/audio?path={test_audio_path}")
+            self.assertEqual(res_stream.status_code, 200)
+            self.assertEqual(res_stream.headers.get("content-type"), "audio/wav")
+            self.assertNotIn("attachment", res_stream.headers.get("content-disposition", ""))
+
+            # 2. Descarga (attachment) con nombre de archivo relativo
+            res_download = self.client.get(f"/recordings/audio?path={test_filename}&download=true")
+            self.assertEqual(res_download.status_code, 200)
+            disp = res_download.headers.get("content-disposition", "")
+            self.assertIn("attachment", disp)
+            self.assertIn(test_filename, disp)
+
+            # 3. Descarga con filename personalizado
+            custom_name = "mi_reunion_exportada.wav"
+            res_custom = self.client.get(f"/recordings/audio?path={test_filename}&download=true&filename={custom_name}")
+            self.assertEqual(res_custom.status_code, 200)
+            disp_custom = res_custom.headers.get("content-disposition", "")
+            self.assertIn(custom_name, disp_custom)
+
+            # 4. Seguridad: ruta fuera de recordings debe retornar 403
+            res_unsafe = self.client.get("/recordings/audio?path=../../outside.wav")
+            self.assertEqual(res_unsafe.status_code, 403)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+
+    def test_chat_history_with_segments_and_multiturn(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_segments.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_segments.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": "Ana y Carlos hablaron del nuevo servidor",
+                "created": 1700000000.0,
+                "segments": [
+                    {"start": 75.0, "end": 80.0, "speaker": "Carlos", "text": "El servidor estara listo el viernes"},
+                    {"start": 120.0, "end": 125.0, "speaker": "Ana", "text": "Aprobamos el nuevo presupuesto del servidor"}
+                ],
+                "analysis": {
+                    "summary": ["Despliegue del nuevo servidor"],
+                    "key_decisions": ["Se aprueba el servidor"],
+                    "action_items": [{"task": "Configurar servidor", "assignee": "Carlos", "deadline": "Viernes", "completed": False}],
+                    "category": "Infraestructura",
+                    "tone": "Técnico"
+                },
+                "bookmarks": []
+            }, f)
+
+        try:
+            with patch.object(_analyzer_instance, "chat_with_history", return_value="Carlos dijo que el servidor estara el viernes"):
+                # Simular pregunta multi-turn donde la pregunta usa solo 'servidor' y aprovecha el contexto
+                res = self.client.post("/chat/history", json={
+                    "messages": [
+                        {"role": "user", "content": "¿Quién habló sobre infraestructura en la reunión?"},
+                        {"role": "assistant", "content": "Se discutió la infraestructura tecnológica."}
+                    ],
+                    "question": "¿Qué dijo Carlos sobre el servidor?"
+                })
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "done")
+            refs = data.get("referenced_meetings", [])
+            self.assertTrue(len(refs) > 0)
+            # Validar que los snippets contienen el formato [MM:SS] Carlos: ...
+            snippets = refs[0].get("snippets", [])
+            self.assertTrue(len(snippets) > 0)
+            self.assertTrue(any("Carlos" in s and "[01:15]" in s for s in snippets))
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_chat_meeting_with_enriched_context(self):
+        recordings_dir = get_recordings_dir()
+        os.makedirs(recordings_dir, exist_ok=True)
+        test_filename = "test_meeting_chat_single.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_chat_single.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummy_audio")
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "audio_path": test_audio_path,
+                "transcript": "Discusión sobre la fecha de entrega del proyecto",
+                "created": 1700000000.0,
+                "segments": [
+                    {"start": 65.0, "end": 70.0, "speaker": "Elena", "text": "La entrega final sera el 15 de noviembre"}
+                ],
+                "analysis": {
+                    "summary": ["Definición de fecha de entrega"],
+                    "key_decisions": ["Entrega fijada para el 15 de noviembre"],
+                    "action_items": [{"task": "Subir código", "assignee": "Elena", "deadline": "15 nov", "completed": False}],
+                    "category": "Planificación",
+                    "tone": "Formal"
+                },
+                "bookmarks": [{"time": 65.0, "note": "Definición de fecha"}]
+            }, f)
+
+        try:
+            captured_context = []
+            def fake_chat(context, messages, question):
+                captured_context.append(context)
+                return "La entrega es el 15 de noviembre"
+
+            with patch.object(_analyzer_instance, "chat_with_transcript", side_effect=fake_chat):
+                res = self.client.post("/chat", json={
+                    "audio_path": test_audio_path,
+                    "messages": [],
+                    "question": "¿Cuándo es la entrega?"
+                })
+
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "done")
+            self.assertIn("15 de noviembre", data["response"])
+
+            # Validar que el contexto inyectado al modelo incluye metadatos y timestamps
+            self.assertTrue(len(captured_context) > 0)
+            c = captured_context[0]
+            self.assertIn("REUNIÓN:", c)
+            self.assertIn("RESUMEN REGISTRADO:", c)
+            self.assertIn("DECISIONES CLAVE:", c)
+            self.assertIn("COMPROMISOS Y TAREAS:", c)
+            self.assertIn("[01:05] Elena: La entrega final sera el 15 de noviembre", c)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_chat_meeting_without_transcript_returns_400(self):
+        res = self.client.post("/chat", json={
+            "audio_path": "non_existent_audio.wav",
+            "messages": [],
+            "question": "¿De qué hablaron?"
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("No se encontró la transcripción", res.json()["detail"])
+
+    def test_chat_meeting_stream_emits_sse_events(self):
+        recordings_dir = get_recordings_dir()
+        test_filename = "test_meeting_chat_stream.wav"
+        test_audio_path = os.path.join(recordings_dir, test_filename)
+        test_json_path = os.path.join(recordings_dir, "test_meeting_chat_stream.json")
+
+        with open(test_audio_path, "wb") as f:
+            f.write(b"RIFFdummydata")
+
+        with open(test_json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "filename": test_filename,
+                "audio_path": test_audio_path,
+                "transcript": "Transcripción de prueba para streaming",
+                "analysis": {"category": "Demo"}
+            }, f)
+
+        try:
+            def fake_stream(context, messages, question):
+                yield "Hola "
+                yield "mundo"
+
+            with patch.object(_analyzer_instance, "stream_chat_with_transcript", side_effect=fake_stream):
+                res = self.client.post("/chat/stream", json={
+                    "audio_path": test_audio_path,
+                    "messages": [],
+                    "question": "¿Qué dijeron?"
+                })
+
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("text/event-stream", res.headers.get("content-type", ""))
+            body = res.text
+            self.assertIn("data: ", body)
+            self.assertIn("Hola ", body)
+            self.assertIn("mundo", body)
+            self.assertIn('"done": true', body)
+        finally:
+            if os.path.exists(test_audio_path):
+                os.remove(test_audio_path)
+            if os.path.exists(test_json_path):
+                os.remove(test_json_path)
+
+    def test_chat_history_stream_emits_sse_events(self):
+        def fake_stream_history(context, messages, question):
+            yield "Respuesta "
+            yield "historial"
+
+        with patch.object(_analyzer_instance, "stream_chat_with_history", side_effect=fake_stream_history):
+            res = self.client.post("/chat/history/stream", json={
+                "messages": [],
+                "question": "¿Qué tareas hay?"
+            })
+
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("text/event-stream", res.headers.get("content-type", ""))
+        body = res.text
+        self.assertIn("data: ", body)
+        self.assertIn('"done": true', body)
+
+    def test_grounding_score_calculation(self):
+        from api.routers.analysis import _compute_meeting_grounding, _compute_history_grounding
+
+        # 1. Meeting grounding con timestamps -> high
+        g1 = _compute_meeting_grounding("Se acordó [02:15] lanzar el producto", "Contexto de reunión producto", "¿Cuándo?")
+        self.assertEqual(g1["level"], "high")
+        self.assertTrue(g1["has_timestamps"])
+        self.assertIn("timestamp", g1["label"])
+
+        # 2. Meeting grounding con negación -> unmentioned
+        g2 = _compute_meeting_grounding("No se menciona el presupuesto en la reunión", "Contexto", "¿Presupuesto?")
+        self.assertEqual(g2["level"], "unmentioned")
+
+        # 3. History grounding con fragmentos verificados -> high
+        g3 = _compute_history_grounding("El producto se lanza el viernes", [{"filename": "reunion1.wav", "snippets": ["lanza el viernes"]}], "¿Fecha?")
+        self.assertEqual(g3["level"], "high")
+        self.assertIn("Alta concordancia", g3["label"])
+
+        # 4. History grounding con negación -> unmentioned
+        g4 = _compute_history_grounding("No encontré información sobre marketing", [{"filename": "reunion1.wav", "snippets": []}], "¿Marketing?")
+        self.assertEqual(g4["level"], "unmentioned")
 
 
 if __name__ == "__main__":

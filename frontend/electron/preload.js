@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   show: () => ipcRenderer.send('window:show'),
+  reload: () => ipcRenderer.send('window:reload'),
   // Solo http(s) y mailto: (validado en el proceso principal)
   openExternal: (url) => ipcRenderer.send('open:external', url),
   
@@ -24,12 +25,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Copia al portapapeles un diagnóstico sin claves y devuelve el texto -> string
   copyDiagnostics: () => ipcRenderer.invoke('app:copy-diagnostics'),
   // id: 'privacy' | 'eula' | 'third_party' | 'changelog' | 'consent' -> boolean
-  openLegalDoc: (id) => ipcRenderer.invoke('app:open-legal-doc', id),
-  
+  // Archivos de audio locales (descargar o revelar en Explorador de archivos)
+  showItemInFolder: (itemPath) => ipcRenderer.invoke('app:show-item-in-folder', itemPath),
+  saveAudioFile: (defaultFilename, sourcePath) => ipcRenderer.invoke('app:save-audio', { defaultFilename, sourcePath }),
+
   // Atajos globales
   onShortcutToggleRecording: (callback) => {
     const subscription = (_event, ...args) => callback(...args)
     ipcRenderer.on('shortcut:toggle-recording', subscription)
     return () => ipcRenderer.off('shortcut:toggle-recording', subscription)
+  },
+
+  // Dictado interactivo y micro-píldora
+  dictationToggle: () => ipcRenderer.invoke('dictation:toggle'),
+  dictationStart: () => ipcRenderer.invoke('dictation:start'),
+  dictationStop: (opts) => ipcRenderer.invoke('dictation:stop', opts),
+  dictationCancel: () => ipcRenderer.invoke('dictation:cancel'),
+  dictationSetShortcut: (shortcut) => ipcRenderer.invoke('dictation:set-shortcut', shortcut),
+  dictationDragStart: (coords) => ipcRenderer.send('dictation:drag-start', coords),
+  dictationDragMove: (coords) => ipcRenderer.send('dictation:drag-move', coords),
+  dictationDragEnd: () => ipcRenderer.send('dictation:drag-end'),
+  onDictationStateChanged: (callback) => {
+    const subscription = (_event, ...args) => callback(...args)
+    ipcRenderer.on('dictation:state-changed', subscription)
+    return () => ipcRenderer.off('dictation:state-changed', subscription)
   }
 })

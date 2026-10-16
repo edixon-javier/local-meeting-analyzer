@@ -42,11 +42,14 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `session_manager.py` — Gestión en memoria del estado de la sesión activa del usuario.
   - `metadata_repository.py` — Lectura, escritura y almacenamiento de archivos de metadatos `.json` en el historial.
   - `ollama_heartbeat.py` — Monitoreo periódico del estado de Ollama y push de eventos SSE.
+  - `dictation_service.py` — Orquestación de dictado en RAM a 16kHz mono, transcripción ultrarrápida (Groq / OpenAI / Faster-Whisper local), pulido con LLM (Llama 3.1 8B / GPT-4o-mini), inyección en cursor y auditoría en segundo plano.
+  - `win32_injector.py` — Inyector Win32 nativo de baja latencia con 64-bit ctypes, exclusión de historial de Windows (Win+V), SendInput Ctrl+V y restauración asíncrona segura de portapapeles.
 - `api/routers/` — Controladores HTTP modulares.
   - `system.py` — Ajustes de configuración, selección de dispositivos, estado general y SSE `/events`.
   - `recording.py` — Iniciar, parar, pausar, reanudar, cancelar grabación, SSE en vivo `/recording/live-transcription`, control de prueba y niveles RMS en tiempo real.
   - `analysis.py` — Transcripción, análisis estructurado dual, chat individual y consulta RAG con historial global.
   - `history.py` — Listado, borrado, renombrado y subida externa de archivos en el historial.
+  - `dictation.py` — Inicio, parada, cancelación, historial, streaming de audio y re-inyección de notas de voz/dictados.
 
 *Nota sobre archivos legados:* Los antiguos archivos de la raíz del backend (`audio_capture.py`, `transcriber.py`, `analyzer.py`, `config_manager.py`, `state.py`) correspondían al pipeline inicial monolítico y fueron eliminados por no tener ningún importador activo.
 
@@ -102,6 +105,9 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
   - `analysis/`
     - `TranscriptPanel.jsx` — Visualizador segmentado del diálogo con diarización.
     - `InsightsPanel.jsx` — Desglose de tareas, decisiones e insights estructurados.
+  - `dictation/`
+    - `DictationPill.jsx` — Píldora flotante minimalista no enfocable con animación de ondas RMS, temporizador y conmutador de modo.
+    - `DictationHistoryScreen.jsx` — Panel de auditoría de notas de voz/dictados con buscador en tiempo real, reproductor de audio, comparador literal/pulido y re-inyección.
 
 ## Cómo Ejecutar
 1. Doble clic en `start.bat` (instalará dependencias automáticamente la primera vez)
@@ -111,7 +117,11 @@ Una aplicación de escritorio que graba el audio del sistema operativo (loopback
 
 ## Funcionalidades Implementadas
 - 🎙️ Grabación de audio del sistema (loopback nativo Windows) o micrófono.
-- 📝 Transcripción con Whisper local (modelo seleccionable).
+- ⚡ **Dictado Global con Inyección en Cursor**: Atajo de teclado global configurable (`Ctrl+Alt+Espacio`) para dictar desde cualquier app e insertar el texto automáticamente en el cursor activo sin pérdida de foco.
+- 🧠 **Modo Ideas Claras / Pulido con LLM**: Conmutador entre transcripción literal y pulido con IA (Groq Llama 3.1 8B / OpenAI GPT-4o-mini) para eliminar muletillas ("eh, o sea"), resolver autocorrecciones y dar formato profesional, reconociendo comandos de voz ("punto y aparte", "nueva línea").
+- 🛡️ **Inyector Win32 Seguro con Privacidad**: Emulación `Ctrl+V` nativa en <5ms vía `SendInput` con preservación del portapapeles y exclusión de Windows Clipboard History (`Win+V`).
+- 📁 **Auditoría Total de Voz**: Almacenamiento desacoplado en RAM y guardado asíncrono en `recordings/dictations/` de audio (.mp3) y metadatos (.json) con métricas de latencia y app de destino.
+- 📝 Transcripción con Whisper local (modelo seleccionable) y soporte para Groq Whisper Large v3 Turbo en la nube.
 - 🧠 **Análisis Híbrido**: Soporte nativo para Phi-3 (Ollama) local y modelos GPT-4o (OpenAI) en la nube.
   - Resumen en 3 puntos clave
   - Tareas pendientes con responsable y fecha
@@ -248,6 +258,8 @@ Antes de sugerir o ejecutar cualquier `git add` + `git commit`, verificar:
 
 | Versión | Fecha | Descripción | Rama |
 |---------|-------|-------------|------|
+| `v1.8.0` | 2026-10-15 | Dictado Universal e Inyección en Cursor: Inyector Win32 nativo (ctypes 64-bit, SendInput, preservación de portapapeles y exclusión de historial Win+V), micro-píldora flotante unfocusable en Electron (`Ctrl+Alt+Espacio`), streaming directo en RAM a 16kHz, transcripción ultrarrápida (Groq Whisper Large v3 Turbo, OpenAI Whisper, Faster-Whisper local), modo dual "Ideas Claras" con pulido LLM (Llama 3.1 8B / GPT-4o-mini), comandos de voz y auditoría de notas de voz en disco con reproductor y búsqueda. | `feature/universal-dictation-and-voice-audit` |
+| `v1.7.0` | 2026-10-07 | Integración de Servidor MCP y Exportación de Audios: Servidor MCP local (`backend/mcp_server.py`) para agentes externos (Claude, Cursor, Antigravity) con herramientas de reuniones, resúmenes, transcripciones, tareas y búsqueda RAG; exportación nativa de grabaciones en Explorador de Windows y diálogo de guardado. | `feature/mcp-and-audio-export` |
 | `v1.5.0` | 2026-09-18 | Minutas Ejecutivas y Renombrado Interactivo de Hablantes: Exportación de reportes ejecutivos (PDF formal, Markdown estructurado y portapapeles con HTML/Markdown), modal interactivo para renombrar hablantes ("Hablante A" -> Nombre real) con persistencia en JSON y sincronización RAG. | `feature/export-and-speaker-rename` |
 | `v1.4.0` | 2026-09-18 | Live Transcription SSE: Streaming en tiempo real palabra por palabra con Faster-Whisper, segmentación VAD, reconexión inteligente, UI en RecordScreen con auto-scroll no intrusivo y cancelación limpia de recursos. | `feature/live-transcription` |
 | `v1.3.2` | 2026-09-18 | Cierre y Estabilización: Blindaje de seguridad (path traversal), prevención de pérdida de datos (splitext en metadatos multiformato), cancelación en Whisper, prevención de fugas SSE, suite de 22 tests automatizados y circuit breaker robusto. | `feature/mic-tester` |

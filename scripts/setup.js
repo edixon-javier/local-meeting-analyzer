@@ -102,8 +102,24 @@ async function main() {
     process.exit(1);
   }
 
+  // 4. Compilación del lanzador nativo de Windows (Meeting Analyzer.exe)
+  if (process.platform === 'win32') {
+    const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+    const launcherSource = path.join(ROOT_DIR, 'scripts', 'Launcher.cs');
+    const iconPath = path.join(ROOT_DIR, 'icon.ico');
+    const outExe = path.join(ROOT_DIR, 'Meeting Analyzer.exe');
+    if (fs.existsSync(cscPath) && fs.existsSync(launcherSource)) {
+      log('Launcher', 'Compilando lanzador nativo de Windows (Meeting Analyzer.exe)...', COLORS.cyan);
+      try {
+        await runCommand(cscPath, ['/target:winexe', `/win32icon:${iconPath}`, `/out:${outExe}`, '/r:System.Windows.Forms.dll', launcherSource], ROOT_DIR, 'Native Launcher');
+      } catch {
+        log('Launcher WARNING', 'No se pudo compilar el lanzador nativo; se usará start.bat.', COLORS.yellow);
+      }
+    }
+  }
+
   log('Setup', '¡Configuración completada con éxito!', COLORS.bright + COLORS.green);
-  log('Setup', 'Ahora puedes iniciar el proyecto en desarrollo ejecutando: npm run dev', COLORS.yellow);
+  log('Setup', 'Ahora puedes iniciar el proyecto ejecutando "Meeting Analyzer.exe" o "npm run dev"', COLORS.yellow);
 }
 
 main();

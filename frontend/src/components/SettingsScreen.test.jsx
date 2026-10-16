@@ -1,11 +1,12 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
+  systemStatus: undefined,
 }));
 
 vi.mock('../api', () => ({
@@ -21,7 +22,7 @@ vi.mock('../api', () => ({
 }));
 
 vi.mock('../hooks/useSystem', () => ({
-  useSystem: () => ({ showToast: mocks.showToast, isBackendOffline: false }),
+  useSystem: () => ({ showToast: mocks.showToast, isBackendOffline: false, systemStatus: mocks.systemStatus }),
 }));
 
 import SettingsScreen from './SettingsScreen';
@@ -43,7 +44,7 @@ const BASE_CONFIG = {
 async function renderSettings(configOverrides = {}) {
   mocks.getConfig.mockResolvedValue({ data: { ...BASE_CONFIG, ...configOverrides } });
   render(<SettingsScreen />);
-  await screen.findByText('Privacidad');
+  await screen.findByRole('heading', { name: 'Privacidad' });
 }
 
 describe('SettingsScreen: privacidad, soporte y legal', () => {
@@ -62,13 +63,40 @@ describe('SettingsScreen: privacidad, soporte y legal', () => {
 
   afterEach(() => {
     delete window.electronAPI;
+    mocks.systemStatus = undefined;
     localStorage.clear();
+  });
+
+  it('fuera de Electron muestra la versión del backend', async () => {
+    delete window.electronAPI;
+    mocks.systemStatus = { version: '1.6.0' };
+    await renderSettings();
+    expect(await screen.findByText(/Versión 1\.6\.0/)).toBeInTheDocument();
+    expect(screen.queryByText(/desconocida/)).not.toBeInTheDocument();
+  });
+
+  it('sin Electron ni backend indica versión desconocida', async () => {
+    delete window.electronAPI;
+    await renderSettings();
+    expect(await screen.findByText(/Versión desconocida/)).toBeInTheDocument();
+  });
+
+  it('el índice marca la sección elegida con aria-current', async () => {
+    await renderSettings();
+    const toc = screen.getByRole('navigation', { name: 'Secciones de configuración' });
+    const audio = within(toc).getByRole('button', { name: /Audio/ });
+    const privacy = within(toc).getByRole('button', { name: /Privacidad/ });
+    expect(audio).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(privacy);
+    expect(privacy).toHaveAttribute('aria-current', 'true');
+    expect(privacy).toHaveClass('is-active');
+    expect(audio).not.toHaveAttribute('aria-current');
   });
 
   it('muestra las secciones nuevas y la clave guardada enmascarada', async () => {
     await renderSettings();
-    expect(screen.getByText('Ayuda y soporte')).toBeInTheDocument();
-    expect(screen.getByText('Acerca de / Legal')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ayuda y soporte' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Acerca de / Legal' })).toBeInTheDocument();
     expect(screen.getByText('Clave guardada (••••••••1234)')).toBeInTheDocument();
     expect(await screen.findByText(/Versión 1\.6\.0/)).toBeInTheDocument();
     const toggle = screen.getByLabelText(/Usar la nube \(OpenAI\) si el modelo local no está disponible/);
@@ -157,5 +185,31 @@ describe('SettingsScreen: privacidad, soporte y legal', () => {
     expect(screen.getByLabelText(/Usar la nube \(OpenAI\)/)).toBeDisabled();
     // Un único campo de clave visible (no se duplica en Privacidad)
     expect(screen.getAllByLabelText(/OpenAI API Key/)).toHaveLength(1);
+  });
+
+  it('con proveedor Claude muestra el campo de clave de Anthropic y selector de modelo de Claude', async () => {
+    await renderSettings({
+      ai_provider: 'claude',
+      anthropic_api_key: '••••••••5678',
+      has_claude_key: true,
+      claude_model: 'claude-3-5-haiku-20241022'
+    });
+    expect(screen.getByLabelText(/Anthropic \(Claude\) API Key/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Modelo de análisis \(Anthropic Claude\)/)).toBeInTheDocument();
+    expect(screen.getByText('Clave guardada (••••••••5678)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Usar la nube \(OpenAI\)/)).toBeDisabled();
+  });
+
+  it('con proveedor Gemini muestra el campo de clave de Google Gemini y selector de modelo', async () => {
+    await renderSettings({
+      ai_provider: 'gemini',
+      gemini_api_key: '••••••••9012',
+      has_gemini_key: true,
+      gemini_model: 'gemini-2.0-flash'
+    });
+    expect(screen.getByLabelText(/Google Gemini API Key/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Modelo de transcripción y análisis \(Google Gemini\)/)).toBeInTheDocument();
+    expect(screen.getByText('Clave guardada (••••••••9012)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Usar la nube \(OpenAI\)/)).toBeDisabled();
   });
 });

@@ -112,6 +112,14 @@ class IAnalyzer(ABC):
     def chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str) -> str:
         pass
 
+    def stream_chat_with_transcript(self, transcript: str, messages: List[Dict[str, Any]], new_question: str):
+        """Generador por defecto que emite la respuesta completa como un único chunk si no hay streaming nativo."""
+        yield self.chat_with_transcript(transcript, messages, new_question)
+
+    def stream_chat_with_history(self, context: str, messages: List[Dict[str, Any]], new_question: str):
+        """Generador por defecto que emite la respuesta completa como un único chunk si no hay streaming nativo."""
+        yield self.chat_with_history(context, messages, new_question)
+
 class IMetadataRepository(ABC):
     @abstractmethod
     def save_meeting_metadata(
@@ -127,6 +135,10 @@ class IMetadataRepository(ABC):
 
     @abstractmethod
     def get_metadata(self, json_path: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def update_audio_path(self, json_path: str, audio_path: str) -> Optional[Dict[str, Any]]:
         pass
 
     @abstractmethod

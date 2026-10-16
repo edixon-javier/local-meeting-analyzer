@@ -142,6 +142,18 @@ const ICON_PATHS = {
       <circle cx="12" cy="7" r="4" />
     </>
   ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </>
+  ),
+  'arrow-right': (
+    <>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </>
+  ),
   calendar: (
     <>
       <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
@@ -234,6 +246,16 @@ const ICON_PATHS = {
       <path d="M20 9h2" />
       <path d="M9 2v2" />
       <path d="M9 20v2" />
+    </>
+  ),
+  'grip-vertical': (
+    <>
+      <circle cx="9" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="19" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="19" r="1.5" fill="currentColor" stroke="none" />
     </>
   )
 }

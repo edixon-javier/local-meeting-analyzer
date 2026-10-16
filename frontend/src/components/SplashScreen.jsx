@@ -18,6 +18,7 @@ export default function SplashScreen() {
   } = useSystem()
 
   const [isFadingOut, setIsFadingOut] = useState(false)
+  const [copiedDiag, setCopiedDiag] = useState(false)
 
   // Disparar animación de salida al alcanzar estado 'ready'
   useEffect(() => {
@@ -36,6 +37,22 @@ export default function SplashScreen() {
 
   const handleMinimize = () => window.electronAPI?.minimize()
   const handleClose = () => window.electronAPI?.close()
+
+  const handleCopyDiagnostics = async () => {
+    try {
+      if (window.electronAPI?.copyDiagnostics) {
+        await window.electronAPI.copyDiagnostics()
+        setCopiedDiag(true)
+        setTimeout(() => setCopiedDiag(false), 2500)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleOpenLogs = () => {
+    window.electronAPI?.openLogsFolder?.()
+  }
 
   return (
     <div
@@ -155,7 +172,7 @@ export default function SplashScreen() {
             </div>
           </div>
         ) : (
-          /* Estado de fallo con reintento amigable */
+          /* Estado de fallo con reintento y diagnósticos amigables */
           <div className="splash-error-card">
             <div className="splash-error-icon">
               <Icon name="alert-triangle" size={32} />
@@ -173,6 +190,24 @@ export default function SplashScreen() {
               >
                 <Icon name="refresh" size={16} />
                 Reintentar
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary splash-btn-action"
+                onClick={handleOpenLogs}
+                title="Abrir carpeta de registros locales en el Explorador"
+              >
+                <Icon name="file-text" size={16} />
+                Ver registros
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary splash-btn-action"
+                onClick={handleCopyDiagnostics}
+                title="Copiar informe de diagnóstico para soporte técnico"
+              >
+                <Icon name={copiedDiag ? 'check' : 'copy'} size={16} />
+                {copiedDiag ? 'Copiado' : 'Copiar diagnóstico'}
               </button>
               <button
                 type="button"

@@ -3,29 +3,52 @@ import { useSystem } from '../hooks/useSystem'
 import { useRecordings } from '../hooks/useRecordings'
 import { getRecordingMetadata } from '../api'
 import Icon from './Icon'
-import { 
-  copyExecutiveMinutes, 
-  downloadExecutiveMarkdown, 
+import Modal from './Modal'
+import '../styles/quick-access.css'
+import { getRecordingTitle, hasDefaultName, formatDuration, suggestRecordingName } from '../utils/recordingName'
+import {
+  copyExecutiveMinutes,
+  downloadExecutiveMarkdown,
+  downloadFullDocumentMarkdown,
+  downloadTranscriptFile,
+  copyTranscript,
   exportExecutivePdf,
-  formatTime 
+  formatTime
 } from '../utils/minutesExport'
+import { downloadAudioRecording, revealAudioRecording } from '../utils/audioExport'
+import { downloadMeetingTasks } from '../utils/tasksExport'
 
 export default function HistoryScreen({ onNavigate }) {
   const { isBackendOffline, showToast } = useSystem()
-  const { 
-    recordings, 
-    loading, 
+  const {
+    recordings,
+    isPinned,
+    togglePin,
+    loading,
     isRefreshing,
-    loadRecordings, 
-    setDeletingFile, 
-    setRenamingFile, 
-    setNewNameInput, 
-    formatDate 
+    loadRecordings,
+    setDeletingFile,
+    setRenamingFile,
+    setNewNameInput,
+    formatDate
   } = useRecordings()
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('all') // all | analyzed | pending | with_tasks
   const [dateSort, setDateSort] = useState('newest') // newest | oldest
   const [exportingMeeting, setExportingMeeting] = useState(null)
+  const [historyPdfMode, setHistoryPdfMode] = useState('full')
+  const [loadingExportFor, setLoadingExportFor] = useState(null) // filename mientras se cargan los metadatos
+
+  const handleHistoryExportPDF = async (data, title, mode = 'full') => {
+    setHistoryPdfMode(mode)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    try {
+      await exportExecutivePdf(data, title, showToast, mode)
+    } finally {
+      setExportingMeeting(null)
+    }
+  }
 
   useEffect(() => {
     if (!isBackendOffline) {
@@ -34,14 +57,35 @@ export default function HistoryScreen({ onNavigate }) {
   }, [isBackendOffline, loadRecordings])
 
   // Filtrado y ordenamiento de reuniones
+  // La búsqueda cubre el nombre de archivo, el título legible y el tema detectado por el análisis
+  const normalizedQuery = searchQuery.trim().toLowerCase()
   const filteredRecordings = recordings.filter(rec => {
-    const cleanName = rec.filename.replace(/\.[^/.]+$/, '').toLowerCase()
-    const matchesSearch = cleanName.includes(searchQuery.toLowerCase())
+    const matchesSearch = !normalizedQuery || [rec.filename, getRecordingTitle(rec.filename), rec.summary_preview, rec.category]
+      .some((text) => (text || '').toLowerCase().includes(normalizedQuery))
     const matchesCategory = categoryFilter === 'All' || rec.category === categoryFilter
-    return matchesSearch && matchesCategory
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'analyzed'
+          ? Boolean(rec.has_metadata)
+          : statusFilter === 'pending'
+            ? !rec.has_metadata
+            : statusFilter === 'with_tasks'
+              ? Number(rec.pending_tasks_count) > 0
+              : true
+    return matchesSearch && matchesCategory && matchesStatus
   }).sort((a, b) => {
     return dateSort === 'newest' ? b.created - a.created : a.created - b.created
   })
+
+  // Resumen de la cabecera: cuántas reuniones, cuánto tiempo grabado y cuántas están analizadas
+  const analyzedCount = recordings.filter((r) => r.has_metadata).length
+  const totalPendingTasks = recordings.reduce((acc, r) => acc + (Number(r.pending_tasks_count) || 0), 0)
+  const totalTasksCount = recordings.reduce((acc, r) => acc + (Number(r.tasks_count) || 0), 0)
+  const totalSeconds = recordings.reduce((acc, r) => acc + (Number(r.duration) || 0), 0)
+  const totalDuration = totalSeconds >= 3600
+    ? `${Math.floor(totalSeconds / 3600)} h ${Math.round((totalSeconds % 3600) / 60)} min`
+    : totalSeconds > 0 ? `${Math.max(1, Math.round(totalSeconds / 60))} min` : null
 
   // Obtener categorías únicas del listado de reuniones
   const categories = ['All', ...new Set(recordings.map(r => r.category).filter(Boolean))]
@@ -60,20 +104,22 @@ export default function HistoryScreen({ onNavigate }) {
   const handleRenameClick = (e, rec) => {
     e.stopPropagation()
     if (isBackendOffline) return
-    const cleanName = rec.filename.replace(/\.[^/.]+$/, '')
     setRenamingFile(rec)
-    setNewNameInput(cleanName)
+    setNewNameInput(suggestRecordingName(rec))
   }
 
   const handleExportClick = async (e, rec) => {
     e.stopPropagation()
-    if (isBackendOffline) return
+    if (isBackendOffline || loadingExportFor) return
+    setLoadingExportFor(rec.filename)
     try {
       const res = await getRecordingMetadata(rec.path)
       if (res.data && res.data.exists !== false) {
         setExportingMeeting({
           ...res.data,
-          title: rec.filename.replace(/\.[^/.]+$/, ''),
+          path: rec.path,
+          filename: rec.filename,
+          title: getRecordingTitle(rec.filename),
           createdDate: formatDate(rec.created)
         })
       } else {
@@ -81,6 +127,17 @@ export default function HistoryScreen({ onNavigate }) {
       }
     } catch {
       showToast?.({ type: 'error', message: 'Error cargando metadatos de la reunión' })
+    } finally {
+      setLoadingExportFor(null)
+    }
+  }
+
+  // Las tarjetas son role="button": Enter y Espacio las abren (solo si el foco está en la propia tarjeta)
+  const handleCardKeyDown = (e, rec) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleOpenDetails(rec)
     }
   }
 
@@ -88,7 +145,9 @@ export default function HistoryScreen({ onNavigate }) {
     return (
       <div className="history-screen" style={{ flex: 1, padding: '24px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <div className="empty-state glass" style={{ padding: '48px 32px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', textAlign: 'center', maxWidth: 450 }}>
-          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div className="empty-state-icon" style={{ marginBottom: 16, opacity: 1 }}>
+            <Icon name="alert-triangle" size={48} style={{ color: 'var(--red-record)' }} />
+          </div>
           <div className="empty-state-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Servidor Desconectado</div>
           <div className="empty-state-sub" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             El historial no se puede cargar porque el motor local de la aplicación no está disponible.
@@ -109,72 +168,96 @@ export default function HistoryScreen({ onNavigate }) {
 
   return (
     <div className="history-screen" style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-      
+
       {/* Cabecera */}
       <div style={{ marginBottom: 24, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Historial de Reuniones</h1>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => loadRecordings()}
+              disabled={loading || isRefreshing}
+              title="Recargar historial de reuniones y compromisos (F5)"
+              aria-label="Recargar historial de reuniones"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '4px 9px' }}
+            >
+              <Icon name="refresh" size={12} className={isRefreshing ? 'spinner-small' : ''} />
+              <span>Actualizar</span>
+            </button>
             {isRefreshing && (
               <span style={{ fontSize: 11, color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)' }}>
-                <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} /> Actualizando...
+                <span className="spinner-small" style={{ width: 10, height: 10, borderWidth: 2 }} aria-hidden="true" /> Actualizando…
               </span>
             )}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Administra, busca y revisa los análisis de tus reuniones guardadas localmente.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+            {recordings.length === 0
+              ? 'Aquí aparecerán tus reuniones grabadas o subidas.'
+              : [
+                  `${recordings.length} ${recordings.length === 1 ? 'reunión' : 'reuniones'}`,
+                  totalDuration ? `${totalDuration} grabadas` : null,
+                  `${analyzedCount} ${analyzedCount === 1 ? 'analizada' : 'analizadas'}`,
+                  totalTasksCount > 0
+                    ? (totalPendingTasks > 0
+                        ? `${totalPendingTasks} ${totalPendingTasks === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
+                        : `${totalTasksCount} tareas listas`)
+                    : null
+                ].filter(Boolean).join(' · ')}
+          </p>
         </div>
       </div>
 
       {/* Barra de Filtros e Búsqueda */}
       <div className="filters-container" style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <input 
-          type="text" 
-          placeholder="Buscar reunión por título..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: 200,
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13
-          }}
-        />
+        <div style={{ position: 'relative', flex: 1, minWidth: 200, display: 'flex' }}>
+          <Icon name="search" size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            type="search"
+            className="filter-control"
+            placeholder="Buscar por título, tema o categoría…"
+            aria-label="Buscar reuniones por título, tema o categoría"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery('') }}
+            style={{ flex: 1, paddingLeft: 36 }}
+          />
+        </div>
 
         {/* Filtro de Categoría */}
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13,
-            minWidth: 150
-          }}
+          className="filter-control input-select"
+          aria-label="Filtrar por categoría"
+          style={{ minWidth: 170 }}
         >
           {categories.map(c => (
             <option key={c} value={c}>{c === 'All' ? 'Todas las Categorías' : c}</option>
           ))}
         </select>
 
+        {/* Filtro de Estado de Análisis / Compromisos */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="filter-control input-select"
+          aria-label="Filtrar por estado"
+          style={{ minWidth: 160 }}
+        >
+          <option value="all">Todos los estados</option>
+          <option value="analyzed">Solo analizadas</option>
+          <option value="pending">Sin analizar</option>
+          <option value="with_tasks">Con tareas pendientes</option>
+        </select>
+
         {/* Ordenar por Fecha */}
         <select
           value={dateSort}
           onChange={(e) => setDateSort(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-primary)',
-            fontSize: 13
-          }}
+          className="filter-control input-select"
+          aria-label="Ordenar por fecha"
         >
           <option value="newest">Más recientes primero</option>
           <option value="oldest">Más antiguos primero</option>
@@ -188,144 +271,192 @@ export default function HistoryScreen({ onNavigate }) {
             <div className="empty-state-icon" style={{ opacity: 0.6 }}>
               <Icon name="search" size={32} />
             </div>
-            <div className="empty-state-title">No se encontraron reuniones</div>
-            <div className="empty-state-sub">Prueba con otros términos de búsqueda o filtros.</div>
+{recordings.length === 0 ? (
+              <>
+                <div className="empty-state-title">Aún no hay reuniones guardadas</div>
+                <div className="empty-state-sub">Graba una reunión o sube un archivo de audio para verla aquí.</div>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => onNavigate('record')}>
+                  <Icon name="mic" size={14} /> Nueva grabación
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="empty-state-title">No se encontraron reuniones</div>
+                <div className="empty-state-sub">Prueba con otros términos de búsqueda o filtros.</div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setSearchQuery(''); setCategoryFilter('All'); setStatusFilter('all') }}
+                >
+                  <Icon name="x" size={13} /> Limpiar filtros
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-            {filteredRecordings.map(rec => (
-              <div 
-                key={rec.filename} 
+            {filteredRecordings.map(rec => {
+              const title = getRecordingTitle(rec.filename)
+              const duration = formatDuration(rec.duration)
+              const customName = !hasDefaultName(rec.filename)
+              return (
+              <div
+                key={rec.filename}
                 className="meeting-card glass"
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir ${title}${duration ? `, ${duration}` : ''}`}
+                title={`${rec.filename} · ${rec.size_mb} MB`}
                 onClick={() => handleOpenDetails(rec)}
-                style={{
-                  padding: 20,
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border-subtle)',
-                  cursor: 'pointer',
-                  transition: 'transform var(--transition-fast), border-color var(--transition-fast)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  position: 'relative'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--accent-primary)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-subtle)'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                }}
+                onKeyDown={(e) => handleCardKeyDown(e, rec)}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
-                  <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={rec.filename.replace(/\.[^/.]+$/, '')}>
-                      {rec.filename.replace(/\.[^/.]+$/, '')}
-                    </h3>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatDate(rec.created)}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
-                    {rec.has_metadata && (
-                      <button 
-                        onClick={(e) => handleExportClick(e, rec)} 
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '4px 8px', fontSize: 11, background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.3)', color: 'var(--text-accent)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                        title="Exportar Minuta Ejecutiva (PDF, MD, Copiar)"
+                <div className="meeting-card-head">
+                  <h3 className="meeting-card-title">{title}</h3>
+                  <div className="meeting-card-meta">
+                    {duration && <span><Icon name="clock" size={12} /> {duration}</span>}
+                    {customName && <span><Icon name="calendar" size={12} /> {formatDate(rec.created)}</span>}
+                    {rec.bookmarks_count > 0 && (
+                      <span className="meeting-card-bookmarks">
+                        <Icon name="bookmark" size={12} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
+                      </span>
+                    )}
+                    {rec.tasks_count > 0 && (
+                      <span
+                        className="meeting-card-tasks"
+                        title={`${rec.tasks_count} tareas (${rec.pending_tasks_count} pendientes)`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          color: rec.pending_tasks_count > 0 ? 'var(--accent-primary)' : 'var(--green-ok)',
+                          fontWeight: 500
+                        }}
                       >
-                        <Icon name="file-text" size={13} />
+                        <Icon name="check-circle" size={12} />
+                        {rec.pending_tasks_count > 0
+                          ? `${rec.pending_tasks_count}/${rec.tasks_count} pend.`
+                          : `${rec.tasks_count} listas`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {rec.summary_preview ? (
+                  <p className="meeting-card-topic">{rec.summary_preview}</p>
+                ) : (
+                  <p className="meeting-card-topic is-empty">
+                    {rec.has_metadata ? 'Sin resumen disponible.' : 'Aún sin analizar. Ábrela para transcribirla y obtener el resumen.'}
+                  </p>
+                )}
+
+                <div className="meeting-card-footer">
+                  <div className="meeting-card-tags">
+                    {rec.has_metadata ? (
+                      <>
+                        {rec.category && <span className="pill category">{rec.category}</span>}
+                        {rec.tone && <span className="pill tone">{rec.tone}</span>}
+                        {!rec.category && !rec.tone && (
+                          <span className="meeting-card-status is-done"><Icon name="check-circle" size={11} /> Analizada</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="meeting-card-status"><Icon name="mic" size={11} /> Sin analizar</span>
+                    )}
+                  </div>
+                  <div className="meeting-card-actions">
+                    {rec.has_metadata && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleExportClick(e, rec)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="btn btn-secondary btn-sm meeting-card-export"
+                        disabled={loadingExportFor === rec.filename}
+                        aria-busy={loadingExportFor === rec.filename || undefined}
+                        aria-label="Exportar minuta y documentos de la reunión"
+                        title="Exportar minuta ejecutiva (PDF, Markdown o copiar)"
+                      >
+                        {loadingExportFor === rec.filename
+                          ? <span className="spinner-small" style={{ width: 12, height: 12 }} aria-hidden="true" />
+                          : <Icon name="file-text" size={13} />}
                         <span>Minuta</span>
                       </button>
                     )}
-                    <button 
-                      onClick={(e) => handleRenameClick(e, rec)} 
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); downloadAudioRecording(rec, showToast) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
+                      title="Descargar archivo de audio"
+                      aria-label={`Descargar audio de ${title}`}
+                    >
+                      <Icon name="download" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); revealAudioRecording(rec, showToast) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
+                      title="Mostrar archivo en el Explorador"
+                      aria-label={`Mostrar archivo de ${title} en el Explorador`}
+                    >
+                      <Icon name="folder" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); togglePin(rec.filename) }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm btn-pin"
+                      aria-pressed={isPinned(rec.filename)}
+                      title={isPinned(rec.filename) ? 'Quitar de fijadas' : 'Fijar en acceso rápido'}
+                      aria-label={`${isPinned(rec.filename) ? 'Quitar de fijadas' : 'Fijar'} ${title}`}
+                    >
+                      <Icon name="flag" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRenameClick(e, rec)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-secondary btn-square btn-sm"
                       title="Renombrar"
-                      aria-label="Renombrar reunión"
+                      aria-label={`Renombrar ${title}`}
                     >
                       <Icon name="edit" size={13} />
                     </button>
-                    <button 
-                      onClick={(e) => handleDeleteClick(e, rec.filename)} 
-                      className="btn btn-secondary btn-sm" 
-                      style={{ padding: '4px 8px', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--red-record)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteClick(e, rec.filename)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="btn btn-danger btn-square btn-sm"
                       title="Eliminar"
-                      aria-label="Eliminar reunión"
+                      aria-label={`Eliminar ${title}`}
                     >
                       <Icon name="trash" size={13} />
                     </button>
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name="folder" size={12} /> {rec.size_mb} MB
-                  </span>
-                  {rec.has_metadata ? (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--green-glow)', color: 'var(--green-ok)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="check-circle" size={11} /> Analizado
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="mic" size={11} /> Sin análisis
-                    </span>
-                  )}
-                  {rec.bookmarks_count > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="bookmark" size={11} /> {rec.bookmarks_count} {rec.bookmarks_count === 1 ? 'marcador' : 'marcadores'}
-                    </span>
-                  )}
-                </div>
-
-                {rec.has_metadata && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                    {rec.category && <span className="pill category" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.category}</span>}
-                    {rec.tone && <span className="pill tone" style={{ fontSize: 11, padding: '2px 8px' }}>{rec.tone}</span>}
-                  </div>
-                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
 
       {/* Modal de Exportación de Minuta desde Historial */}
       {exportingMeeting && (
-        <div 
-          className="modal-overlay"
-          onClick={() => setExportingMeeting(null)}
-          style={{
-            position: 'fixed',
-            top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(15, 23, 42, 0.82)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999
-          }}
-        >
-          <div 
-            className="glass"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 480,
-              padding: 24, borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border-subtle)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
-            }}
-          >
+        <Modal titleId="export-minutes-title" onClose={() => setExportingMeeting(null)} maxWidth={480}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="file-text" size={20} style={{ color: 'var(--accent-primary)' }} />
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  Minuta Ejecutiva
+                <Icon name="download" size={20} style={{ color: 'var(--accent-primary-hover)' }} />
+                <h3 id="export-minutes-title" className="modal-title" style={{ margin: 0 }}>
+                  Exportar Reunión y Documentos
                 </h3>
               </div>
-              <button 
-                className="btn btn-secondary btn-sm"
+              <button
+                type="button"
+                className="btn btn-secondary btn-square btn-sm"
                 onClick={() => setExportingMeeting(null)}
-                style={{ padding: '4px 8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                aria-label="Cerrar modal"
+                aria-label="Cerrar"
+                title="Cerrar (Esc)"
               >
                 <Icon name="x" size={14} />
               </button>
@@ -358,88 +489,320 @@ export default function HistoryScreen({ onNavigate }) {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                className="btn btn-secondary"
-                onClick={async () => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  await copyExecutiveMinutes(data, showToast)
-                  setExportingMeeting(null)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="copy" size={15} /> Copiar Minuta (Slack / Email)
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Sección 1: Documento Completo */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="file-text" size={15} style={{ color: 'var(--accent-primary)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Documento Completo</strong>
+                  <span className="pill" style={{ fontSize: 10, padding: '1px 6px' }}>Recomendado</span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Minuta ejecutiva, decisiones, compromisos y la conversación íntegra con hablantes.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      downloadFullDocumentMarkdown(data, exportingMeeting.title, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Descargar .md
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      handleHistoryExportPDF(data, exportingMeeting.title, 'full')
+                    }}
+                    style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="file-text" size={13} /> Exportar PDF
+                  </button>
+                </div>
+              </div>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  downloadExecutiveMarkdown(data, exportingMeeting.title, showToast)
-                  setExportingMeeting(null)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="download" size={15} /> Descargar Markdown (.md)
-              </button>
+              {/* Sección 2: Minuta Ejecutiva */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="target" size={15} style={{ color: 'var(--green-ok)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Minuta Ejecutiva</strong>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Resumen ejecutivo de 1 página con decisiones y compromisos clave para Slack o Email.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      await copyExecutiveMinutes(data, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="copy" size={13} /> Copiar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      downloadExecutiveMarkdown(data, exportingMeeting.title, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Descargar .md
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        category: exportingMeeting.analysis?.category || 'General',
+                        tone: exportingMeeting.analysis?.tone || 'Profesional',
+                        durationInsight: exportingMeeting.analysis?.duration_insight || '',
+                        summary: exportingMeeting.analysis?.summary || [],
+                        keyDecisions: exportingMeeting.analysis?.key_decisions || [],
+                        actionItems: exportingMeeting.analysis?.action_items || [],
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || '',
+                        bookmarks: exportingMeeting.bookmarks || []
+                      }
+                      handleHistoryExportPDF(data, exportingMeeting.title, 'executive')
+                    }}
+                    style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="file-text" size={13} /> Exportar PDF
+                  </button>
+                </div>
+              </div>
 
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  const data = {
-                    title: exportingMeeting.title,
-                    date: exportingMeeting.createdDate || '',
-                    category: exportingMeeting.analysis?.category || 'General',
-                    tone: exportingMeeting.analysis?.tone || 'Profesional',
-                    durationInsight: exportingMeeting.analysis?.duration_insight || '',
-                    summary: exportingMeeting.analysis?.summary || [],
-                    keyDecisions: exportingMeeting.analysis?.key_decisions || [],
-                    actionItems: exportingMeeting.analysis?.action_items || [],
-                    segments: exportingMeeting.segments || [],
-                    transcript: exportingMeeting.transcript || '',
-                    bookmarks: exportingMeeting.bookmarks || []
-                  }
-                  await exportExecutivePdf(data, exportingMeeting.title, showToast)
-                }}
-                style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                <Icon name="file-text" size={15} /> Exportar / Imprimir PDF
-              </button>
+              {/* Sección 3: Conversación Completa */}
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Icon name="chat" size={15} style={{ color: 'var(--amber)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Conversación Completa</strong>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  Transcripción literal con hablantes y marcas de tiempo en formato texto universal.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      downloadTranscriptFile(data, exportingMeeting.title, showToast, 'txt')
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Texto (.txt)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      downloadTranscriptFile(data, exportingMeeting.title, showToast, 'md')
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="download" size={13} /> Diálogo (.md)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      const data = {
+                        title: exportingMeeting.title,
+                        date: exportingMeeting.createdDate || '',
+                        segments: exportingMeeting.segments || [],
+                        transcript: exportingMeeting.transcript || ''
+                      }
+                      await copyTranscript(data, showToast)
+                      setExportingMeeting(null)
+                    }}
+                    style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                  >
+                    <Icon name="copy" size={13} /> Copiar Diálogo
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección 4: Compromisos de esta reunión si existen */}
+              {exportingMeeting.analysis?.action_items && exportingMeeting.analysis.action_items.length > 0 && (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Icon name="check-circle" size={15} style={{ color: 'var(--green-ok)' }} />
+                    <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Compromisos ({exportingMeeting.analysis.action_items.length})</strong>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                    Exportar tareas y acuerdos de esta reunión individual.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'txt',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar lista de tareas en texto (.txt)"
+                    >
+                      <Icon name="file-text" size={13} /> Lista (.txt)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'ics',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar compromisos en formato calendario (.ics)"
+                    >
+                      <Icon name="calendar" size={13} /> Calendario (.ics)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        downloadMeetingTasks(
+                          exportingMeeting.filename,
+                          'csv',
+                          exportingMeeting.analysis.action_items,
+                          exportingMeeting.title,
+                          showToast
+                        )
+                      }}
+                      style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 11 }}
+                      title="Descargar compromisos en formato tabla CSV (.csv)"
+                    >
+                      <Icon name="download" size={13} /> Excel (.csv)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sección 5: Archivo de Audio Original */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => downloadAudioRecording(exportingMeeting, showToast)}
+                  style={{ flex: 1, justifyContent: 'center', padding: '9px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  title="Guardar archivo original de audio en el equipo"
+                >
+                  <Icon name="download" size={14} /> Guardar Audio
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => revealAudioRecording(exportingMeeting, showToast)}
+                  style={{ flex: 1, justifyContent: 'center', padding: '9px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  title="Abrir ubicación del archivo en el Explorador de Windows"
+                >
+                  <Icon name="folder" size={14} /> En Carpeta
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Plantilla oculta para impresión si se lanza PDF desde Historial */}
       {exportingMeeting && (
         <div className="executive-print-report" aria-hidden="true">
           <div className="print-header">
-            <div className="print-badge-header">MEETING ANALYZER &bull; MINUTA EJECUTIVA OFICIAL</div>
-            <h1 className="print-title">📋 Minuta Ejecutiva: {exportingMeeting.title}</h1>
+            <div className="print-badge-header">
+              {historyPdfMode === 'executive'
+                ? 'MEETING ANALYZER • MINUTA EJECUTIVA OFICIAL'
+                : 'MEETING ANALYZER • DOCUMENTO COMPLETO DE REUNIÓN'}
+            </div>
+            <h1 className="print-title">
+              {historyPdfMode === 'executive' ? '📋 Minuta Ejecutiva: ' : '📄 Documento Completo: '}
+              {exportingMeeting.title}
+            </h1>
             <div className="print-meta-row">
               {exportingMeeting.createdDate && <span>📅 {exportingMeeting.createdDate}</span>}
               <span>🏷️ <strong>Categoría:</strong> {exportingMeeting.analysis?.category || 'General'}</span>
@@ -467,7 +830,7 @@ export default function HistoryScreen({ onNavigate }) {
             <div className="print-section">
               <h2 className="print-section-title">🎯 Decisiones Clave</h2>
               <ul className="print-decisions-list">
-                {exportingMeeting.analysis.key_decisions.map((dec, idx) => <li key={idx}>{dec}</li>)}
+                {exportingMeeting.analysis?.key_decisions.map((dec, idx) => <li key={idx}>{dec}</li>)}
               </ul>
             </div>
           )}
@@ -504,24 +867,26 @@ export default function HistoryScreen({ onNavigate }) {
             </table>
           </div>
 
-          <div className="print-section print-page-break">
-            <h2 className="print-section-title">📝 Transcripción Completa</h2>
-            <div className="print-transcript-list">
-              {exportingMeeting.segments && exportingMeeting.segments.length > 0 ? (
-                exportingMeeting.segments.map((seg, idx) => (
-                  <div key={idx} className="print-transcript-item">
-                    <div className="print-transcript-speaker">
-                      <strong>👥 {seg.speaker || 'Hablante'}</strong>
-                      <span className="print-transcript-time">⏱️ {formatTime(seg.start)} - {formatTime(seg.end)}</span>
+          {historyPdfMode === 'full' && (
+            <div className="print-section print-page-break">
+              <h2 className="print-section-title">📝 Transcripción Completa</h2>
+              <div className="print-transcript-list">
+                {exportingMeeting.segments && exportingMeeting.segments.length > 0 ? (
+                  exportingMeeting.segments.map((seg, idx) => (
+                    <div key={idx} className="print-transcript-item">
+                      <div className="print-transcript-speaker">
+                        <strong>👥 {seg.speaker || 'Hablante'}</strong>
+                        <span className="print-transcript-time">⏱️ {formatTime(seg.start)} - {formatTime(seg.end)}</span>
+                      </div>
+                      <p className="print-transcript-text">{seg.text}</p>
                     </div>
-                    <p className="print-transcript-text">{seg.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p style={{ whiteSpace: 'pre-wrap' }}>{exportingMeeting.transcript || 'Sin transcripción.'}</p>
-              )}
+                  ))
+                ) : (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{exportingMeeting.transcript || 'Sin transcripción.'}</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

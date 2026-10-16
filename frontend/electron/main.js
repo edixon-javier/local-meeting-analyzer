@@ -1,7 +1,7 @@
 // electron/main.js
 // Proceso principal de Electron. Lanza la ventana del app.
 
-const { app, BrowserWindow, ipcMain, shell, Menu, Tray, globalShortcut, dialog, clipboard } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, Menu, Tray, globalShortcut, dialog, clipboard, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -13,7 +13,12 @@ let pythonProcess
 let tray = null
 let isQuitting = false
 
-const isDev = process.env.NODE_ENV === 'development'
+// Píldora flotante para dictado global en cursor
+let pillWindow = null
+let isDictating = false
+let dictationShortcut = 'CommandOrControl+Shift+D'
+
+const isDev = process.env.NODE_ENV === 'development' || Boolean(process.env.VITE_DEV_URL)
 
 // El frontend usa http://localhost:8765 (api.js, CSP de index.html)
 const BACKEND_PORT = 8765
@@ -75,6 +80,7 @@ if (!gotSingleInstanceLock) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
+    mainWindow.webContents?.reloadIgnoringCache()
   })
 }
 
@@ -93,6 +99,18 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  // Atajos de teclado para recarga e inspección en ventana sin bordes
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') {
+      if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) {
+        mainWindow.webContents.reloadIgnoringCache()
+      }
+      if (input.key === 'F12' || ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i')) {
+        mainWindow.webContents.toggleDevTools()
+      }
+    }
   })
 
   if (isDev) {
@@ -138,11 +156,241 @@ function createWindow() {
   })
 }
 
+// ─────────────────────────────────────────
+// Micro-Píldora Flotante para Dictado en Cursor
+// ─────────────────────────────────────────
+function createPillWindow() {
+  if (pillWindow && !pillWindow.isDestroyed()) return pillWindow
+
+  pillWindow = new BrowserWindow({
+    width: 360,
+    height: 54,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    focusable: false,
+    skipTaskbar: true,
+    show: false,
+    resizable: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  if (process.platform === 'win32') {
+    pillWindow.setAlwaysOnTop(true, 'screen-saver')
+  }
+
+  // Prevenir que robe el foco bajo cualquier circunstancia
+  pillWindow.setFocusable(false)
+
+  if (isDev) {
+    pillWindow.loadURL(`${process.env.VITE_DEV_URL || 'http://localhost:5173'}#dictation-pill`)
+  } else {
+    pillWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'dictation-pill' })
+  }
+
+  pillWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      pillWindow.hide()
+    }
+    return false
+  })
+
+  return pillWindow
+}
+
+function positionPillWindow() {
+  if (!pillWindow || pillWindow.isDestroyed()) return
+  try {
+    const point = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(point)
+    const { workArea } = display
+    const pillWidth = 360
+    const pillHeight = 54
+    const x = Math.round(workArea.x + (workArea.width - pillWidth) / 2)
+    const y = Math.round(workArea.y + workArea.height - pillHeight - 40)
+    pillWindow.setBounds({ x, y, width: pillWidth, height: pillHeight })
+  } catch (err) {
+    console.error('[Electron] Error posicionando pillWindow:', err)
+  }
+}
+
+async function startDictationSession() {
+  try {
+    if (!pillWindow || pillWindow.isDestroyed()) {
+      createPillWindow()
+    }
+    positionPillWindow()
+    pillWindow.showInactive()
+    isDictating = true
+
+    pillWindow.webContents?.send('dictation:state-changed', { state: 'recording', started_at: Date.now() })
+    mainWindow?.webContents?.send('dictation:state-changed', { state: 'recording' })
+
+    const res = await fetch(`http://127.0.0.1:${BACKEND_PORT}/dictation/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data?.detail || `HTTP ${res.status}`)
+    }
+    console.log('[Electron] Dictado iniciado en backend:', data)
+    return data
+  } catch (err) {
+    console.error('[Electron] Error iniciando dictado:', err)
+    isDictating = false
+    pillWindow?.hide()
+    mainWindow?.webContents?.send('dictation:state-changed', { state: 'idle', error: String(err) })
+    return null
+  }
+}
+
+async function stopDictationSession(mode) {
+  if (!isDictating) return null
+  isDictating = false
+  try {
+    pillWindow?.webContents?.send('dictation:state-changed', { state: 'processing' })
+    mainWindow?.webContents?.send('dictation:state-changed', { state: 'processing' })
+
+    const reqBody = { inject: true }
+    if (mode) reqBody.mode = mode
+
+    const res = await fetch(`http://127.0.0.1:${BACKEND_PORT}/dictation/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody)
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data?.detail || `HTTP ${res.status}`)
+    }
+    console.log('[Electron] Dictado completado e inyectado:', data.id)
+
+    pillWindow?.webContents?.send('dictation:state-changed', { state: 'finished', data })
+    mainWindow?.webContents?.send('dictation:state-changed', { state: 'idle', data })
+
+    const isProblem = !data?.id || data?.status === 'silence_or_too_short' || data?.status === 'empty_audio' || data?.status === 'no_speech_detected'
+    const hideDelayMs = isProblem ? 2500 : 1200
+
+    setTimeout(() => {
+      if (!isDictating && pillWindow && !pillWindow.isDestroyed()) {
+        pillWindow.hide()
+      }
+    }, hideDelayMs)
+
+    return data
+  } catch (err) {
+    console.error('[Electron] Error finalizando dictado:', err)
+    pillWindow?.webContents?.send('dictation:state-changed', { state: 'finished', data: { detail: String(err) } })
+    mainWindow?.webContents?.send('dictation:state-changed', { state: 'idle', error: String(err) })
+    setTimeout(() => {
+      if (!isDictating && pillWindow && !pillWindow.isDestroyed()) {
+        pillWindow.hide()
+      }
+    }, 2500)
+    return null
+  }
+}
+
+async function cancelDictationSession() {
+  isDictating = false
+  try {
+    await fetch(`http://127.0.0.1:${BACKEND_PORT}/dictation/cancel`, { method: 'POST' })
+  } catch (err) {
+    console.error('[Electron] Error cancelando dictado:', err)
+  }
+  pillWindow?.hide()
+  pillWindow?.webContents?.send('dictation:state-changed', { state: 'idle' })
+  mainWindow?.webContents?.send('dictation:state-changed', { state: 'idle' })
+}
+
+async function toggleDictation() {
+  if (isDictating) {
+    return await stopDictationSession()
+  } else {
+    return await startDictationSession()
+  }
+}
+
+function registerDictationShortcut(shortcut) {
+  if (dictationShortcut) {
+    try {
+      globalShortcut.unregister(dictationShortcut)
+    } catch {}
+  }
+  dictationShortcut = shortcut || 'CommandOrControl+Shift+D'
+  try {
+    const ok = globalShortcut.register(dictationShortcut, () => {
+      toggleDictation()
+    })
+    if (!ok) {
+      console.warn(`[Electron] No se pudo registrar el atajo global de dictado: ${dictationShortcut}`)
+    } else {
+      console.log(`[Electron] Atajo global de dictado registrado: ${dictationShortcut}`)
+    }
+  } catch (e) {
+    console.error('[Electron] Error registrando atajo de dictado:', e)
+  }
+}
+
+function killDanglingPort(port) {
+  if (process.platform !== 'win32') return
+  try {
+    const res = spawnSync('netstat', ['-ano', '-p', 'tcp'], { windowsHide: true, encoding: 'utf8' })
+    if (res.stdout) {
+      const lines = res.stdout.split(/\r?\n/)
+      for (const line of lines) {
+        if (line.includes(`:${port}`) && line.includes('LISTENING')) {
+          const parts = line.trim().split(/\s+/)
+          const pid = parts[parts.length - 1]
+          if (pid && pid !== '0' && pid !== String(process.pid)) {
+            console.log(`[Electron] Liberando puerto ${port} (PID ${pid} residual)...`)
+            spawnSync('taskkill', ['/pid', pid, '/f', '/t'], { windowsHide: true })
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Electron] No se pudo comprobar puerto residual:', err?.message || err)
+  }
+}
+
+function ensureOllamaRunning() {
+  if (process.platform !== 'win32') return
+  try {
+    fetch('http://127.0.0.1:11434/api/version', { signal: AbortSignal.timeout(1000) })
+      .catch(() => {
+        try {
+          const ollamaProc = spawn('ollama', ['serve'], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true,
+          })
+          ollamaProc.unref()
+          console.log('[Electron] Ollama no estaba en ejecución; iniciado silenciosamente en segundo plano.')
+        } catch {
+          // Ollama no instalado en el sistema
+        }
+      })
+  } catch {
+    // Ignorar
+  }
+}
+
 function startPythonBackend() {
   if (process.env.EXTERNAL_BACKEND === 'true') {
     console.log('[Electron] Usando backend externo (start_dev.bat)');
     return;
   }
+
+  killDanglingPort(BACKEND_PORT);
 
   let pythonExecutable;
   let args = [];
@@ -162,9 +410,11 @@ function startPythonBackend() {
     env.MEETING_ANALYZER_DATA_DIR = app.getPath('userData');
     env.MEETING_ANALYZER_BIN_DIR = path.join(process.resourcesPath, 'bin');
   } else {
-    // Desarrollo: venv local; los datos siguen en backend/config.json y backend/recordings
+    // Desarrollo: venv local; preferir pythonw.exe para evitar asignación de consolas en Windows
     backendDir = path.join(__dirname, '../../backend');
-    pythonExecutable = path.join(backendDir, 'venv/Scripts/python.exe');
+    const pythonw = path.join(backendDir, 'venv/Scripts/pythonw.exe');
+    const python = path.join(backendDir, 'venv/Scripts/python.exe');
+    pythonExecutable = fs.existsSync(pythonw) ? pythonw : python;
     args = [path.join(backendDir, 'main.py')];
   }
 
@@ -251,6 +501,11 @@ ipcMain.on('window:maximize', () => {
   else mainWindow?.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close()) // Esto gatillará el close interceptado
+ipcMain.on('window:reload', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents?.reloadIgnoringCache()
+  }
+})
 // Trae la ventana al frente (p. ej. para pedir consentimiento si se grabó desde el atajo o la bandeja)
 ipcMain.on('window:show', () => {
   if (mainWindow?.isMinimized()) mainWindow.restore()
@@ -432,6 +687,104 @@ ipcMain.handle('export:pdf', async (event, defaultFilename) => {
   return false
 })
 
+// Mostrar archivo de audio en el Explorador de Windows con el archivo seleccionado
+ipcMain.handle('app:show-item-in-folder', async (_event, itemPath) => {
+  try {
+    if (!itemPath || typeof itemPath !== 'string') return false
+    const recordingsDir = path.join(getBackendDataDir(), 'recordings')
+    let target = itemPath
+    if (!path.isAbsolute(target)) {
+      target = path.join(recordingsDir, path.basename(target))
+    }
+    target = path.normalize(target)
+    if (!fs.existsSync(target)) {
+      console.warn('[Electron] Archivo a mostrar no existe:', target)
+      return false
+    }
+    shell.showItemInFolder(target)
+    return true
+  } catch (err) {
+    console.error('[Electron] Error al mostrar archivo en carpeta:', err)
+    return false
+  }
+})
+
+// Guardar copia del archivo de audio en ubicación elegida por el usuario
+ipcMain.handle('app:save-audio', async (_event, { defaultFilename, sourcePath }) => {
+  const { dialog } = require('electron')
+  try {
+    if (!sourcePath || typeof sourcePath !== 'string') return false
+    const recordingsDir = path.join(getBackendDataDir(), 'recordings')
+    let src = sourcePath
+    if (!path.isAbsolute(src)) {
+      src = path.join(recordingsDir, path.basename(src))
+    }
+    src = path.normalize(src)
+    if (!fs.existsSync(src)) {
+      console.warn('[Electron] Archivo de origen no existe:', src)
+      return false
+    }
+
+    const ext = path.extname(src).replace('.', '').toLowerCase() || 'wav'
+    const cleanDefault = defaultFilename || path.basename(src)
+
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: cleanDefault,
+      filters: [
+        { name: 'Archivos de audio', extensions: [ext, 'wav', 'mp3', 'm4a', 'ogg', 'flac'] },
+        { name: 'Todos los archivos', extensions: ['*'] }
+      ]
+    })
+
+    if (filePath) {
+      fs.copyFileSync(src, filePath)
+      return true
+    }
+    return false
+  } catch (err) {
+    console.error('[Electron] Error al guardar archivo de audio:', err)
+    return false
+  }
+})
+
+// ─────────────────────────────────────────
+// IPC - Dictado interactivo y píldora flotante
+// ─────────────────────────────────────────
+ipcMain.handle('dictation:toggle', () => toggleDictation())
+ipcMain.handle('dictation:start', () => startDictationSession())
+ipcMain.handle('dictation:stop', (_event, opts) => stopDictationSession(opts?.mode))
+ipcMain.handle('dictation:cancel', () => cancelDictationSession())
+ipcMain.handle('dictation:set-shortcut', (_event, sc) => {
+  registerDictationShortcut(sc)
+  return true
+})
+
+let pillDragState = null
+
+ipcMain.on('dictation:drag-start', (_event, { screenX, screenY }) => {
+  if (!pillWindow || pillWindow.isDestroyed()) return
+  const [winX, winY] = pillWindow.getPosition()
+  pillDragState = {
+    initialWinX: winX,
+    initialWinY: winY,
+    grabMouseX: screenX,
+    grabMouseY: screenY,
+  }
+})
+
+ipcMain.on('dictation:drag-move', (_event, { screenX, screenY }) => {
+  if (!pillWindow || pillWindow.isDestroyed() || !pillDragState) return
+  const deltaX = screenX - pillDragState.grabMouseX
+  const deltaY = screenY - pillDragState.grabMouseY
+  const newX = Math.round(pillDragState.initialWinX + deltaX)
+  const newY = Math.round(pillDragState.initialWinY + deltaY)
+  pillWindow.setPosition(newX, newY)
+})
+
+ipcMain.on('dictation:drag-end', () => {
+  pillDragState = null
+})
+
 // Detiene el backend (y sus hijos, p. ej. ffmpeg) de forma SÍNCRONA: debe terminar antes de
 // salir y antes de que el instalador de una actualización reemplace meeting-backend.exe.
 function stopPythonBackend() {
@@ -558,6 +911,7 @@ app.whenReady().then(() => {
   const info = getAppInfo()
   console.log(`[Electron] Local Meeting Analyzer v${info.version} · Electron ${info.electron} · ${os.type()} ${info.os} ${info.arch} · empaquetado: ${info.isPackaged}`)
 
+  ensureOllamaRunning()
   startPythonBackend()
   createWindow()
   createTray()
@@ -567,6 +921,23 @@ app.whenReady().then(() => {
   globalShortcut.register('CommandOrControl+Shift+R', () => {
     mainWindow?.webContents.send('shortcut:toggle-recording')
   })
+
+  // Cargar atajo de dictado personalizado si existe en config.json
+  try {
+    const cfgPath = path.join(getBackendDataDir(), 'config.json')
+    if (fs.existsSync(cfgPath)) {
+      const savedCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      if (savedCfg?.dictation_shortcut) {
+        dictationShortcut = savedCfg.dictation_shortcut
+      }
+    }
+  } catch (e) {
+    console.warn('[Electron] No se pudo leer dictation_shortcut de config.json:', e)
+  }
+
+  // Micro-píldora y atajo global de dictado (Ctrl+Shift+D por defecto)
+  createPillWindow()
+  registerDictationShortcut(dictationShortcut)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

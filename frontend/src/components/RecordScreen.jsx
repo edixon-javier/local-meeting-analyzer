@@ -15,30 +15,24 @@ import {
   getLiveTranscriptionUrl,
   addLiveBookmark,
   deleteLiveBookmark,
-  getConfig
+  getConfig,
+  updateConfig,
+  getAudioDevices,
+  startAudioTest,
+  stopAudioTest
 } from '../api'
 import { useSystem } from '../hooks/useSystem'
 import { useConsent } from './onboarding/useConsent'
 import { t as consentText } from './onboarding/consentText'
 import Icon from './Icon'
 import LiveTranscriptPanel from './recording/LiveTranscriptPanel'
+import { getPrivacyNotice } from '../utils/engineStatus'
 
-// Línea de privacidad veraz según dónde se procesa el audio (proveedor de IA configurado)
-function getPrivacyNotice(provider, cloudFallback) {
-  if (provider === 'openai') {
-    return { icon: 'cloud', color: 'var(--yellow-warn)', text: 'Modo nube: el audio y el texto se envían a OpenAI.' }
-  }
-  if (provider === 'local') {
-    if (cloudFallback) {
-      return {
-        icon: 'cloud',
-        color: 'var(--yellow-warn)',
-        text: 'Procesamiento local. Si Ollama no responde, el texto se enviará a OpenAI (lo activaste en Ajustes).'
-      }
-    }
-    return { icon: 'lock', color: 'var(--green-ok)', text: 'Procesamiento local: el audio y el texto no salen de este equipo.' }
-  }
-  return null
+// Fuente de audio configurada (Configuración › Audio)
+const RECORD_SOURCE_LABELS = {
+  both: 'audio del sistema + micrófono',
+  system: 'solo el audio del sistema',
+  mic: 'solo el micrófono',
 }
 
 export default function RecordScreen({ onRecordingDone }) {
@@ -109,6 +103,74 @@ export default function RecordScreen({ onRecordingDone }) {
     }
   }
 
+  // Prueba de niveles de audio antes de iniciar la grabación
+  const [isTestingAudio, setIsTestingAudio] = useState(false)
+  const [testMicLevel, setTestMicLevel] = useState(0)
+  const [testSysLevel, setTestSysLevel] = useState(0)
+  const testIntervalRef = useRef(null)
+
+  const toggleAudioTest = async () => {
+    if (isTestingAudio) {
+      setIsTestingAudio(false)
+      if (testIntervalRef.current) clearInterval(testIntervalRef.current)
+      try {
+        await stopAudioTest()
+      } catch (e) {
+        console.error(e)
+      }
+      setTestMicLevel(0)
+      setTestSysLevel(0)
+    } else {
+      setIsTestingAudio(true)
+      try {
+        await startAudioTest()
+        testIntervalRef.current = setInterval(async () => {
+          try {
+            const res = await getAudioTestLevels()
+            if (res.data) {
+              setTestMicLevel(Math.min(100, Math.round(res.data.mic_level * 100)))
+              setTestSysLevel(Math.min(100, Math.round(res.data.sys_level * 100)))
+            }
+          } catch {
+            // ignorar
+          }
+        }, 150)
+      } catch (err) {
+        console.error('Error al iniciar prueba de audio:', err)
+        setIsTestingAudio(false)
+        showToast({ type: 'error', message: 'No se pudo iniciar la prueba de audio' })
+      }
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (testIntervalRef.current) clearInterval(testIntervalRef.current)
+      stopAudioTest().catch(() => {})
+    }
+  }, [])
+
+  // Edición interactiva de notas de marcadores en vivo
+  const [editingBookmarkId, setEditingBookmarkId] = useState(null)
+  const [editingBookmarkNote, setEditingBookmarkNote] = useState('')
+
+  const handleStartEditBookmark = (bm) => {
+    setEditingBookmarkId(bm.id)
+    setEditingBookmarkNote(bm.note || '')
+  }
+
+  const handleSaveEditedBookmark = async (bm) => {
+    const updatedNote = editingBookmarkNote.trim()
+    setBookmarks(prev => prev.map(b => b.id === bm.id ? { ...b, note: updatedNote } : b))
+    setEditingBookmarkId(null)
+    try {
+      await addLiveBookmark(bm.time, updatedNote)
+      showToast({ type: 'success', message: 'Nota actualizada' })
+    } catch (err) {
+      console.error('Error al actualizar nota del marcador:', err)
+    }
+  }
+
   // Atajo de teclado para marcar momento clave: tecla 'M' o 'Ctrl+B'
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -136,6 +198,22 @@ export default function RecordScreen({ onRecordingDone }) {
 
   const sseRef = useRef(null)
 
+  // Dispositivos y fuente de grabación
+  const [devices, setDevices] = useState([])
+  const [micDeviceId, setMicDeviceId] = useState('default')
+  const [recordMode, setRecordMode] = useState('both')
+
+  // Cargar lista de dispositivos de audio
+  useEffect(() => {
+    if (!isBackendOffline) {
+      getAudioDevices()
+        .then((res) => {
+          setDevices(res.data?.devices || [])
+        })
+        .catch(() => {})
+    }
+  }, [isBackendOffline])
+
   // Proveedor de IA configurado (para que la línea de privacidad sea veraz)
   const [privacyConfig, setPrivacyConfig] = useState(null)
   useEffect(() => {
@@ -143,10 +221,14 @@ export default function RecordScreen({ onRecordingDone }) {
     getConfig()
       .then((res) => {
         if (cancelled) return
+        const cfg = res.data || {}
         setPrivacyConfig({
-          provider: res.data?.ai_provider,
-          cloudFallback: Boolean(res.data?.allow_cloud_fallback)
+          provider: cfg.ai_provider,
+          cloudFallback: Boolean(cfg.allow_cloud_fallback),
+          recordMode: cfg.record_mode || 'both'
         })
+        if (cfg.mic_device_id) setMicDeviceId(cfg.mic_device_id)
+        if (cfg.record_mode) setRecordMode(cfg.record_mode)
       })
       .catch(() => {
         // Sin configuración disponible: se usa el proveedor que reporta /status (si lo hay)
@@ -154,10 +236,33 @@ export default function RecordScreen({ onRecordingDone }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [systemStatus?.ai_provider, systemStatus?.allow_cloud_fallback])
+
+  const handleMicChange = async (newDeviceId) => {
+    setMicDeviceId(newDeviceId)
+    try {
+      await updateConfig({ mic_device_id: newDeviceId })
+      showToast({ type: 'success', message: 'Micrófono actualizado' })
+    } catch (err) {
+      console.error('Error al actualizar micrófono:', err)
+      showToast({ type: 'error', message: 'No se pudo actualizar el micrófono' })
+    }
+  }
+
+  const handleModeChange = async (newMode) => {
+    setRecordMode(newMode)
+    setPrivacyConfig(prev => prev ? { ...prev, recordMode: newMode } : { recordMode: newMode })
+    try {
+      await updateConfig({ record_mode: newMode })
+      showToast({ type: 'success', message: `Modo: ${RECORD_SOURCE_LABELS[newMode] || newMode}` })
+    } catch (err) {
+      console.error('Error al actualizar modo:', err)
+    }
+  }
+
   const privacyNotice = getPrivacyNotice(
     privacyConfig?.provider || systemStatus?.ai_provider,
-    privacyConfig?.cloudFallback
+    privacyConfig?.cloudFallback ?? systemStatus?.allow_cloud_fallback
   )
 
   // Polling de niveles de audio mientras se graba activamente
@@ -200,8 +305,15 @@ export default function RecordScreen({ onRecordingDone }) {
     setIsDragging(true)
   }
 
-  const handleDragLeave = () => {
+  const handleDragLeave = (e) => {
+    // Ignorar el dragleave que se produce al pasar sobre elementos hijos (evita parpadeo)
+    if (e.currentTarget.contains(e.relatedTarget)) return
     setIsDragging(false)
+  }
+
+  const openFilePicker = () => {
+    if (isBackendOffline || isUploading) return
+    fileInputRef.current?.click()
   }
 
   const handleDrop = (e) => {
@@ -217,6 +329,8 @@ export default function RecordScreen({ onRecordingDone }) {
   const handleFileChange = (e) => {
     if (isBackendOffline || isUploading) return
     const file = e.target.files[0]
+    // Permite volver a elegir el mismo archivo (p. ej. tras un error)
+    e.target.value = ''
     if (file) {
       handleUpload(file)
     }
@@ -235,7 +349,7 @@ export default function RecordScreen({ onRecordingDone }) {
 
     setIsUploading(true)
     setUploadProgress(0)
-    showToast({ type: 'info', message: 'Subiendo archivo de audio...' })
+    showToast({ type: 'info', message: 'Subiendo archivo de audio…' })
 
     try {
       const res = await uploadAudioFile(file, (progressEvent) => {
@@ -243,7 +357,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setUploadProgress(percent)
       })
 
-      showToast({ type: 'success', message: '✅ Archivo subido con éxito. Iniciando análisis...' })
+      showToast({ type: 'success', message: 'Archivo subido. Iniciando análisis…' })
       setIsUploading(false)
       onRecordingDone(res.data.path)
     } catch (err) {
@@ -372,6 +486,13 @@ export default function RecordScreen({ onRecordingDone }) {
       }
       if (!consented) return
 
+      // DETENER PRUEBA PREVIA SI ESTABA ACTIVA
+      if (isTestingAudio) {
+        if (testIntervalRef.current) clearInterval(testIntervalRef.current)
+        setIsTestingAudio(false)
+        await stopAudioTest().catch(() => {})
+      }
+
       // INICIAR GRABACIÓN
       try {
         setIsPreparing(true)
@@ -473,7 +594,7 @@ export default function RecordScreen({ onRecordingDone }) {
         setIsPaused(true)
         await pauseRecording()
         setStreamStatus('paused')
-        showToast({ type: 'info', message: '⏸️ Grabación pausada' })
+        showToast({ type: 'info', message: 'Grabación pausada' })
       } catch {
         setIsPaused(false)
         showToast({ type: 'error', message: 'Error al pausar la grabación' })
@@ -493,22 +614,299 @@ export default function RecordScreen({ onRecordingDone }) {
 
   return (
     <div className={`record-screen ${isStudioActive ? 'is-recording' : ''}`}>
-      {/* Estado inactivo / Inicial */}
+      {/* Consola en Reposo (Modern Audio Studio Hub) */}
       {!isStudioActive && (
-        <div style={{ textAlign: 'center', marginBottom: 12 }}>
-          <h1 className="record-title" style={{ fontSize: 36, marginBottom: 12 }}>Listo para grabar</h1>
-          <p className="record-subtitle" style={{ margin: '0 auto', fontSize: 16 }}>
-            Presiona el botón para iniciar la captura de audio y análisis automático con IA.
-          </p>
-          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)' }}>
-              <input 
-                type="checkbox" 
-                checked={isLiveTranscriptionEnabled} 
-                onChange={(e) => handleToggleLiveTranscription(e.target.checked)} 
-              />
-              Transcripción en tiempo real
-            </label>
+        <div className="record-hub-container">
+          {/* 1. Isla Superior de Selección Rápida de Micrófono, Fuente y Test */}
+          <div className="record-top-island">
+            <div className="record-island-left">
+              {/* Selector Rápido de Micrófono */}
+              <div className="quick-mic-selector" title="Dispositivo de micrófono activo">
+                <Icon name="mic" size={13} style={{ color: 'var(--accent-primary)' }} />
+                <select
+                  value={micDeviceId}
+                  onChange={(e) => handleMicChange(e.target.value)}
+                  disabled={isBackendOffline}
+                  className="quick-mic-select"
+                  aria-label="Seleccionar micrófono"
+                >
+                  <option value="default">Predeterminado del sistema</option>
+                  {devices
+                    .filter((d) => d.id !== 'loopback')
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Segmented Selector de Modo */}
+              <div className="mode-segmented-pill" role="radiogroup" aria-label="Fuente de grabación">
+                <button
+                  type="button"
+                  className={`mode-segment-btn ${recordMode === 'both' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('both')}
+                  title="Captura tanto tu micrófono como el audio de la llamada (Meet, Teams, Zoom)"
+                >
+                  <Icon name="layers" size={12} />
+                  <span>Ambos</span>
+                </button>
+                <button
+                  type="button"
+                  className={`mode-segment-btn ${recordMode === 'mic' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('mic')}
+                  title="Graba solo tu micrófono"
+                >
+                  <Icon name="mic" size={12} />
+                  <span>Solo Mic</span>
+                </button>
+                <button
+                  type="button"
+                  className={`mode-segment-btn ${recordMode === 'system' ? 'active' : ''}`}
+                  onClick={() => handleModeChange('system')}
+                  title="Graba solo el audio interno de tu equipo"
+                >
+                  <Icon name="volume" size={12} />
+                  <span>Solo Sistema</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="record-island-right">
+              {/* Toggle Transcripción en Vivo */}
+              <label className="switch-field" style={{ fontSize: 12, margin: 0 }}>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="switch"
+                  checked={isLiveTranscriptionEnabled}
+                  aria-checked={isLiveTranscriptionEnabled}
+                  onChange={(e) => handleToggleLiveTranscription(e.target.checked)}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>En tiempo real</span>
+              </label>
+
+              {/* Botón Probar Micrófono */}
+              <button
+                type="button"
+                className={`btn btn-secondary btn-sm ${isTestingAudio ? 'btn-active-test' : ''}`}
+                onClick={toggleAudioTest}
+                disabled={isBackendOffline}
+                title="Comprobar niveles de tu micrófono y audio del sistema antes de iniciar"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 10px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: 11
+                }}
+              >
+                <Icon name={isTestingAudio ? 'stop' : 'volume'} size={12} />
+                <span>{isTestingAudio ? 'Detener' : 'Probar'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Medidores de prueba desplegados si está probando */}
+          {isTestingAudio && (
+            <div
+              className="pre-rec-meter-card glass"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 20,
+                padding: '8px 16px',
+                borderRadius: 'var(--radius-full)',
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                animation: 'fadeIn 0.2s ease-out'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="mic" size={13} style={{ color: 'var(--accent-primary)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Mic:</span>
+                <div style={{ width: 90, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${testMicLevel}%`,
+                      background: 'linear-gradient(90deg, #10B981, #F59E0B)',
+                      transition: 'width 0.1s ease-out'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', width: 28, textAlign: 'right' }}>{testMicLevel}%</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="volume" size={13} style={{ color: '#38BDF8' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Sis:</span>
+                <div style={{ width: 90, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${testSysLevel}%`,
+                      background: 'linear-gradient(90deg, #38BDF8, #818CF8)',
+                      transition: 'width 0.1s ease-out'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', width: 28, textAlign: 'right' }}>{testSysLevel}%</span>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Tarjeta Consola Central de Grabación */}
+          <div className="record-hero-card">
+            <div className={`hero-record-core record-btn-wrapper ${isBackendOffline ? 'offline' : ''}`}>
+              <button
+                type="button"
+                className="hero-record-btn record-btn"
+                onClick={handleStartStop}
+                disabled={isBackendOffline || isPreparing}
+                aria-busy={isPreparing || undefined}
+                aria-label={isPreparing ? 'Iniciando grabación...' : 'Iniciar grabación'}
+                title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación (Ctrl+Shift+R)'}
+              >
+                {isPreparing ? (
+                  <div className="spinner-small on-accent" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                ) : (
+                  <span className="hero-record-icon btn-icon">
+                    <Icon name="mic" size={42} />
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <h1 className="hero-record-title">Iniciar Grabación</h1>
+            <p className="hero-record-subtitle">
+              Captura audio de llamadas de Meet, Zoom, Teams o notas con transcripción y análisis inteligente.
+            </p>
+
+            <div className="hero-hotkey-chip" title="Atajo de teclado global">
+              <span>Atajo:</span>
+              <kbd className="kbd-tag">Ctrl</kbd>
+              <span>+</span>
+              <kbd className="kbd-tag">Shift</kbd>
+              <span>+</span>
+              <kbd className="kbd-tag">R</kbd>
+            </div>
+
+            <div className="hero-footer-strip">
+              {privacyNotice && (
+                <div
+                  className="record-privacy-pill"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    color: privacyNotice.color,
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border-subtle)',
+                    padding: '3px 10px',
+                    borderRadius: 'var(--radius-full)'
+                  }}
+                >
+                  <Icon name={privacyNotice.icon} size={12} style={{ color: privacyNotice.color }} />
+                  <span>{privacyNotice.text}</span>
+                </div>
+              )}
+
+              <p className="consent-reminder" style={{ margin: 0 }} title={consentText('consent.reminder.tooltip')}>
+                <Icon name="alert-triangle" size={12} />
+                <span>{consentText('consent.reminder.text')}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* 3. Barra Refinada de Carga de Archivos de Audio */}
+          <div
+            className={`record-upload-bar upload-dropzone ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''} ${isBackendOffline ? 'disabled' : ''}`}
+            role="button"
+            tabIndex={isBackendOffline || isUploading ? -1 : 0}
+            aria-disabled={isBackendOffline || isUploading || undefined}
+            aria-busy={isUploading || undefined}
+            aria-label="Subir un archivo de audio para analizarlo"
+            title={isBackendOffline ? 'Sin conexión al backend' : undefined}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={openFilePicker}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                openFilePicker()
+              }
+            }}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".wav,.mp3,.m4a,.mp4,.ogg,.aac,.flac,audio/*"
+              tabIndex={-1}
+              style={{ display: 'none' }}
+            />
+
+            {isUploading ? (
+              <div className="upload-progress-box" style={{ width: '100%' }} aria-live="polite">
+                <div className="spinner-small" style={{ width: 20, height: 20 }} />
+                <div className="upload-progress-text" style={{ fontSize: 13 }}>Subiendo audio… {uploadProgress}%</div>
+                <div
+                  className="upload-progress-bar"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={uploadProgress}
+                  style={{ flex: 1, height: 6 }}
+                >
+                  <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--accent-primary)'
+                    }}
+                  >
+                    <Icon name="upload" size={16} />
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {isDragging ? 'Suelta el archivo aquí' : '¿Ya tienes una grabación de audio?'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Arrastra tu archivo o haz clic para seleccionarlo
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.04em',
+                    color: 'var(--text-muted)',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    padding: '3px 8px',
+                    borderRadius: 6
+                  }}
+                >
+                  WAV · MP3 · M4A · AAC · FLAC
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -518,8 +916,8 @@ export default function RecordScreen({ onRecordingDone }) {
         <div className="record-studio" role="region" aria-label="Estudio de Grabación Activa">
           {/* Overlay de Finalización Suave */}
           {isFinalizing && (
-            <div className="studio-finalizing-overlay">
-              <div className="spinner-small" style={{ width: 36, height: 36, borderWidth: 3 }} />
+            <div className="studio-finalizing-overlay" role="status" aria-live="polite">
+              <div className="spinner-small" style={{ width: 36, height: 36, borderWidth: 3 }} aria-hidden="true" />
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginTop: 8 }}>
                 Finalizando reunión...
               </div>
@@ -549,6 +947,32 @@ export default function RecordScreen({ onRecordingDone }) {
                   <div className="meter-fill sys" style={{ width: `${sysLevel}%` }} />
                 </div>
               </div>
+              {privacyNotice && (
+                <span
+                  className="studio-privacy-chip"
+                  title={privacyNotice.text}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 11,
+                    color: privacyNotice.color,
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 160,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  <Icon name={privacyNotice.icon} size={12} style={{ color: privacyNotice.color, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {privacyNotice.shortText || privacyNotice.text}
+                  </span>
+                </span>
+              )}
             </div>
 
             <div className="record-studio-timer" aria-label={`Tiempo transcurrido: ${formatTime(seconds)}`}>
@@ -589,7 +1013,7 @@ export default function RecordScreen({ onRecordingDone }) {
               >
                 {isFinalizing ? (
                   <>
-                    <div className="spinner-small" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    <div className="spinner-small on-accent" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
                     <span>Finalizando...</span>
                   </>
                 ) : (
@@ -650,19 +1074,32 @@ export default function RecordScreen({ onRecordingDone }) {
                     </button>
                   </div>
 
-                  <div className="visualizer-body">
-                    <div className={`studio-waveform ${isPaused ? 'paused' : ''}`}>
-                      {Array.from({ length: 24 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="studio-wave-bar"
-                          style={{
-                            animationDelay: `${(i % 8) * 0.12}s`,
-                            animationPlayState: isPaused ? 'paused' : 'running',
-                            height: isPaused ? '8px' : `${Math.max(14, Math.min(76, ((micLevel + sysLevel) / 2) * 0.8 + ((i * 7) % 25)))}px`
-                          }}
-                        />
-                      ))}
+                  <div className="visualizer-body" style={{ position: 'relative' }}>
+                    <div
+                      className="studio-sound-aura"
+                      style={{
+                        transform: `scale(${1 + Math.min(1.5, (micLevel + sysLevel) / 100)})`,
+                        opacity: isPaused ? 0.04 : Math.min(0.65, 0.12 + (micLevel + sysLevel) / 120)
+                      }}
+                    />
+                    <div className={`studio-waveform ${isPaused ? 'paused' : ''}`} style={{ zIndex: 1 }}>
+                      {Array.from({ length: 32 }).map((_, i) => {
+                        const freqMod = Math.sin((i / 32) * Math.PI) * 0.85 + 0.35
+                        const combinedLevel = (micLevel * 1.1 + sysLevel * 0.9) / 2
+                        const dynamicHeight = isPaused ? 8 : Math.max(10, Math.min(84, (combinedLevel * freqMod * 1.25) + 12 + ((i * 7) % 16)))
+                        return (
+                          <div
+                            key={i}
+                            className="studio-wave-bar"
+                            style={{
+                              animationDelay: `${(i % 10) * 0.08}s`,
+                              animationPlayState: isPaused ? 'paused' : 'running',
+                              height: `${dynamicHeight}px`,
+                              background: `linear-gradient(180deg, #38BDF8 0%, #818CF8 50%, #C084FC 100%)`
+                            }}
+                          />
+                        )
+                      })}
                     </div>
 
                     <div className="visualizer-status-text">
@@ -747,7 +1184,8 @@ export default function RecordScreen({ onRecordingDone }) {
                     ref={noteInputRef}
                     type="text"
                     className="bookmark-text-input"
-                    placeholder="Nota rápida (Enter para guardar)..."
+                    placeholder="Nota rápida (Enter para guardar)…"
+                    aria-label="Nota del momento clave"
                     value={bookmarkNote}
                     onChange={(e) => setBookmarkNote(e.target.value)}
                     onKeyDown={(e) => {
@@ -807,19 +1245,82 @@ export default function RecordScreen({ onRecordingDone }) {
                 ) : (
                   <div className="bookmarks-items-list">
                     {bookmarks.map((bm) => (
-                      <div key={bm.id} className="bookmark-item-row">
-                        <span className="bm-item-time">{formatSegmentTime(bm.time)}</span>
-                        <span className="bm-item-note">{bm.note || 'Momento destacado'}</span>
-                        <button
-                          type="button"
-                          className="bm-item-delete"
-                          onClick={() => handleDeleteBookmark(bm.id)}
-                          title="Eliminar marcador"
-                          aria-label={`Eliminar marcador a los ${formatSegmentTime(bm.time)}`}
-                        >
-                          <Icon name="x" size={12} />
-                        </button>
-                      </div>
+                      editingBookmarkId === bm.id ? (
+                        <div key={bm.id} className="bookmark-item-row is-editing" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="bm-item-time">{formatSegmentTime(bm.time)}</span>
+                          <input
+                            type="text"
+                            value={editingBookmarkNote}
+                            onChange={(e) => setEditingBookmarkNote(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveEditedBookmark(bm)
+                              if (e.key === 'Escape') setEditingBookmarkId(null)
+                            }}
+                            autoFocus
+                            style={{
+                              flex: 1,
+                              padding: '2px 6px',
+                              fontSize: 12,
+                              background: 'var(--bg-base)',
+                              border: '1px solid var(--accent-primary)',
+                              borderRadius: 4,
+                              color: 'var(--text-primary)'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="bm-item-delete"
+                            onClick={() => handleSaveEditedBookmark(bm)}
+                            title="Guardar nota"
+                            aria-label="Guardar nota editada"
+                            style={{ color: 'var(--accent-primary-hover)' }}
+                          >
+                            <Icon name="check" size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="bm-item-delete"
+                            onClick={() => setEditingBookmarkId(null)}
+                            title="Cancelar"
+                            aria-label="Cancelar edición"
+                          >
+                            <Icon name="x" size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div key={bm.id} className="bookmark-item-row">
+                          <span className="bm-item-time">{formatSegmentTime(bm.time)}</span>
+                          <span
+                            className="bm-item-note"
+                            onClick={() => handleStartEditBookmark(bm)}
+                            title="Clic para editar nota"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {bm.note || 'Momento destacado'}
+                          </span>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 'auto' }}>
+                            <button
+                              type="button"
+                              className="bm-item-delete"
+                              onClick={() => handleStartEditBookmark(bm)}
+                              title="Editar nota"
+                              aria-label={`Editar nota a los ${formatSegmentTime(bm.time)}`}
+                              style={{ opacity: 0.7 }}
+                            >
+                              <Icon name="edit" size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              className="bm-item-delete"
+                              onClick={() => handleDeleteBookmark(bm.id)}
+                              title="Eliminar marcador"
+                              aria-label={`Eliminar marcador a los ${formatSegmentTime(bm.time)}`}
+                            >
+                              <Icon name="x" size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )
                     ))}
                   </div>
                 )}
@@ -827,96 +1328,6 @@ export default function RecordScreen({ onRecordingDone }) {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Botón Iniciar Grabación (Solo cuando NO está grabando) */}
-      {!isStudioActive && (
-        <div className={`record-btn-wrapper ${isBackendOffline ? 'offline' : ''}`}>
-          <button
-            type="button"
-            className="record-btn"
-            onClick={handleStartStop}
-            disabled={isBackendOffline || isPreparing}
-            style={{
-              cursor: isBackendOffline || isPreparing ? 'not-allowed' : 'pointer',
-              opacity: isBackendOffline || isPreparing ? 0.5 : 1,
-              filter: isBackendOffline ? 'grayscale(1)' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            aria-label={isPreparing ? 'Iniciando grabación...' : 'Iniciar grabación'}
-            title={isBackendOffline ? 'Sin conexión al backend' : 'Iniciar grabación'}
-          >
-            {isPreparing ? (
-              <div className="spinner-small" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff', width: 24, height: 24, borderWidth: 3 }}></div>
-            ) : (
-              <span className="btn-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="mic" size={32} />
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Recordatorio de consentimiento, siempre visible junto al botón de grabar */}
-      {!isStudioActive && (
-        <p className="consent-reminder" title={consentText('consent.reminder.tooltip')}>
-          <Icon name="alert-triangle" size={13} />
-          <span>{consentText('consent.reminder.text')}</span>
-          <span className="sr-only"> {consentText('consent.reminder.tooltip')}</span>
-        </p>
-      )}
-
-      {/* Carga de audio (Solo si no está grabando) */}
-      {!isStudioActive && (
-        <>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-            Se utilizará el <strong>Micrófono</strong> o el <strong>Sistema</strong> según tu configuración.
-          </p>
-
-          <div className="upload-container" style={{ width: '100%', maxWidth: 420, marginTop: 12 }}>
-            <div className="upload-divider">
-              <span>o también</span>
-            </div>
-
-            <div
-              className={`upload-dropzone ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''} ${isBackendOffline ? 'disabled' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => !isBackendOffline && !isUploading && fileInputRef.current?.click()}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".wav,.mp3,.m4a,.mp4,.ogg,.aac,.flac,audio/*"
-                style={{ display: 'none' }}
-              />
-
-              {isUploading ? (
-                <div className="upload-progress-box">
-                  <div className="spinner-small" />
-                  <div className="upload-progress-text">Subiendo audio... {uploadProgress}%</div>
-                  <div className="upload-progress-bar">
-                    <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                </div>
-              ) : (
-                <div className="upload-prompt">
-                  <span className="upload-icon" style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
-                    <Icon name="upload" size={28} style={{ color: 'var(--accent-primary)' }} />
-                  </span>
-                  <span className="upload-text">
-                    Arrastra un archivo de audio aquí o <span className="upload-link">selecciónalo</span>
-                  </span>
-                  <span className="upload-subtext">WAV, MP3, M4A, MP4, OGG, FLAC</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
       )}
     </div>
   )

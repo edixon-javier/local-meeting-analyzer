@@ -11,6 +11,8 @@ import AnalysisScreen from './components/AnalysisScreen'
 import SettingsScreen from './components/SettingsScreen'
 import HistoryScreen from './components/HistoryScreen'
 import HistoryChatScreen from './components/HistoryChatScreen'
+import DictationHistoryScreen from './components/dictation/DictationHistoryScreen'
+import DictationPill from './components/dictation/DictationPill'
 import Toast from './components/Toast'
 import { startRecording, stopRecording } from './api'
 import { SystemProvider } from './context/SystemContext'
@@ -92,6 +94,7 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
       {/* Sidebar de navegación */}
       <Sidebar
         currentView={view}
+        currentAudioPath={audioPath}
         onNavigate={handleNavigate}
       />
 
@@ -107,12 +110,13 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
           <AnalysisScreen
             audioPath={audioPath}
             onBack={() => setView('record')}
+            onNavigate={handleNavigate}
           />
         )}
 
         {view === 'analysis' && !audioPath && (
           <div className="empty-state" style={{ flex: 1 }}>
-            <img src={logoImg} alt="Empty" className="empty-state-icon" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', opacity: 0.6 }} />
+            <img src={logoImg} alt="" className="empty-state-icon" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', opacity: 0.6 }} />
             <div className="empty-state-title">Sin grabación</div>
             <div className="empty-state-sub">Primero graba una reunión para poder analizarla.</div>
             <button className="btn btn-primary" onClick={() => setView('record')}>
@@ -133,6 +137,12 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
           />
         )}
 
+        {view === 'dictations' && (
+          <DictationHistoryScreen
+            onNavigate={handleNavigate}
+          />
+        )}
+
         {view === 'settings' && (
           <SettingsScreen />
         )}
@@ -141,8 +151,8 @@ function AppContent({ view, setView, audioPath, handleRecordingDone, handleNavig
   )
 }
 
-export default function App() {
-  const [view, setView] = useState('record')          // 'record' | 'analysis' | 'history' | 'history-chat' | 'settings'
+function MainApp() {
+  const [view, setView] = useState('record')          // 'record' | 'analysis' | 'history' | 'history-chat' | 'dictations' | 'settings'
   const [audioPath, setAudioPath] = useState(null)   // Ruta del WAV grabado
   const [toast, setToast] = useState(null)
   // Asistente de bienvenida: se abre en el primer arranque y cuando Ajustes dispara `onboarding:open`
@@ -180,7 +190,7 @@ export default function App() {
       <RecordingsProvider>
         <div className="app-layout">
           {/* Barra de título personalizada (frameless) */}
-          <TitleBar currentView={view} />
+          <TitleBar currentView={view} audioPath={audioPath} />
 
           <ErrorBoundary>
             <ConsentProvider>
@@ -197,7 +207,7 @@ export default function App() {
           </ErrorBoundary>
 
           {/* Barra de estado inferior */}
-          <StatusBar />
+          <StatusBar onNavigate={handleNavigate} />
 
           {/* Notificaciones */}
           <Toast toast={toast} onDismiss={() => setToast(null)} />
@@ -215,3 +225,17 @@ export default function App() {
     </SystemProvider>
   )
 }
+
+export default function App() {
+  const isPillMode = typeof window !== 'undefined' && (
+    window.location.hash === '#dictation-pill' ||
+    window.location.search.includes('pill=1')
+  )
+
+  if (isPillMode) {
+    return <DictationPill />
+  }
+
+  return <MainApp />
+}
+

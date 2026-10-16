@@ -97,7 +97,7 @@ export default function OfflineOverlay() {
         >
           {retrying ? (
             <>
-              <span className="spinner-sm" style={{ borderLeftColor: 'transparent', width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span className="spinner-small on-accent" style={{ width: 16, height: 16 }} aria-hidden="true" />
               Reintentando conexión...
             </>
           ) : (
@@ -106,6 +106,30 @@ export default function OfflineOverlay() {
             </>
           )}
         </button>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          {window.electronAPI?.reload && (
+            <button
+              type="button"
+              onClick={() => window.electronAPI.reload()}
+              className="btn btn-secondary"
+              style={{ flex: 1, padding: '10px 14px', fontSize: 13, justifyContent: 'center' }}
+            >
+              <Icon name="refresh" size={14} /> Recargar
+            </button>
+          )}
+          {window.electronAPI?.openLogsFolder && (
+            <button
+              type="button"
+              onClick={() => window.electronAPI.openLogsFolder()}
+              className="btn btn-secondary"
+              style={{ flex: 1, padding: '10px 14px', fontSize: 13, justifyContent: 'center' }}
+              title="Abrir registros para diagnóstico"
+            >
+              <Icon name="file-text" size={14} /> Ver registros
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

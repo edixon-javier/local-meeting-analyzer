@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { getAudioUrl } from '../../api'
+import { useSystem } from '../../hooks/useSystem'
+import { downloadAudioRecording, revealAudioRecording } from '../../utils/audioExport'
+import { downloadTranscriptFile, copyTranscript } from '../../utils/minutesExport'
 import Icon from '../Icon'
 
 export default function TranscriptPanel({ 
@@ -19,8 +22,10 @@ export default function TranscriptPanel({
   onOpenRenameSpeaker,
   bookmarks = [],
   onAddBookmark,
-  onDeleteBookmark
+  onDeleteBookmark,
+  meetingTitle
 }) {
+  const { showToast } = useSystem()
   const [isAddingBookmark, setIsAddingBookmark] = useState(false)
   const [newBookmarkNote, setNewBookmarkNote] = useState('')
 
@@ -53,8 +58,28 @@ export default function TranscriptPanel({
 
   const totalMatches = matchingSegments.length
   const isFilteringActive = cleanQuery.length > 0 || speakerFilter !== 'all'
+  const [autoScrollFollow, setAutoScrollFollow] = useState(true)
 
-  // Ajustar puntero si cambia el resultado de búsqueda
+  // Auto-scroll suave al segmento activo durante la reproducción
+  useEffect(() => {
+    if (activeSegmentIndex >= 0 && autoScrollFollow && !isFilteringActive) {
+      const el = document.getElementById(`segment-${activeSegmentIndex}`)
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        const isOutOfView = rect.top < 120 || rect.bottom > (window.innerHeight - 80)
+        if (isOutOfView) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }
+    }
+  }, [activeSegmentIndex, autoScrollFollow, isFilteringActive])
+
+  const handleSkipTime = (deltaSeconds) => {
+    if (audioRef?.current) {
+      const newTime = Math.max(0, (audioRef.current.currentTime || 0) + deltaSeconds)
+      audioRef.current.currentTime = newTime
+    }
+  }
   useEffect(() => {
     setCurrentMatchPointer(0)
   }, [cleanQuery, speakerFilter])
@@ -122,13 +147,7 @@ export default function TranscriptPanel({
         regex.test(part) ? (
           <mark 
             key={i} 
-            style={{
-              background: isCurrentMatch ? '#F59E0B' : 'rgba(234, 179, 8, 0.4)',
-              color: isCurrentMatch ? '#000000' : '#FEF08A',
-              fontWeight: 700,
-              padding: '1px 3px',
-              borderRadius: 3
-            }}
+            className={`transcript-mark ${isCurrentMatch ? 'is-current' : ''}`}
           >
             {part}
           </mark>
@@ -143,86 +162,175 @@ export default function TranscriptPanel({
   const segmentsToRender = onlyShowMatches && isFilteringActive ? matchingSegments : indexedSegments
   const activeMatchingOriginalIndex = matchingSegments[currentMatchPointer]?.originalIndex
 
+  const handleDownloadTranscript = () => {
+    const filename = audioPath ? audioPath.split(/[/\\]/).pop() : 'conversacion'
+    downloadTranscriptFile(
+      {
+        title: meetingTitle || 'Reunión',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        segments: segments || [],
+        transcript: transcript || ''
+      },
+      filename,
+      showToast,
+      'txt'
+    )
+  }
+
+  const handleCopyTranscript = async () => {
+    await copyTranscript(
+      {
+        title: meetingTitle || 'Reunión',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        segments: segments || [],
+        transcript: transcript || ''
+      },
+      showToast
+    )
+  }
+
   return (
     <div className="transcript-panel">
-      <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+      <div className="panel-header transcript-header">
         {/* Fila Superior: Título y Acciones Principales */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="panel-title">
-            <Icon name="file-text" size={16} />
-            Transcripción ({segments?.length || 0} intervenciones)
+        <div className="transcript-header-top">
+          <div className="panel-title transcript-title">
+            <div className="transcript-title-text">
+              <h1 className="panel-title-text analysis-meeting-title" title={meetingTitle}>{meetingTitle || 'Reunión'}</h1>
+              <span className="analysis-meeting-sub">
+                <Icon name="file-text" size={12} /> Transcripción · {segments?.length || 0} {segments?.length === 1 ? 'intervención' : 'intervenciones'}
+              </span>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button 
-              className="btn btn-secondary btn-sm" 
-              onClick={reprocess} 
-              title="Volver a transcribir y analizar esta reunión"
+          <div className="transcript-header-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleDownloadTranscript}
+              title="Descargar conversación completa con marcas de tiempo y hablantes (.txt)"
+              aria-label="Descargar conversación completa"
             >
-              <Icon name="refresh" size={14} /> Reprocesar
+              <Icon name="download" size={14} /> <span className="btn-label-collapsible">Descargar Conversación</span>
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={onBack}>
-              <Icon name="mic" size={14} /> Nueva Reunión
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyTranscript}
+              title="Copiar diálogo completo al portapapeles"
+              aria-label="Copiar conversación completa"
+            >
+              <Icon name="copy" size={14} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={reprocess}
+              title="Volver a transcribir y analizar esta reunión"
+              aria-label="Reprocesar reunión"
+            >
+              <Icon name="refresh" size={14} /> <span className="btn-label-collapsible">Reprocesar</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onBack}
+              title="Volver a la pantalla de grabación"
+              aria-label="Nueva reunión"
+            >
+              <Icon name="mic" size={14} /> <span className="btn-label-collapsible">Nueva Reunión</span>
             </button>
           </div>
         </div>
-        
+
         {/* Reproductor de Audio Integrado */}
         {audioPath && step === 'done' && (
           <div className="audio-player-container">
-            <button 
+            <button
+              type="button"
               onClick={changeSpeed}
-              className="btn btn-secondary btn-sm"
-              style={{ padding: '6px 10px', fontSize: 12, minWidth: 45, background: 'var(--bg-elevated)' }}
+              className="btn btn-secondary btn-sm transcript-speed-btn"
               title="Velocidad de reproducción"
+              aria-label={`Velocidad de reproducción actual: ${playbackSpeed}x`}
             >
               {playbackSpeed}x
             </button>
-            <audio 
+            <button
+              type="button"
+              onClick={() => handleSkipTime(-5)}
+              className="btn btn-secondary btn-sm transcript-skip-btn"
+              title="Retroceder 5 segundos"
+              aria-label="Retroceder 5 segundos"
+            >
+              -5s
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSkipTime(5)}
+              className="btn btn-secondary btn-sm transcript-skip-btn"
+              title="Avanzar 5 segundos"
+              aria-label="Avanzar 5 segundos"
+            >
+              +5s
+            </button>
+            <audio
               ref={audioRef}
               src={getAudioUrl(audioPath)}
               controls
               className="custom-audio-player"
               onTimeUpdate={handleTimeUpdate}
             />
+            <button
+              type="button"
+              onClick={() => setAutoScrollFollow(prev => !prev)}
+              className={`btn btn-secondary btn-sm transcript-autoscroll-btn ${autoScrollFollow ? 'is-active' : ''}`}
+              title={autoScrollFollow ? 'Seguimiento de audio activo: se desplaza al reproducir' : 'Seguimiento de audio pausado: clic para activar'}
+              aria-label="Alternar seguimiento de audio sincronizado"
+            >
+              <Icon name="target" size={13} />
+              <span className="btn-label-collapsible">{autoScrollFollow ? 'Seguir audio' : 'Fijar vista'}</span>
+            </button>
             {onAddBookmark && (
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className={`btn btn-secondary btn-sm transcript-bookmark-btn ${isAddingBookmark ? 'is-active' : ''}`}
                 onClick={() => setIsAddingBookmark(prev => !prev)}
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  color: isAddingBookmark ? '#F59E0B' : 'inherit',
-                  borderColor: isAddingBookmark ? '#F59E0B' : undefined
-                }}
                 title="Marcar momento en el segundo actual del audio"
+                aria-label="Marcar momento clave"
               >
                 <Icon name="bookmark" size={13} />
-                <span>Marcar Momento</span>
+                <span className="btn-label-collapsible">Marcar Momento</span>
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => downloadAudioRecording({ path: audioPath }, showToast)}
+              title="Descargar o guardar archivo de audio"
+              aria-label="Descargar archivo de audio"
+            >
+              <Icon name="download" size={13} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => revealAudioRecording({ path: audioPath }, showToast)}
+              title="Mostrar archivo en el Explorador"
+              aria-label="Mostrar archivo en el Explorador"
+            >
+              <Icon name="folder" size={13} />
+            </button>
           </div>
         )}
 
         {/* Formulario para añadir marcador en reproducción */}
         {isAddingBookmark && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 12px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid #F59E0B',
-            borderRadius: 'var(--radius-md)'
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', fontFamily: 'monospace' }}>
+          <div className="transcript-bookmark-form">
+            <span className="transcript-bookmark-time">
               [{formatSegmentTime(audioRef.current?.currentTime || 0)}]
             </span>
             <input
               type="text"
+              className="transcript-bookmark-input"
               placeholder="Nota del momento clave..."
               value={newBookmarkNote}
               onChange={(e) => setNewBookmarkNote(e.target.value)}
@@ -231,29 +339,18 @@ export default function TranscriptPanel({
                 if (e.key === 'Escape') setIsAddingBookmark(false)
               }}
               autoFocus
-              style={{
-                flex: 1,
-                padding: '4px 8px',
-                fontSize: 12,
-                background: 'var(--bg-base)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)'
-              }}
             />
             <button
               type="button"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm transcript-bookmark-save"
               onClick={handleSavePlaybackBookmark}
-              style={{ padding: '4px 10px', fontSize: 12 }}
             >
               Guardar
             </button>
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm transcript-bookmark-cancel"
               onClick={() => setIsAddingBookmark(false)}
-              style={{ padding: '4px 8px', fontSize: 12 }}
             >
               <Icon name="x" size={12} />
             </button>
@@ -262,58 +359,26 @@ export default function TranscriptPanel({
 
         {/* Tira interactiva de marcadores clave */}
         {bookmarks && bookmarks.length > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            flexWrap: 'wrap',
-            padding: '6px 10px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)'
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="transcript-bookmark-strip">
+            <span className="transcript-bookmark-strip-label">
               <Icon name="bookmark" size={12} /> Momentos:
             </span>
             {bookmarks.map((bm) => (
               <span
                 key={bm.id}
+                className="transcript-bookmark-chip"
                 onClick={() => handleSegmentClick(bm.time)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '3px 8px',
-                  background: 'rgba(245, 158, 11, 0.12)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: 11,
-                  color: '#F59E0B',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#F59E0B'; e.currentTarget.style.background = 'rgba(245, 158, 11, 0.22)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.3)'; e.currentTarget.style.background = 'rgba(245, 158, 11, 0.12)' }}
                 title="Clic para reproducir e ir a este momento"
               >
-                <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{formatSegmentTime(bm.time)}</span>
-                {bm.note && <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bm.note}</span>}
+                <span className="transcript-bookmark-chip-time">{formatSegmentTime(bm.time)}</span>
+                {bm.note && <span className="transcript-bookmark-chip-note">{bm.note}</span>}
                 {onDeleteBookmark && (
                   <button
                     type="button"
+                    className="transcript-bookmark-chip-delete"
                     onClick={(e) => {
                       e.stopPropagation()
                       onDeleteBookmark(bm.id)
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      color: 'inherit',
-                      opacity: 0.6,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center'
                     }}
                     title="Eliminar marcador"
                   >
@@ -327,23 +392,14 @@ export default function TranscriptPanel({
 
         {/* ── BARRA DE BÚSQUEDA Y FILTRO DE DIÁLOGOS (Decisión de Producto 1) ── */}
         {segments && segments.length > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 10px',
-            background: 'var(--bg-elevated)',
-            border: isFilteringActive ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            flexWrap: 'wrap',
-            transition: 'border-color 0.2s ease'
-          }}>
+          <div className={`transcript-search-bar ${isFilteringActive ? 'is-filtering' : ''}`}>
             {/* Input de Búsqueda */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 170 }}>
-              <Icon name="search" size={14} style={{ color: isFilteringActive ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
+            <div className="transcript-search-field">
+              <Icon name="search" size={14} />
               <input
                 ref={searchInputRef}
                 id="transcript-search-input"
+                className="transcript-search-input"
                 type="text"
                 placeholder="Buscar en la transcripción... (Ctrl+F)"
                 value={searchQuery}
@@ -356,28 +412,12 @@ export default function TranscriptPanel({
                     handleClearSearch()
                   }
                 }}
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  fontSize: 12,
-                  color: 'var(--text-primary)'
-                }}
               />
               {searchQuery && (
                 <button
                   type="button"
+                  className="transcript-search-clear"
                   onClick={handleClearSearch}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: '2px',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
                   title="Limpiar búsqueda (Esc)"
                 >
                   <Icon name="x" size={12} />
@@ -388,18 +428,9 @@ export default function TranscriptPanel({
             {/* Filtro por Hablante */}
             {uniqueSpeakers.length > 1 && (
               <select
+                className={`transcript-speaker-select ${speakerFilter !== 'all' ? 'is-filtered' : ''}`}
                 value={speakerFilter}
                 onChange={(e) => setSpeakerFilter(e.target.value)}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: 12,
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  color: speakerFilter !== 'all' ? 'var(--text-accent)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  maxWidth: 150
-                }}
                 title="Filtrar intervenciones por hablante"
               >
                 <option value="all">Todos los hablantes</option>
@@ -411,42 +442,31 @@ export default function TranscriptPanel({
 
             {/* Contador de coincidencias y botones de navegación */}
             {isFilteringActive && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: totalMatches > 0 ? 'var(--text-primary)' : '#EF4444',
-                  background: totalMatches > 0 ? 'var(--bg-surface)' : 'rgba(239, 68, 68, 0.1)',
-                  padding: '2px 6px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-subtle)',
-                  fontFamily: 'monospace'
-                }}>
-                  {totalMatches > 0 
+              <div className="transcript-match-controls">
+                <span className={`transcript-match-count ${totalMatches > 0 ? '' : 'is-empty'}`}>
+                  {totalMatches > 0
                     ? `${cleanQuery ? `${currentMatchPointer + 1}/${totalMatches}` : `${totalMatches} segs`}`
                     : 'Sin resultados'
                   }
                 </span>
 
                 {totalMatches > 1 && cleanQuery && (
-                  <div style={{ display: 'flex', gap: 2 }}>
+                  <div className="transcript-match-nav">
                     <button
                       type="button"
                       onClick={handlePrevMatch}
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '3px 6px', fontSize: 11 }}
+                      className="btn btn-secondary btn-sm transcript-match-nav-btn"
                       title="Coincidencia anterior (Shift+Enter)"
                     >
-                      <Icon name="arrow-left" size={11} style={{ transform: 'rotate(90deg)' }} />
+                      <Icon name="arrow-left" size={11} />
                     </button>
                     <button
                       type="button"
                       onClick={handleNextMatch}
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '3px 6px', fontSize: 11 }}
+                      className="btn btn-secondary btn-sm transcript-match-nav-btn"
                       title="Siguiente coincidencia (Enter)"
                     >
-                      <Icon name="arrow-right" size={11} style={{ transform: 'rotate(90deg)' }} />
+                      <Icon name="arrow-right" size={11} />
                     </button>
                   </div>
                 )}
@@ -454,18 +474,8 @@ export default function TranscriptPanel({
                 {/* Botón para alternar 'Solo coincidencias' */}
                 <button
                   type="button"
+                  className={`transcript-isolate-btn ${onlyShowMatches ? 'is-active' : ''}`}
                   onClick={() => setOnlyShowMatches(prev => !prev)}
-                  style={{
-                    padding: '3px 8px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-subtle)',
-                    background: onlyShowMatches ? 'var(--accent-primary)' : 'var(--bg-surface)',
-                    color: onlyShowMatches ? '#FFF' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
                   title={onlyShowMatches ? 'Mostrar todo el diálogo con resaltado' : 'Mostrar solo los fragmentos coincidentes'}
                 >
                   {onlyShowMatches ? 'Ver todos' : 'Aislar'}
@@ -479,7 +489,7 @@ export default function TranscriptPanel({
       <div className="panel-body">
         {segments && segments.length > 0 ? (
           segmentsToRender.length > 0 ? (
-            <div className="diarized-chat" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 12 }}>
+            <div className="diarized-chat transcript-list">
               {segmentsToRender.map((seg) => {
                 const originalIdx = seg.originalIndex
                 const segBookmarks = (bookmarks || []).filter(
@@ -487,76 +497,51 @@ export default function TranscriptPanel({
                 )
                 const isSelectedBySearch = cleanQuery && activeMatchingOriginalIndex === originalIdx
                 const isActivePlayback = originalIdx === activeSegmentIndex
+                const segmentClasses = [
+                  'chat-bubble glass transcript-segment',
+                  isActivePlayback && 'active-segment is-playing',
+                  segBookmarks.length > 0 && 'has-bookmarks',
+                  isSelectedBySearch && 'is-search-match'
+                ].filter(Boolean).join(' ')
 
                 return (
-                  <div 
-                    key={originalIdx} 
+                  <div
+                    key={originalIdx}
                     id={`segment-${originalIdx}`}
                     onClick={() => handleSegmentClick(seg.start)}
-                    className={`chat-bubble glass ${isActivePlayback ? 'active-segment' : ''}`} 
-                    style={{
-                      padding: '12px 16px',
-                      borderRadius: 'var(--radius-md)',
-                      background: isSelectedBySearch 
-                        ? 'rgba(99, 102, 241, 0.15)' 
-                        : (isActivePlayback ? 'var(--bg-elevated)' : 'var(--bg-surface)'),
-                      border: isSelectedBySearch 
-                        ? '2px solid var(--accent-primary)' 
-                        : (segBookmarks.length > 0 
-                            ? '1px solid rgba(245, 158, 11, 0.4)' 
-                            : '1px solid var(--border-subtle)'),
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleSegmentClick(seg.start)
+                      }
                     }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Reproducir desde ${formatSegmentTime(seg.start)}: ${seg.speaker || 'Hablante'}`}
+                    className={segmentClasses}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed var(--border-subtle)', paddingBottom: 6, marginBottom: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="transcript-segment-head">
+                      <div className="transcript-segment-who">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             onOpenRenameSpeaker?.(seg.speaker)
                           }}
-                          className="speaker-badge-btn"
-                          title={`Clic para renombrar a "${seg.speaker}" en toda la reunión`}
-                          aria-label={`Renombrar hablante ${seg.speaker}`}
-                          style={{
-                            background: 'rgba(99, 102, 241, 0.12)',
-                            border: '1px solid rgba(99, 102, 241, 0.25)',
-                            borderRadius: 'var(--radius-full)',
-                            padding: '3px 8px',
-                            color: 'var(--text-accent)',
-                            fontWeight: 700,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            transition: 'all var(--transition-fast)'
-                          }}
+                          className="speaker-badge-btn transcript-speaker-badge"
+                          onKeyDown={(e) => e.stopPropagation()}
+                          title={`Clic para renombrar a "${seg.speaker || 'Hablante'}" en toda la reunión`}
+                          aria-label={`Renombrar hablante ${seg.speaker || 'sin nombre'}`}
                         >
                           <Icon name="user" size={13} />
-                          <span>{seg.speaker}</span>
-                          <Icon name="edit" size={11} style={{ opacity: 0.7 }} />
+                          <span>{seg.speaker || 'Hablante'}</span>
+                          <Icon name="edit" size={11} />
                         </button>
                         {segBookmarks.map((bm) => (
                           <span
                             key={bm.id}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              background: 'rgba(245, 158, 11, 0.15)',
-                              border: '1px solid rgba(245, 158, 11, 0.35)',
-                              color: '#F59E0B',
-                              borderRadius: 'var(--radius-full)',
-                              padding: '2px 8px',
-                              fontSize: 11,
-                              fontWeight: 600
-                            }}
+                            className="transcript-segment-bookmark"
                             title={bm.note || 'Momento clave'}
                           >
                             <Icon name="bookmark" size={11} />
@@ -564,11 +549,11 @@ export default function TranscriptPanel({
                           </span>
                         ))}
                       </div>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}
+                      <span className="transcript-segment-time">
+                        {formatSegmentTime(seg.start)} – {formatSegmentTime(seg.end)}
                       </span>
                     </div>
-                    <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, margin: 0 }}>
+                    <p className="transcript-segment-text">
                       {renderHighlightedText(seg.text, cleanQuery, isSelectedBySearch)}
                     </p>
                   </div>
@@ -576,7 +561,7 @@ export default function TranscriptPanel({
               })}
             </div>
           ) : (
-            <div className="empty-state" style={{ padding: '32px 16px' }}>
+            <div className="empty-state transcript-empty-filter">
               <div className="empty-state-icon">
                 <Icon name="search" size={32} />
               </div>
@@ -587,9 +572,8 @@ export default function TranscriptPanel({
               </div>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm transcript-reset-btn"
                 onClick={() => { setSearchQuery(''); setSpeakerFilter('all'); }}
-                style={{ marginTop: 12 }}
               >
                 Restablecer filtros
               </button>
@@ -597,7 +581,7 @@ export default function TranscriptPanel({
           )
         ) : (
           transcript ? (
-            <pre className="transcript-text" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{transcript}</pre>
+            <pre className="transcript-text transcript-plain">{transcript}</pre>
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon">

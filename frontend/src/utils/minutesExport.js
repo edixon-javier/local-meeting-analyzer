@@ -1,5 +1,5 @@
 // src/utils/minutesExport.js
-// Generador y exportador de Minutas Ejecutivas en Markdown, Rich HTML y PDF
+// Generador y exportador de Minutas Ejecutivas, Transcripciones y Documentos Completos en Markdown, Rich HTML, Texto y PDF
 
 export const formatTime = (seconds) => {
   if (seconds === undefined || seconds === null) return '00:00'
@@ -8,6 +8,65 @@ export const formatTime = (seconds) => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+/**
+ * Genera el diálogo íntegro de la conversación en formato Markdown.
+ */
+export function generateTranscriptMarkdown({
+  title = 'Reunión',
+  date = '',
+  segments = [],
+  transcript = ''
+}) {
+  let md = `# 💬 Conversación Completa: ${title}\n\n`
+  if (date) {
+    md += `**Fecha:** ${date}  \n`
+  }
+  if (segments && segments.length > 0) {
+    md += `**Total intervenciones:** ${segments.length}  \n\n---\n\n`
+    segments.forEach((seg) => {
+      const spk = seg.speaker || 'Hablante'
+      const time = `[${formatTime(seg.start)} - ${formatTime(seg.end)}]`
+      md += `**${time} ${spk}:**\n${seg.text}\n\n`
+    })
+  } else if (transcript) {
+    md += `\n---\n\n${transcript}\n`
+  } else {
+    md += `*Sin transcripción disponible.*\n`
+  }
+  return md
+}
+
+/**
+ * Genera el diálogo íntegro de la conversación en formato texto plano universal (.txt).
+ */
+export function generateTranscriptText({
+  title = 'Reunión',
+  date = '',
+  segments = [],
+  transcript = ''
+}) {
+  let txt = `CONVERSACIÓN COMPLETA: ${title}\n`
+  if (date) {
+    txt += `Fecha: ${date}\n`
+  }
+  txt += `======================================================================\n\n`
+  if (segments && segments.length > 0) {
+    segments.forEach((seg) => {
+      const spk = seg.speaker || 'Hablante'
+      const time = `[${formatTime(seg.start)} - ${formatTime(seg.end)}]`
+      txt += `${time} ${spk}:\n${seg.text}\n\n`
+    })
+  } else if (transcript) {
+    txt += `${transcript}\n`
+  } else {
+    txt += `Sin transcripción disponible.\n`
+  }
+  return txt
+}
+
+/**
+ * Genera la Minuta Ejecutiva en Markdown (resumen, decisiones clave y tareas).
+ */
 export function generateExecutiveMarkdown({
   title = 'Reunión',
   date = '',
@@ -19,8 +78,10 @@ export function generateExecutiveMarkdown({
   actionItems = [],
   segments = [],
   transcript = '',
-  bookmarks = []
-}) {
+  bookmarks = [],
+  includeTranscript = false
+}, options = {}) {
+  const shouldIncludeTranscript = Boolean(includeTranscript || options.includeTranscript)
   let md = `# 📋 Minuta Ejecutiva: ${title}\n\n`
   
   if (date) {
@@ -79,20 +140,30 @@ export function generateExecutiveMarkdown({
   }
   md += `\n`
 
-  md += `## 📝 Transcripción Completa\n`
-  if (segments && segments.length > 0) {
-    segments.forEach(seg => {
-      const spk = seg.speaker || 'Hablante'
-      const time = `[${formatTime(seg.start)} - ${formatTime(seg.end)}]`
-      md += `**${time} ${spk}:** ${seg.text}\n\n`
-    })
-  } else if (transcript) {
-    md += `${transcript}\n`
-  } else {
-    md += `*Sin transcripción disponible.*\n`
+  if (shouldIncludeTranscript) {
+    md += `## 📝 Transcripción Completa\n`
+    if (segments && segments.length > 0) {
+      segments.forEach(seg => {
+        const spk = seg.speaker || 'Hablante'
+        const time = `[${formatTime(seg.start)} - ${formatTime(seg.end)}]`
+        md += `**${time} ${spk}:** ${seg.text}\n\n`
+      })
+    } else if (transcript) {
+      md += `${transcript}\n`
+    } else {
+      md += `*Sin transcripción disponible.*\n`
+    }
   }
 
   return md
+}
+
+/**
+ * Genera el Documento Completo: Minuta Ejecutiva + Diálogo Íntegro de la conversación.
+ */
+export function generateFullDocumentMarkdown(data) {
+  const base = generateExecutiveMarkdown(data, { includeTranscript: true })
+  return base.replace(/^# 📋 Minuta Ejecutiva:/, '# 📄 Documento Completo:')
 }
 
 export function generateExecutiveHtml({
@@ -106,8 +177,11 @@ export function generateExecutiveHtml({
   actionItems = [],
   segments = [],
   transcript = '',
-  bookmarks = []
-}) {
+  bookmarks = [],
+  includeTranscript = false
+}, options = {}) {
+  const shouldIncludeTranscript = Boolean(includeTranscript || options.includeTranscript)
+
   const summaryList = (summary && summary.length > 0)
     ? summary.map(s => `<li style="margin-bottom: 6px;">${s}</li>`).join('')
     : '<li><em>Sin resumen disponible.</em></li>'
@@ -138,17 +212,24 @@ export function generateExecutiveHtml({
       `).join('')
     : `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #64748b;"><em>No se identificaron tareas pendientes.</em></td></tr>`
 
-  const transcriptContent = (segments && segments.length > 0)
-    ? segments.map(seg => `
-        <div style="margin-bottom: 12px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #6366f1; border-radius: 4px;">
-          <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">
-            <strong style="color: #4338ca;">👥 ${seg.speaker || 'Hablante'}</strong> &nbsp;
-            <span style="color: #94a3b8;">⏱️ ${formatTime(seg.start)} - ${formatTime(seg.end)}</span>
-          </div>
-          <p style="margin: 0; color: #1e293b; font-size: 13px; line-height: 1.5;">${seg.text}</p>
-        </div>
-      `).join('')
-    : `<pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; color: #334155;">${transcript || 'Sin transcripción disponible.'}</pre>`
+  const transcriptSection = shouldIncludeTranscript ? `
+    <div style="margin-top: 32px;">
+      <h2 style="font-size: 18px; color: #312e81; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 16px;">📝 Transcripción Completa</h2>
+      <div style="margin-top: 12px;">
+        ${(segments && segments.length > 0)
+          ? segments.map(seg => `
+              <div style="margin-bottom: 12px; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #6366f1; border-radius: 4px;">
+                <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">
+                  <strong style="color: #4338ca;">👥 ${seg.speaker || 'Hablante'}</strong> &nbsp;
+                  <span style="color: #94a3b8;">⏱️ ${formatTime(seg.start)} - ${formatTime(seg.end)}</span>
+                </div>
+                <p style="margin: 0; color: #1e293b; font-size: 13px; line-height: 1.5;">${seg.text}</p>
+              </div>
+            `).join('')
+          : `<pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; color: #334155;">${transcript || 'Sin transcripción disponible.'}</pre>`}
+      </div>
+    </div>
+  ` : ''
 
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #0f172a; line-height: 1.6;">
@@ -195,16 +276,14 @@ export function generateExecutiveHtml({
         </table>
       </div>
 
-      <div style="margin-top: 32px;">
-        <h2 style="font-size: 18px; color: #312e81; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 16px;">📝 Transcripción Completa</h2>
-        <div style="margin-top: 12px;">
-          ${transcriptContent}
-        </div>
-      </div>
+      ${transcriptSection}
     </div>
   `
 }
 
+/**
+ * Copia la Minuta Ejecutiva al portapapeles en formato dual (HTML + Markdown).
+ */
 export async function copyExecutiveMinutes(data, showToast) {
   const md = generateExecutiveMarkdown(data)
   const html = generateExecutiveHtml(data)
@@ -224,7 +303,7 @@ export async function copyExecutiveMinutes(data, showToast) {
     }
     showToast?.({ 
       type: 'success', 
-      message: '📋 Minuta copiada al portapapeles (lista para Slack/Email)' 
+      message: 'Minuta copiada al portapapeles (lista para Slack/Email)' 
     })
     return true
   } catch (err) {
@@ -232,7 +311,7 @@ export async function copyExecutiveMinutes(data, showToast) {
       await navigator.clipboard.writeText(md)
       showToast?.({ 
         type: 'success', 
-        message: '📋 Minuta en Markdown copiada al portapapeles' 
+        message: 'Minuta en Markdown copiada al portapapeles' 
       })
       return true
     } catch (fallbackErr) {
@@ -245,6 +324,105 @@ export async function copyExecutiveMinutes(data, showToast) {
   }
 }
 
+/**
+ * Copia la conversación completa íntegra al portapapeles.
+ */
+export async function copyTranscript(data, showToast) {
+  const text = generateTranscriptText(data)
+  try {
+    await navigator.clipboard.writeText(text)
+    showToast?.({
+      type: 'success',
+      message: 'Conversación completa copiada al portapapeles'
+    })
+    return true
+  } catch (err) {
+    showToast?.({
+      type: 'error',
+      message: 'Error al copiar conversación: ' + err.message
+    })
+    return false
+  }
+}
+
+/**
+ * Copia el Documento Completo (Minuta + Conversación) al portapapeles.
+ */
+export async function copyFullDocument(data, showToast) {
+  const md = generateFullDocumentMarkdown(data)
+  const html = generateExecutiveHtml(data, { includeTranscript: true })
+
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const textBlob = new Blob([md], { type: 'text/plain' })
+      const htmlBlob = new Blob([html], { type: 'text/html' })
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': textBlob,
+          'text/html': htmlBlob,
+        })
+      ])
+    } else {
+      await navigator.clipboard.writeText(md)
+    }
+    showToast?.({
+      type: 'success',
+      message: 'Documento completo copiado al portapapeles'
+    })
+    return true
+  } catch (err) {
+    try {
+      await navigator.clipboard.writeText(md)
+      showToast?.({
+        type: 'success',
+        message: 'Documento completo en Markdown copiado al portapapeles'
+      })
+      return true
+    } catch (fallbackErr) {
+      showToast?.({
+        type: 'error',
+        message: 'Error al copiar documento: ' + (fallbackErr.message || err.message)
+      })
+      return false
+    }
+  }
+}
+
+/**
+ * Descarga la conversación completa en archivo (.txt o .md).
+ */
+export function downloadTranscriptFile(data, filename, showToast, format = 'txt') {
+  try {
+    const isMd = format === 'md'
+    const content = isMd ? generateTranscriptMarkdown(data) : generateTranscriptText(data)
+    const mime = isMd ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8'
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const safeTitle = (filename || data.title || 'conversacion')
+      .replace(/[^\w\d\-_.]/g, '_')
+      .replace(/_{2,}/g, '_')
+    a.download = `conversacion_${safeTitle}.${isMd ? 'md' : 'txt'}`
+    a.href = url
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    showToast?.({
+      type: 'success',
+      message: `Conversación completa descargada (.${isMd ? 'md' : 'txt'})`
+    })
+    return true
+  } catch (err) {
+    showToast?.({
+      type: 'error',
+      message: 'Error al descargar conversación: ' + err.message
+    })
+    return false
+  }
+}
+
+/**
+ * Descarga la Minuta Ejecutiva en Markdown (.md).
+ */
 export function downloadExecutiveMarkdown(data, filename, showToast) {
   try {
     const md = generateExecutiveMarkdown(data)
@@ -257,26 +435,56 @@ export function downloadExecutiveMarkdown(data, filename, showToast) {
     a.download = `minuta_ejecutiva_${safeTitle}.md`
     a.href = url
     a.click()
-    URL.revokeObjectURL(url)
-    showToast?.({ type: 'success', message: '📥 Archivo Markdown (.md) descargado' })
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    showToast?.({ type: 'success', message: 'Minuta ejecutiva (.md) descargada' })
     return true
   } catch (err) {
-    showToast?.({ type: 'error', message: 'Error al descargar Markdown: ' + err.message })
+    showToast?.({ type: 'error', message: 'Error al descargar Minuta: ' + err.message })
     return false
   }
 }
 
-export async function exportExecutivePdf(data, filename, showToast) {
-  const safeTitle = (filename || data.title || 'minuta')
+/**
+ * Descarga el Documento Completo en Markdown (.md), que incluye la Minuta y el Diálogo Íntegro.
+ */
+export function downloadFullDocumentMarkdown(data, filename, showToast) {
+  try {
+    const md = generateFullDocumentMarkdown(data)
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const safeTitle = (filename || data.title || 'documento')
+      .replace(/[^\w\d\-_.]/g, '_')
+      .replace(/_{2,}/g, '_')
+    a.download = `documento_completo_${safeTitle}.md`
+    a.href = url
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    showToast?.({ type: 'success', message: 'Documento completo (.md) descargado' })
+    return true
+  } catch (err) {
+    showToast?.({ type: 'error', message: 'Error al descargar documento: ' + err.message })
+    return false
+  }
+}
+
+/**
+ * Exporta el reporte formal a PDF mediante Electron o el diálogo de impresión.
+ * Permite seleccionar 'full' (Documento Completo con Diálogo) o 'executive' (Minuta Ejecutiva concisa).
+ */
+export async function exportExecutivePdf(data, filename, showToast, mode = 'full') {
+  const safeTitle = (filename || data.title || 'documento')
     .replace(/[^\w\d\-_.]/g, '_')
     .replace(/_{2,}/g, '_')
-  const defaultFilename = `minuta_ejecutiva_${safeTitle}.pdf`
+  const prefix = mode === 'executive' ? 'minuta_ejecutiva' : 'documento_completo'
+  const defaultFilename = `${prefix}_${safeTitle}.pdf`
+  const label = mode === 'executive' ? 'Minuta ejecutiva (.pdf)' : 'Documento completo (.pdf)'
 
   if (window.electronAPI?.exportPDF) {
     try {
       const success = await window.electronAPI.exportPDF(defaultFilename)
       if (success) {
-        showToast?.({ type: 'success', message: '📥 PDF exportado correctamente' })
+        showToast?.({ type: 'success', message: `${label} exportado correctamente` })
         return true
       } else {
         showToast?.({ type: 'info', message: 'Exportación a PDF cancelada' })
@@ -291,7 +499,7 @@ export async function exportExecutivePdf(data, filename, showToast) {
     try {
       showToast?.({ 
         type: 'info', 
-        message: '🖨️ Abriendo diálogo de impresión (selecciona "Guardar como PDF")' 
+        message: 'Abriendo diálogo de impresión: elige «Guardar como PDF»' 
       })
       setTimeout(() => {
         window.print()

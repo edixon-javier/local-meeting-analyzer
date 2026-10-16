@@ -17,6 +17,10 @@ class ConfigUpdateRequest(BaseModel):
     ai_provider: Optional[str] = None
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    claude_model: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    gemini_model: Optional[str] = None
     allow_cloud_fallback: Optional[bool] = None
     analysis_focus: Optional[str] = None
     record_mode: Optional[str] = None
@@ -127,6 +131,26 @@ def get_session(
     session.set_paused(audio.is_paused)
     return session.get_state()
 
+def _clean_mic_name(name: str) -> str:
+    """Nombre legible del micrófono: Windows ya suele traerlo como 'Micrófono (X)', así que no se vuelve a prefijar."""
+    name = (name or "").strip()
+    if name.lower().startswith(("micrófono", "microfono", "microphone")):
+        return name
+    return f"Micrófono - {name}" if name else "Micrófono"
+
+def _unique_labels(devices: list) -> list:
+    """Si dos dispositivos quedan con la misma etiqueta, añade un sufijo numérico para distinguirlos."""
+    counts = {}
+    for d in devices:
+        counts[d["name"]] = counts.get(d["name"], 0) + 1
+    seen = {}
+    for d in devices:
+        base = d["name"]
+        if counts[base] > 1:
+            seen[base] = seen.get(base, 0) + 1
+            d["name"] = f"{base} ({seen[base]})"
+    return devices
+
 @router.get("/audio/devices")
 def get_audio_devices():
     """Retorna los dispositivos de audio de grabación disponibles."""
@@ -142,8 +166,8 @@ def get_audio_devices():
 
         mics = sc.all_microphones(include_loopback=False)
         for mic in mics:
-            devices.append({"id": mic.id, "name": f"Micrófono - {mic.name}"})
-        return {"devices": devices}
+            devices.append({"id": mic.id, "name": _clean_mic_name(mic.name)})
+        return {"devices": _unique_labels(devices)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -199,6 +223,95 @@ def test_ai_connection(
             else:
                 raise HTTPException(status_code=500, detail=f"Error al conectar con OpenAI: {str(e)}")
 
+    elif provider == "claude":
+        typed_key = (request.api_key or "").strip()
+        if is_masked_api_key(typed_key):
+            typed_key = ""
+        api_key = typed_key or config.get("anthropic_api_key", "").strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Debes ingresar o tener guardada una clave API de Anthropic (Claude).")
+        
+        model = (request.model or "").strip() or config.get("claude_model", "claude-3-5-haiku-20241022")
+        import requests
+        t0 = time.time()
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        body = {
+            "model": model,
+            "max_tokens": 5,
+            "messages": [{"role": "user", "content": "ping"}]
+        }
+        try:
+            res = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=body, timeout=12.0)
+            latency_ms = max(1, int((time.time() - t0) * 1000))
+            if res.status_code == 200:
+                return {
+                    "status": "ok",
+                    "provider": "claude",
+                    "model": model,
+                    "latency_ms": latency_ms,
+                    "message": f"Conexión exitosa con Claude ({latency_ms} ms). Modelo '{model}' verificado y listo."
+                }
+            elif res.status_code == 401:
+                raise HTTPException(status_code=401, detail="API Key de Anthropic inválida o no autorizada (Error 401). Verifica tu clave en console.anthropic.com.")
+            elif res.status_code == 429:
+                raise HTTPException(status_code=429, detail="Límite de cuota excedido o fondos insuficientes en Anthropic (Error 429).")
+            elif res.status_code == 404:
+                raise HTTPException(status_code=404, detail=f"El modelo '{model}' no existe o no está habilitado en tu cuenta de Anthropic.")
+            else:
+                raise HTTPException(status_code=res.status_code, detail=f"Error al conectar con Claude ({res.status_code}): {res.text}")
+        except requests.exceptions.Timeout:
+            raise HTTPException(status_code=504, detail="Tiempo de espera agotado al conectar con Claude (Anthropic).")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=500, detail=f"Error al conectar con Claude: {str(e)}")
+
+    elif provider == "gemini":
+        typed_key = (request.api_key or "").strip()
+        if is_masked_api_key(typed_key):
+            typed_key = ""
+        api_key = typed_key or config.get("gemini_api_key", "").strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Debes ingresar o tener guardada una clave API de Google Gemini.")
+        
+        model = (request.model or "").strip() or config.get("gemini_model", "gemini-2.0-flash")
+        import requests
+        t0 = time.time()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        body = {
+            "contents": [{"parts": [{"text": "ping"}]}],
+            "generationConfig": {"maxOutputTokens": 5}
+        }
+        try:
+            res = requests.post(url, json=body, timeout=12.0)
+            latency_ms = max(1, int((time.time() - t0) * 1000))
+            if res.status_code == 200:
+                return {
+                    "status": "ok",
+                    "provider": "gemini",
+                    "model": model,
+                    "latency_ms": latency_ms,
+                    "message": f"Conexión exitosa con Google Gemini ({latency_ms} ms). Modelo '{model}' verificado y listo."
+                }
+            elif res.status_code in (400, 403):
+                raise HTTPException(status_code=401, detail="API Key de Google Gemini inválida o no autorizada. Verifica tu clave en Google AI Studio.")
+            elif res.status_code == 429:
+                raise HTTPException(status_code=429, detail="Límite de cuota excedido en Google Gemini (Error 429).")
+            elif res.status_code == 404:
+                raise HTTPException(status_code=404, detail=f"El modelo '{model}' no existe en la API de Google Gemini.")
+            else:
+                raise HTTPException(status_code=res.status_code, detail=f"Error al conectar con Google Gemini ({res.status_code}): {res.text}")
+        except requests.exceptions.Timeout:
+            raise HTTPException(status_code=504, detail="Tiempo de espera agotado al conectar con Google Gemini.")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=500, detail=f"Error al conectar con Google Gemini: {str(e)}")
+
     elif provider == "local":
         model = (request.model or "").strip() or config.get("ollama_model", DEFAULT_OLLAMA_MODEL)
         import requests
@@ -235,7 +348,7 @@ def test_ai_connection(
                 raise e
             raise HTTPException(status_code=500, detail=f"Error al verificar Ollama: {str(e)}")
     else:
-        raise HTTPException(status_code=400, detail=f"Proveedor desconocido: '{provider}'. Valores permitidos: 'openai', 'local'.")
+        raise HTTPException(status_code=400, detail=f"Proveedor desconocido: '{provider}'. Valores permitidos: 'openai', 'claude', 'gemini', 'local'.")
 
 @router.get("/config")
 def get_current_config(config: Config = Depends(get_config)):
@@ -251,13 +364,14 @@ def update_config(
 ):
     """Actualiza la configuración del sistema."""
     updates = {k: v for k, v in request.model_dump().items() if v is not None}
-    if "openai_api_key" in updates:
-        # Un valor enmascarado (el que devuelve GET /config) no es una clave: se ignora y se
-        # conserva la guardada. Una cadena vacía es un borrado explícito de la clave.
-        if is_masked_api_key(updates["openai_api_key"]):
-            del updates["openai_api_key"]
-        else:
-            updates["openai_api_key"] = updates["openai_api_key"].strip()
+    for key_name in ("openai_api_key", "anthropic_api_key", "gemini_api_key"):
+        if key_name in updates:
+            # Un valor enmascarado (el que devuelve GET /config) no es una clave: se ignora y se
+            # conserva la guardada. Una cadena vacía es un borrado explícito de la clave.
+            if is_masked_api_key(updates[key_name]):
+                del updates[key_name]
+            else:
+                updates[key_name] = updates[key_name].strip()
     config.update(updates)
     config.save()
     

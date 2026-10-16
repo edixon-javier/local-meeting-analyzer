@@ -2,31 +2,37 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useSystem } from '../hooks/useSystem'
 import { useAnalysisPipeline } from '../hooks/useAnalysisPipeline'
 import { renameSpeaker, addRecordingBookmark, deleteRecordingBookmark, updateRecordingTaskStatus } from '../api'
-import { 
-  copyExecutiveMinutes, 
-  downloadExecutiveMarkdown, 
-  exportExecutivePdf 
+import {
+  copyExecutiveMinutes,
+  downloadExecutiveMarkdown,
+  downloadFullDocumentMarkdown,
+  downloadTranscriptFile,
+  copyTranscript,
+  exportExecutivePdf
 } from '../utils/minutesExport'
 import TranscriptPanel from './analysis/TranscriptPanel'
 import InsightsPanel from './analysis/InsightsPanel'
 import ChatPanel from './ChatPanel'
 import SpeakerRenameModal from './SpeakerRenameModal'
+import Modal from './Modal'
 import Icon from './Icon'
+import '../styles/analysis.css'
+import { getRecordingTitle } from '../utils/recordingName'
 
-export default function AnalysisScreen({ audioPath, onBack }) {
+export default function AnalysisScreen({ audioPath, onBack, onNavigate }) {
   const { showToast, systemStatus } = useSystem()
-  
-  const { 
-    step, 
-    transcript, 
-    segments, 
-    analysis, 
+
+  const {
+    step,
+    transcript,
+    segments,
+    analysis,
     bookmarks,
     setBookmarks,
-    errorMsg, 
-    elapsedSeconds, 
-    progressPercent, 
-    cancelPipeline, 
+    errorMsg,
+    elapsedSeconds,
+    progressPercent,
+    cancelPipeline,
     reprocess,
     updateSpeakerInState,
     updateTaskInState
@@ -36,7 +42,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1)
   const audioRef = useRef(null)
-  
+
   const [activeTab, setActiveTab] = useState('insights') // insights | chat
 
   const formatSegmentTime = (seconds) => {
@@ -49,6 +55,8 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   // Speaker Rename Modal State
   const [speakerModalOpen, setSpeakerModalOpen] = useState(false)
   const [selectedSpeaker, setSelectedSpeaker] = useState('')
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [pdfPrintMode, setPdfPrintMode] = useState('full')
 
   const handleOpenRenameSpeaker = (speakerName) => {
     setSelectedSpeaker(speakerName)
@@ -123,7 +131,9 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     ? segments.filter(s => s.speaker === selectedSpeaker).length
     : 0
 
-  const cleanTitle = audioPath ? audioPath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '') : 'Reunión'
+  // Título legible ("Reunión · 6 oct, 19:56" o el nombre que puso el usuario) y nombre seguro para archivos exportados
+  const cleanTitle = audioPath ? getRecordingTitle(audioPath.split(/[/\\]/).pop()) : 'Reunión'
+  const exportFileName = cleanTitle.replace(/[<>:"/\\|?*]/g, '-')
 
   const getMinutesData = () => ({
     title: cleanTitle,
@@ -146,12 +156,19 @@ export default function AnalysisScreen({ audioPath, onBack }) {
 
   const handleDownloadMarkdown = () => {
     if (!analysis) return
-    downloadExecutiveMarkdown(getMinutesData(), cleanTitle, showToast)
+    downloadExecutiveMarkdown(getMinutesData(), exportFileName, showToast)
   }
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (mode = 'full') => {
     if (!analysis) return
-    await exportExecutivePdf(getMinutesData(), cleanTitle, showToast)
+    setPdfPrintMode(mode)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    await exportExecutivePdf(getMinutesData(), exportFileName, showToast, mode)
+  }
+
+  const handleDownloadTranscript = (format = 'txt') => {
+    if (!analysis) return
+    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, format)
   }
 
   const handleTimeUpdate = () => {
@@ -169,7 +186,15 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   const handleSegmentClick = (start) => {
     if (audioRef.current) {
       audioRef.current.currentTime = start
-      audioRef.current.play()
+      audioRef.current.play?.()
+    }
+    if (segments && segments.length > 0) {
+      const startNum = typeof start === 'number' ? start : parseFloat(start)
+      const exactIndex = segments.findIndex(seg => startNum >= seg.start && startNum <= (seg.end + 0.5))
+      const targetIndex = exactIndex !== -1 ? exactIndex : segments.reduce((closest, seg, idx) => {
+        return Math.abs(seg.start - startNum) < Math.abs(segments[closest].start - startNum) ? idx : closest
+      }, 0)
+      setActiveSegmentIndex(targetIndex)
     }
   }
 
@@ -190,6 +215,10 @@ export default function AnalysisScreen({ audioPath, onBack }) {
           const topPos = activeEl.offsetTop - container.offsetTop - (container.clientHeight / 2) + (activeEl.clientHeight / 2)
           container.scrollTo({ top: Math.max(0, topPos), behavior: 'smooth' })
         }
+        // Aplicar pulso visual para sincronizar visualmente el transcript con el timestamp del chat
+        activeEl.classList.remove('chat-timestamp-pulse')
+        void activeEl.offsetWidth
+        activeEl.classList.add('chat-timestamp-pulse')
       }
     }
   }, [activeSegmentIndex])
@@ -199,21 +228,20 @@ export default function AnalysisScreen({ audioPath, onBack }) {
     onBack()
   }
 
-  const meetingFilename = audioPath ? audioPath.split(/[/\\]/).pop() : 'Reunión'
 
   // ── Pantallas de Carga y Espera Unificada (Cero sobreposición de loaders) ──
   if (step === 'checking') {
     return (
       <div className="unified-processing-screen">
-        <div className="unified-processing-card" style={{ maxWidth: 440 }}>
+        <div className="unified-processing-card analysis-card-compact">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '24px 0 16px', display: 'flex', justifyContent: 'center' }}>
-            <div className="spinner-small" style={{ width: 34, height: 34, borderWidth: 3 }} />
+          <div className="analysis-spinner-wrap">
+            <div className="spinner-small analysis-spinner-lg" aria-hidden="true" />
           </div>
-          <h2 className="unified-processing-title" style={{ fontSize: 18 }}>Preparando reunión...</h2>
-          <p className="unified-processing-sub" style={{ fontSize: 13, marginBottom: 8 }}>
+          <h2 className="unified-processing-title analysis-title-sm">Preparando reunión...</h2>
+          <p className="unified-processing-sub analysis-sub-sm">
             Verificando datos locales y configurando el motor de análisis.
           </p>
         </div>
@@ -226,16 +254,16 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' }}>
+          <div className="analysis-status-icon is-warning">
             <Icon name="clock" size={30} />
           </div>
           <h2 className="unified-processing-title">Proceso previo en cola</h2>
-          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+          <p className="unified-processing-sub analysis-sub-narrow">
             El motor de IA está finalizando una tarea anterior o liberando memoria. Puedes esperar o desbloquear el reprocesamiento inmediato.
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <div className="analysis-status-actions">
             <button type="button" className="btn btn-primary" onClick={reprocess}>
               <Icon name="refresh" size={15} /> Desbloquear y Reprocesar
             </button>
@@ -258,7 +286,7 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
 
           {/* Anillo de Progreso Único (Cero sobreposiciones) */}
@@ -322,17 +350,17 @@ export default function AnalysisScreen({ audioPath, onBack }) {
               <span className="stage-dot">
                 <Icon name="check" size={11} />
               </span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Audio</span>
+              <span className="analysis-stage-label">Audio</span>
             </div>
             <div className="processing-stage-item active">
               <span className="stage-dot">
                 {!isTranscribing ? <Icon name="check" size={11} /> : '2'}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Transcripción</span>
+              <span className="analysis-stage-label">Transcripción</span>
             </div>
             <div className={`processing-stage-item ${!isTranscribing ? 'active' : ''}`}>
               <span className="stage-dot">3</span>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>Análisis IA</span>
+              <span className="analysis-stage-label">Análisis IA</span>
             </div>
           </div>
 
@@ -351,16 +379,16 @@ export default function AnalysisScreen({ audioPath, onBack }) {
       <div className="unified-processing-screen">
         <div className="unified-processing-card">
           <div className="processing-card-header">
-            <span className="processing-meeting-title">{meetingFilename}</span>
+            <span className="processing-meeting-title">{cleanTitle}</span>
           </div>
-          <div style={{ margin: '16px 0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#EF4444' }}>
+          <div className="analysis-status-icon is-error">
             <Icon name="alert-triangle" size={32} />
           </div>
-          <h2 className="unified-processing-title" style={{ color: '#EF4444' }}>Error en el procesamiento</h2>
-          <p className="unified-processing-sub" style={{ maxWidth: 360 }}>
+          <h2 className="unified-processing-title analysis-title-error">Error en el procesamiento</h2>
+          <p className="unified-processing-sub analysis-sub-narrow">
             {errorMsg || 'No fue posible completar el procesamiento de la reunión.'}
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <div className="analysis-status-actions">
             <button type="button" className="btn btn-primary" onClick={reprocess}>
               <Icon name="refresh" size={15} /> Reprocesar Audio
             </button>
@@ -376,7 +404,8 @@ export default function AnalysisScreen({ audioPath, onBack }) {
   // ── Vista completa de análisis ──
   return (
     <div className="analysis-screen">
-      <TranscriptPanel 
+      <TranscriptPanel
+        meetingTitle={cleanTitle}
         audioPath={audioPath}
         transcript={transcript}
         segments={segments}
@@ -396,65 +425,97 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         onDeleteBookmark={handleDeleteBookmark}
       />
 
-      <div className="insights-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="tabs" style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className={`btn btn-sm ${activeTab === 'insights' ? 'btn-primary' : 'btn-secondary'}`}
+      <div className="insights-panel analysis-side-panel">
+        <div className="panel-header analysis-side-header">
+          <div className="tabs analysis-tabs" role="tablist" aria-label="Vista del panel">
+            <button
+              type="button"
+              role="tab"
+              id="insights-tab"
+              aria-selected={activeTab === 'insights'}
+              aria-controls="insights-tabpanel"
+              className={`btn btn-sm analysis-tab ${activeTab === 'insights' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('insights')}
-              style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
               <Icon name="file-text" size={14} /> Resumen
             </button>
-            <button 
-              className={`btn btn-sm ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
+            <button
+              type="button"
+              role="tab"
+              id="chat-tab"
+              aria-selected={activeTab === 'chat'}
+              aria-controls="insights-tabpanel"
+              className={`btn btn-sm analysis-tab ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setActiveTab('chat')}
-              style={{ borderRadius: '16px', padding: '6px 12px', fontSize: '13px' }}
             >
               <Icon name="chat" size={14} /> Chat IA
             </button>
           </div>
-          
+
           {activeTab === 'insights' && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button 
-                onClick={handleCopyMinutes} 
-                className="btn btn-secondary btn-sm" 
-                title="Copiar Minuta Ejecutiva (lista para Slack/Email en Markdown y formato enriquecido)"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+            <div className="analysis-export-actions" role="group" aria-label="Opciones de exportación">
+              <button
+                type="button"
+                onClick={handleCopyMinutes}
+                className="btn btn-secondary btn-square"
+                title="Copiar minuta ejecutiva al portapapeles (lista para Slack / Email)"
+                aria-label="Copiar minuta al portapapeles"
               >
-                <Icon name="copy" size={14} /> Copiar Minuta
+                <Icon name="copy" size={14} />
               </button>
-              <button 
-                onClick={handleDownloadMarkdown} 
-                className="btn btn-secondary btn-sm" 
-                title="Descargar archivo Markdown (.md) estructurado"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+              <button
+                type="button"
+                onClick={() => handleDownloadTranscript('txt')}
+                className="btn btn-secondary btn-square"
+                title="Descargar conversación completa en texto (.txt)"
+                aria-label="Descargar conversación completa"
               >
-                <Icon name="download" size={14} /> Descargar MD
+                <Icon name="chat" size={14} />
               </button>
-              <button 
-                onClick={handleExportPDF} 
-                className="btn btn-secondary btn-sm" 
-                title="Generar y guardar Minuta Ejecutiva en PDF"
-                style={{ padding: '6px 10px', fontSize: '13px' }}
+              <button
+                type="button"
+                onClick={() => setExportModalOpen(true)}
+                className="btn btn-secondary btn-square"
+                title="Opciones de exportación: Documento Completo, Minuta o Conversación"
+                aria-label="Opciones de exportación"
               >
-                <Icon name="file-text" size={14} /> PDF
+                <Icon name="download" size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportPDF('full')}
+                className="btn btn-secondary btn-square"
+                title="Exportar Documento Completo en PDF"
+                aria-label="Exportar documento en PDF"
+              >
+                <Icon name="file-text" size={14} />
               </button>
             </div>
           )}
         </div>
-        
-        <div className="panel-body" style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        <div
+          className="panel-body analysis-side-body"
+          id="insights-tabpanel"
+          role="tabpanel"
+          aria-labelledby={activeTab === 'chat' ? 'chat-tab' : 'insights-tab'}
+        >
           {activeTab === 'chat' ? (
-            <ChatPanel audioPath={audioPath} />
+            <ChatPanel
+              audioPath={audioPath}
+              onSeekAudio={handleSegmentClick}
+              onNavigate={onNavigate}
+            />
           ) : (
-            <InsightsPanel 
-              analysis={analysis} 
+            <InsightsPanel
+              analysis={analysis}
               bookmarks={bookmarks}
               onSeekAudio={handleSegmentClick}
               onToggleTask={handleToggleTaskStatus}
               meetingTitle={cleanTitle}
+              audioPath={audioPath}
+              filename={audioPath ? audioPath.split(/[/\\]/).pop() : null}
+              showToast={showToast}
             />
           )}
         </div>
@@ -469,12 +530,177 @@ export default function AnalysisScreen({ audioPath, onBack }) {
         onClose={() => setSpeakerModalOpen(false)}
       />
 
+      {/* Modal de Exportación y Descargas Estructuradas */}
+      {exportModalOpen && (
+        <Modal
+          titleId="export-dialog-title"
+          onClose={() => setExportModalOpen(false)}
+          maxWidth={480}
+        >
+          <div className="modal-header" style={{ marginBottom: 12 }}>
+            <h3 id="export-dialog-title" className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 16 }}>
+              <Icon name="download" size={18} /> Exportar Reunión y Documentos
+            </h3>
+            <button
+              type="button"
+              className="btn btn-secondary btn-square"
+              onClick={() => setExportModalOpen(false)}
+              aria-label="Cerrar diálogo de exportación"
+              style={{ width: 28, height: 28, padding: 0 }}
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Selecciona el tipo de documento que deseas generar para <strong>{cleanTitle}</strong>:
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Opción 1: Documento Completo */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="file-text" size={15} style={{ color: 'var(--accent-primary)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Documento Completo</strong>
+                <span className="pill" style={{ fontSize: 10, padding: '1px 6px' }}>Recomendado</span>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Informe exhaustivo: resumen ejecutivo, decisiones clave, compromisos y la transcripción íntegra de la conversación.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    downloadFullDocumentMarkdown(getMinutesData(), exportFileName, showToast)
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Descargar .md
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    setExportModalOpen(false)
+                    await handleExportPDF('full')
+                  }}
+                  style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="file-text" size={13} /> Exportar PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Opción 2: Minuta Ejecutiva */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="target" size={15} style={{ color: 'var(--green-ok)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Minuta Ejecutiva</strong>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Resumen ejecutivo de 1 página con decisiones y compromisos clave para compartir en Slack, Teams o Email.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    await handleCopyMinutes()
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="copy" size={13} /> Copiar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    handleDownloadMarkdown()
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Descargar .md
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    setExportModalOpen(false)
+                    await handleExportPDF('executive')
+                  }}
+                  style={{ flex: 1, minWidth: 90, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="file-text" size={13} /> Exportar PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Opción 3: Conversación Completa */}
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Icon name="chat" size={15} style={{ color: 'var(--amber)' }} />
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Conversación Completa</strong>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                Diálogo íntegro segmentado por interlocutor con marcas de tiempo en formato texto universal.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, 'txt')
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Texto (.txt)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    downloadTranscriptFile(getMinutesData(), exportFileName, showToast, 'md')
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="download" size={13} /> Diálogo (.md)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    await copyTranscript(getMinutesData(), showToast)
+                    setExportModalOpen(false)
+                  }}
+                  style={{ flex: 1, minWidth: 100, justifyContent: 'center', fontSize: 12 }}
+                >
+                  <Icon name="copy" size={13} /> Copiar Diálogo
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Plantilla invisible en pantalla para impresión / PDF formal */}
       {analysis && (
         <div className="executive-print-report" aria-hidden="true">
           <div className="print-header">
-            <div className="print-badge-header">MEETING ANALYZER &bull; MINUTA EJECUTIVA OFICIAL</div>
-            <h1 className="print-title">📋 Minuta Ejecutiva: {cleanTitle}</h1>
+            <div className="print-badge-header">
+              {pdfPrintMode === 'executive'
+                ? 'MEETING ANALYZER • MINUTA EJECUTIVA OFICIAL'
+                : 'MEETING ANALYZER • DOCUMENTO COMPLETO DE REUNIÓN'}
+            </div>
+            <h1 className="print-title">
+              {pdfPrintMode === 'executive' ? '📋 Minuta Ejecutiva: ' : '📄 Documento Completo: '}
+              {cleanTitle}
+            </h1>
             <div className="print-meta-row">
               <span>📅 {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
               <span>🏷️ <strong>Categoría:</strong> {analysis.category || 'General'}</span>
@@ -552,24 +778,26 @@ export default function AnalysisScreen({ audioPath, onBack }) {
             </table>
           </div>
 
-          <div className="print-section print-page-break">
-            <h2 className="print-section-title">📝 Transcripción Completa</h2>
-            <div className="print-transcript-list">
-              {segments && segments.length > 0 ? (
-                segments.map((seg, idx) => (
-                  <div key={idx} className="print-transcript-item">
-                    <div className="print-transcript-speaker">
-                      <strong>👥 {seg.speaker || 'Hablante'}</strong>
-                      <span className="print-transcript-time">⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
+          {pdfPrintMode === 'full' && (
+            <div className="print-section print-page-break">
+              <h2 className="print-section-title">📝 Transcripción Completa</h2>
+              <div className="print-transcript-list">
+                {segments && segments.length > 0 ? (
+                  segments.map((seg, idx) => (
+                    <div key={idx} className="print-transcript-item">
+                      <div className="print-transcript-speaker">
+                        <strong>👥 {seg.speaker || 'Hablante'}</strong>
+                        <span className="print-transcript-time">⏱️ {formatSegmentTime(seg.start)} - {formatSegmentTime(seg.end)}</span>
+                      </div>
+                      <p className="print-transcript-text">{seg.text}</p>
                     </div>
-                    <p className="print-transcript-text">{seg.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p style={{ whiteSpace: 'pre-wrap' }}>{transcript || 'Sin transcripción.'}</p>
-              )}
+                  ))
+                ) : (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{transcript || 'Sin transcripción.'}</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

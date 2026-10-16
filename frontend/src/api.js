@@ -5,6 +5,25 @@ import axios from 'axios'
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8765'
 export const getAudioUrl = (audioPath) => `${BASE_URL}/recordings/audio?path=${encodeURIComponent(audioPath)}`
+export const getAudioDownloadUrl = (audioPath, filename) => {
+  const fileParam = filename ? `&filename=${encodeURIComponent(filename)}` : ''
+  return `${BASE_URL}/recordings/audio?path=${encodeURIComponent(audioPath)}&download=true${fileParam}`
+}
+export const getMeetingTasksExportUrl = (filename, format = 'csv', status = 'all', title = null) => {
+  const safeFilename = filename ? filename.split(/[/\\]/).pop() : ''
+  let url = `${BASE_URL}/recordings/${encodeURIComponent(safeFilename)}/tasks/export?format=${encodeURIComponent(format)}&status=${encodeURIComponent(status)}`
+  if (title) {
+    url += `&title=${encodeURIComponent(title)}`
+  }
+  return url
+}
+export const getConsolidatedTasksExportUrl = (format = 'csv', status = 'all', category = null) => {
+  let url = `${BASE_URL}/recordings/tasks/export?format=${encodeURIComponent(format)}&status=${encodeURIComponent(status)}`
+  if (category && category !== 'All') {
+    url += `&category=${encodeURIComponent(category)}`
+  }
+  return url
+}
 
 // Estado local de conectividad en la capa de red
 let isBackendOffline = false
@@ -94,16 +113,194 @@ export const renameSpeaker = (filename, oldSpeaker, newSpeaker) =>
     old_speaker: oldSpeaker,
     new_speaker: newSpeaker,
   })
+
+// ─── Dictado Global en Cursor y Auditoría de Voz ───
+export const startDictation = (data = {}) => api.post('/dictation/start', data)
+export const stopDictation = (data = {}) => api.post('/dictation/stop', data)
+export const cancelDictation = () => api.post('/dictation/cancel')
+export const getDictationStatus = () => api.get('/dictation/status')
+export const getDictationHistory = (params = {}) => api.get('/dictation/history', { params })
+export const getDictationAudioUrl = (filename) => `${BASE_URL}/dictation/audio/${encodeURIComponent(filename)}`
+export const deleteDictation = (id) => api.delete(`/dictation/${encodeURIComponent(id)}`)
+export const reinjectDictation = (id) => api.post(`/dictation/${encodeURIComponent(id)}/reinject`)
 export const addRecordingBookmark = (filename, time, note = '') =>
   api.post(`/recordings/${encodeURIComponent(filename)}/bookmarks`, { time, note })
 export const deleteRecordingBookmark = (filename, bookmarkId) =>
   api.delete(`/recordings/${encodeURIComponent(filename)}/bookmarks/${encodeURIComponent(bookmarkId)}`)
 export const updateRecordingTaskStatus = (filename, taskIndex, completed) =>
   api.patch(`/recordings/${encodeURIComponent(filename)}/tasks/${taskIndex}`, { completed })
+export const getConsolidatedTasks = (status = 'all', category = null) => {
+  const params = { status }
+  if (category && category !== 'All') {
+    params.category = category
+  }
+  return api.get('/recordings/tasks', { params })
+}
+export const exportMeetingTasks = (filename, format = 'csv', status = 'all', title = null) => {
+  const safeFilename = filename ? filename.split(/[/\\]/).pop() : ''
+  const params = { format, status }
+  if (title) {
+    params.title = title
+  }
+  return api.get(`/recordings/${encodeURIComponent(safeFilename)}/tasks/export`, {
+    params,
+    responseType: 'blob'
+  })
+}
+export const exportConsolidatedTasks = (format = 'csv', status = 'all', category = null) => {
+  const params = { format, status }
+  if (category && category !== 'All') {
+    params.category = category
+  }
+  return api.get('/recordings/tasks/export', {
+    params,
+    responseType: 'blob'
+  })
+}
 export const getConfig = () => api.get('/config')
 export const updateConfig = (config) => api.post('/config', config)
-export const chatWithMeeting = (audioPath, messages, question) => api.post('/chat', { audio_path: audioPath, messages, question })
-export const chatWithHistory = (messages, question) => api.post('/chat/history', { messages, question })
+export const chatWithMeeting = (audioPath, messages, question, options = {}) =>
+  api.post('/chat', { audio_path: audioPath, messages, question }, options)
+export const chatWithHistory = (messages, question, options = {}) =>
+  api.post('/chat/history', { messages, question }, options)
+
+export async function chatWithMeetingStream(audioPath, messages, question, onChunk, options = {}) {
+  const signal = options.signal
+  try {
+    const response = await fetch(`${BASE_URL}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio_path: audioPath, messages, question }),
+      signal
+    })
+
+    if (!response.ok) {
+      const fallback = await chatWithMeeting(audioPath, messages, question, options)
+      if (fallback.data?.response) {
+        onChunk?.(fallback.data.response)
+      }
+      return fallback.data
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+    let grounding = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(trimmed.slice(6))
+            if (data.error) {
+              throw new Error(data.error)
+            }
+            if (data.text) {
+              fullText += data.text
+              onChunk?.(fullText)
+            }
+            if (data.grounding) {
+              grounding = data.grounding
+            }
+          } catch (e) {
+            if (e.message && !e.message.includes('JSON')) throw e
+          }
+        }
+      }
+    }
+    return { response: fullText, grounding }
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'CanceledError') {
+      const abortErr = new Error('canceled')
+      abortErr.name = 'CanceledError'
+      throw abortErr
+    }
+    const fallback = await chatWithMeeting(audioPath, messages, question, options)
+    if (fallback.data?.response) {
+      onChunk?.(fallback.data.response)
+    }
+    return fallback.data
+  }
+}
+
+export async function chatWithHistoryStream(messages, question, onChunk, options = {}) {
+  const signal = options.signal
+  try {
+    const response = await fetch(`${BASE_URL}/chat/history/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, question }),
+      signal
+    })
+
+    if (!response.ok) {
+      const fallback = await chatWithHistory(messages, question, options)
+      if (fallback.data?.response) {
+        onChunk?.(fallback.data.response)
+      }
+      return fallback.data
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+    let referencedMeetings = []
+    let grounding = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(trimmed.slice(6))
+            if (data.error) {
+              throw new Error(data.error)
+            }
+            if (data.text) {
+              fullText += data.text
+              onChunk?.(fullText)
+            }
+            if (data.referenced_meetings) {
+              referencedMeetings = data.referenced_meetings
+            }
+            if (data.grounding) {
+              grounding = data.grounding
+            }
+          } catch (e) {
+            if (e.message && !e.message.includes('JSON')) throw e
+          }
+        }
+      }
+    }
+    return { response: fullText, referenced_meetings: referencedMeetings, grounding }
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'CanceledError') {
+      const abortErr = new Error('canceled')
+      abortErr.name = 'CanceledError'
+      throw abortErr
+    }
+    const fallback = await chatWithHistory(messages, question, options)
+    if (fallback.data?.response) {
+      onChunk?.(fallback.data.response)
+    }
+    return fallback.data
+  }
+}
 export const uploadAudioFile = (file, onUploadProgress) => {
   const formData = new FormData()
   formData.append('file', file)
