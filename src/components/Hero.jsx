@@ -38,7 +38,6 @@ export function Hero() {
               {/* Actions (Emerald themed, identical height, perfectly aligned) */}
               <div className="animate-enter-3 pt-2 flex flex-col sm:flex-row items-center sm:items-start gap-4">
                 <PrimaryShimmerButton
-                  href="/Meeting-Analyzer.exe"
                   label="Descargar para Windows (.exe)"
                 />
                 <SecondaryGitHubButton

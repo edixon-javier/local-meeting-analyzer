@@ -47,7 +47,6 @@ export default function App() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <PrimaryShimmerButton
-                href="/Meeting-Analyzer.exe"
                 label="Descargar para Windows (.exe)"
                 badge="100% Gratuito y Libre • AGPL-3.0"
               />

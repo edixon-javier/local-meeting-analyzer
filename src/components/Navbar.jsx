@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Github, Download, Menu, X, ShieldCheck } from 'lucide-react';
+import { DOWNLOAD_URL } from './Buttons';
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -78,8 +79,9 @@ export function Navbar() {
             <span>GitHub</span>
           </a>
           <a
-            href="/Meeting-Analyzer.exe"
-            download="Meeting-Analyzer.exe"
+            href={DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-xs font-semibold text-white shadow-[0_0_20px_-3px_rgba(16,185,129,0.45)] hover:brightness-110 active:scale-95 transition-all"
           >
             <Download className="w-3.5 h-3.5" />
@@ -137,8 +139,9 @@ export function Navbar() {
           </a>
           <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
             <a
-              href="/Meeting-Analyzer.exe"
-              download="Meeting-Analyzer.exe"
+              href={DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full text-center py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 font-semibold text-white text-xs shadow-md"
             >
               Descargar para Windows (.exe)

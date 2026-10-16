@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Download, Github, Check } from 'lucide-react';
 
+// Única fuente del enlace de descarga: la última versión publicada en GitHub Releases
+// (instalador .exe real generado por el CI; nunca un ejecutable servido desde esta web).
+export const DOWNLOAD_URL = "https://github.com/edixon-javier/local-meeting-analyzer/releases/latest";
+
 export function PrimaryShimmerButton({
-  href = "/Meeting-Analyzer.exe",
+  href = DOWNLOAD_URL,
   label = "Descargar para Windows (.exe)",
   className = "",
 }) {
@@ -17,7 +21,8 @@ export function PrimaryShimmerButton({
     <div className="relative inline-flex items-center">
       <a
         href={href}
-        download="Meeting-Analyzer.exe"
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={handleClick}
         className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl p-[1.5px] h-[52px] transition-all duration-300 hover:scale-[1.01] active:scale-[0.98] shadow-[0_0_35px_-5px_rgba(16,185,129,0.45)] hover:shadow-[0_0_45px_-5px_rgba(16,185,129,0.7)] ${className}`}
       >
@@ -40,7 +45,7 @@ export function PrimaryShimmerButton({
       {downloadStarted && (
         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-mono shadow-lg flex items-center gap-1.5 animate-pulse z-20">
           <Check className="w-3.5 h-3.5 text-emerald-400" />
-          <span>¡Descarga iniciada: Meeting-Analyzer.exe!</span>
+          <span>Abriendo la descarga en GitHub…</span>
         </div>
       )}
     </div>
