@@ -72,7 +72,9 @@ def _safe_metadata(*dists):
 hiddenimports = (
     _local_modules("api", "core", "domain", "services")
     + collect_submodules("uvicorn")
-    + collect_submodules("mcp")  # servidor MCP integrado ("meeting-backend.exe --mcp")
+    # Servidor MCP integrado ("meeting-backend.exe --mcp"). Se excluye mcp.cli: es la CLI del SDK,
+    # no la usa el servidor y requiere "typer", que no forma parte de las dependencias del backend.
+    + collect_submodules("mcp", filter=lambda name: not name.startswith("mcp.cli"))
     + [
         "python_multipart",
         "onnxruntime",  # VAD de faster-whisper (import perezoso)
