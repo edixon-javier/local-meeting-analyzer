@@ -17,7 +17,7 @@ export const REPO_URL = 'https://github.com/edixon-javier/local-meeting-analyzer
 export const ISSUES_URL = `${REPO_URL.replace(/\/+$/, '')}/issues`
 
 // Política de privacidad publicada (docs/privacy.html servida por GitHub Pages u otro host)
-export const PRIVACY_URL = 'https://local-meeting-analyzer.vercel.app/privacy.html'
+export const PRIVACY_URL = 'https://local-meeting-analyzer.vercel.app/privacy'
 
 // Ficha de la app en Microsoft Store
 export const STORE_URL = '[URL DE LA FICHA EN MICROSOFT STORE]'

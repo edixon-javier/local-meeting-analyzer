@@ -18,7 +18,7 @@ Idioma principal de la ficha: **Español**. Se recomienda crear también una fic
 | **Subcategoría** | La que ofrezca Partner Center más cercana a «Productividad personal» o «Negocios» |
 | **Sitio web** | https://local-meeting-analyzer.vercel.app |
 | **Correo de soporte** | [CORREO DE CONTACTO] |
-| **URL de la política de privacidad** (obligatoria: usa el micrófono) | [URL PÚBLICA DE docs/privacy.html], por ejemplo `https://[USUARIO].github.io/[REPOSITORIO]/privacy.html` (publica `docs/privacy.html` con GitHub Pages) |
+| **URL de la política de privacidad** (obligatoria: usa el micrófono) | https://local-meeting-analyzer.vercel.app/privacy (copia de `docs/privacy.html` servida desde la web; publícala cuando rellenes titular, correo y fecha) |
 | **Copyright** | © 2026 [NOMBRE DEL TITULAR] |
 | **Términos de licencia** | Enlaza `LICENSE` (AGPL-3.0-or-later) y `legal/EULA.txt` (sin el bloque de nota para el desarrollador). Añade a la descripción: "Software libre (AGPL-3.0). Código fuente: https://github.com/edixon-javier/local-meeting-analyzer". |
 
@@ -151,7 +151,7 @@ Local Meeting Analyzer is a desktop application built with Electron. It requires
 
 The application talks to its backend and to the Ollama service that the user installs locally only over localhost. It stores its data in its own application data folder, and reads or writes other files only when the user explicitly chooses them (for example, importing an audio file or exporting meeting minutes). It does not require administrator privileges, does not install services or drivers, and does not change system settings.
 
-No audio or text leaves the device unless the user explicitly configures their own OpenAI API key. The app has no telemetry, no accounts and no ads. A privacy policy is available at the URL provided in the listing.
+No audio or text leaves the device unless the user explicitly configures their own API key for an optional cloud provider (OpenAI, Anthropic Claude, Google Gemini or Groq for dictation) and selects it. Dictation is local by default. The app has no telemetry, no accounts and no ads. A privacy policy is available at the URL provided in the listing.
 ```
 
 Referencia en español (no es necesario pegarla):
