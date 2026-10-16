@@ -1,7 +1,9 @@
 import React from 'react';
 import { Mic, Github, ShieldCheck, Heart, Download } from 'lucide-react';
+import { useDownloadHref } from './Buttons';
 
 export function Footer() {
+  const { href: downloadHref } = useDownloadHref();
   return (
     <footer className="border-t border-white/10 bg-[#05070e] py-14">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,7 +34,7 @@ export function Footer() {
             <a href="#requisitos" className="hover:text-cyan-300 transition-colors">Requisitos</a>
             <a href="#faq" className="hover:text-cyan-300 transition-colors">FAQ</a>
             <a
-              href="https://github.com/edixon-javier/local-meeting-analyzer/releases"
+              href={downloadHref}
               className="text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1"
             >
               <Download className="w-3.5 h-3.5" /> Descargar .exe

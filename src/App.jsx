@@ -4,6 +4,7 @@ import { Hero } from './components/Hero';
 import { BentoGrid } from './components/BentoGrid';
 import { PrivacySection } from './components/PrivacySection';
 import { RequirementsSection } from './components/RequirementsSection';
+import { InstallSteps } from './components/InstallSteps';
 import { FaqSection } from './components/FaqSection';
 import { Footer } from './components/Footer';
 import { PrimaryShimmerButton, SecondaryGitHubButton } from './components/Buttons';
@@ -25,6 +26,9 @@ export default function App() {
         {/* Reimagined Privacy Section with enriched animations */}
         <PrivacySection />
 
+        {/* Qué descargar y cómo instalarlo (para quien recibe el enlace) */}
+        <InstallSteps />
+
         {/* Requirements in Emerald Green theme */}
         <RequirementsSection />
 
@@ -42,7 +46,7 @@ export default function App() {
             </h2>
 
             <p className="text-slate-400 text-xs sm:text-sm md:text-base max-w-xl mx-auto leading-relaxed mb-8">
-              Descarga el instalador .exe de Local Meeting Analyzer directamente en tu equipo. Sin cuotas mensuales, sin telemetría y con total soberanía sobre tu información.
+              Descarga el instalador para Windows y empieza en minutos. Sin cuotas mensuales, sin telemetría y con total soberanía sobre tu información.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">

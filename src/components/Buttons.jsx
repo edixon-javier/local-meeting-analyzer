@@ -1,16 +1,25 @@
 import React, { useState } from 'react';
 import { Download, Github, Check } from 'lucide-react';
 
-// Única fuente del enlace de descarga: la última versión publicada en GitHub Releases
+import { RELEASES_PAGE_URL, useLatestRelease } from '../latestRelease';
+
+// Respaldo si no se puede consultar la última versión: la página de Releases de GitHub
 // (instalador .exe real generado por el CI; nunca un ejecutable servido desde esta web).
-export const DOWNLOAD_URL = "https://github.com/edixon-javier/local-meeting-analyzer/releases/latest";
+export const DOWNLOAD_URL = RELEASES_PAGE_URL;
+
+// Enlace directo al instalador de la última versión (o la página de Releases como respaldo)
+export function useDownloadHref() {
+  const release = useLatestRelease();
+  return { href: release?.url || DOWNLOAD_URL, release };
+}
 
 export function PrimaryShimmerButton({
-  href = DOWNLOAD_URL,
   label = "Descargar para Windows (.exe)",
   className = "",
+  showDetails = true,
 }) {
   const [downloadStarted, setDownloadStarted] = useState(false);
+  const { href, release } = useDownloadHref();
 
   const handleClick = () => {
     setDownloadStarted(true);
@@ -18,11 +27,10 @@ export function PrimaryShimmerButton({
   };
 
   return (
-    <div className="relative inline-flex items-center">
+    <div className="relative inline-flex flex-col items-center">
       <a
         href={href}
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(release ? {} : { target: "_blank", rel: "noopener noreferrer" })}
         onClick={handleClick}
         className={`group relative inline-flex items-center justify-center overflow-hidden rounded-xl p-[1.5px] h-[52px] transition-all duration-300 hover:scale-[1.01] active:scale-[0.98] shadow-[0_0_35px_-5px_rgba(16,185,129,0.45)] hover:shadow-[0_0_45px_-5px_rgba(16,185,129,0.7)] ${className}`}
       >
@@ -41,11 +49,20 @@ export function PrimaryShimmerButton({
         </span>
       </a>
 
+      {showDetails && (
+        <p className="mt-2 text-[11px] text-slate-400 whitespace-nowrap">
+          {release ? `Versión ${release.version} · ${release.sizeMB} MB · ` : ''}Windows 10/11 (64 bits) ·{' '}
+          <a href="#instalar" className="text-emerald-300/90 hover:text-emerald-200 underline underline-offset-2">
+            Cómo instalarlo
+          </a>
+        </p>
+      )}
+
       {/* Floating feedback alert when download begins */}
       {downloadStarted && (
         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-mono shadow-lg flex items-center gap-1.5 animate-pulse z-20">
           <Check className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Abriendo la descarga en GitHub…</span>
+          <span>{release ? `Descargando ${release.fileName}…` : 'Abriendo la descarga en GitHub…'}</span>
         </div>
       )}
     </div>
