@@ -9,7 +9,7 @@ active_listeners: List[asyncio.Queue] = []
 cached_models: List[str] = []
 last_models_update: float = 0.0
 
-async def check_ollama_status(url: str = "http://localhost:11434/api/tags") -> bool:
+async def check_ollama_status(url: str = "http://127.0.0.1:11434/api/tags") -> bool:
     global cached_models, last_models_update
     try:
         async with httpx.AsyncClient() as client:

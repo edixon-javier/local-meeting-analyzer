@@ -6,7 +6,9 @@ from typing import Optional, Dict, Any, List
 from domain.interfaces import IAnalyzer
 from core.config import Config, DEFAULT_OLLAMA_MODEL
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+# 127.0.0.1 y no "localhost": en Windows "localhost" se resuelve primero a IPv6 (::1) y, como Ollama
+# escucha solo en IPv4, cada petición esperaba ~2 s antes de reintentar por 127.0.0.1.
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 LOCAL_UNAVAILABLE_MSG = (
     "El modelo local no está disponible. Inicia Ollama o activa el uso de la nube en Ajustes."

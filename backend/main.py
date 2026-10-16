@@ -66,7 +66,9 @@ if os.path.exists(_env_path):
             _line = _line.strip()
             if _line and not _line.startswith("#") and "=" in _line:
                 _k, _v = _line.split("=", 1)
-                os.environ[_k.strip()] = _v.strip()
+                # El .env solo aporta valores por defecto: no pisa variables ya definidas
+                # (p. ej. BACKEND_PORT o MEETING_ANALYZER_DATA_DIR que pasa Electron o un script)
+                os.environ.setdefault(_k.strip(), _v.strip())
 
 import logging
 

@@ -34,7 +34,9 @@ from core.paths import get_data_dir
 
 router = APIRouter()
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+# 127.0.0.1 y no "localhost": en Windows "localhost" se resuelve primero a IPv6 (::1) y, como Ollama
+# escucha solo en IPv4, cada petición esperaba ~2 s antes de reintentar por 127.0.0.1.
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 # ── Umbrales (docs/REQUISITOS.md) ──────────────────────────────────────────
 MIN_WINDOWS_BUILD = 17763  # Windows 10 1809
@@ -420,7 +422,7 @@ def _pull_stream(model: str) -> Iterator[str]:
         if not saw_success:
             yield _ndjson({"status": "error", "error": "La descarga se interrumpió antes de terminar. Inténtalo de nuevo."})
     except requests.exceptions.ConnectionError:
-        yield _ndjson({"status": "error", "error": "Se perdió la conexión con Ollama (localhost:11434)."})
+        yield _ndjson({"status": "error", "error": "Se perdió la conexión con Ollama (127.0.0.1:11434)."})
     except requests.exceptions.Timeout:
         yield _ndjson({"status": "error", "error": "Ollama dejó de responder durante la descarga."})
     except Exception as e:

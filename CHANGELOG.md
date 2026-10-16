@@ -13,6 +13,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 El historial anterior al 1.6.0 se reconstruyó a partir de las etiquetas y de los commits del repositorio.
 
+## [1.6.2] - 2026-10-16
+
+### Corregido
+
+- **IA local mucho más rápida en Windows.** Cada consulta a Ollama esperaba unos 2 segundos de más porque
+  `localhost` se resolvía primero a IPv6; ahora se usa `127.0.0.1`. El estado del sistema responde en milisegundos
+  en lugar de ~2 s y el análisis, el chat y la configuración de Ollama dejan de pagar esa espera en cada llamada.
+- Configuración muestra los modelos de Ollama que tienes instalados (antes la consulta caducaba y siempre aparecía
+  la lista de respaldo).
+- El aviso de consentimiento empaquetado ya no incluye la nota para el desarrollador.
+
 ## [1.6.1] - 2026-10-16
 
 ### Añadido

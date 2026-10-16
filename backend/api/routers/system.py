@@ -106,7 +106,7 @@ def get_ollama_models():
     # 5. Consulta sincrónica con timeout ultra-corto (0.6s) solo si no se sabe el estado y expiró el TTL
     import requests
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=0.6)
+        response = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.6)
         if response.status_code == 200:
             models_data = response.json().get("models", [])
             models = [m["name"] for m in models_data if isinstance(m, dict) and "name" in m]
@@ -317,12 +317,12 @@ def test_ai_connection(
         import requests
         t0 = time.time()
         try:
-            tags_res = requests.get("http://localhost:11434/api/tags", timeout=3.0)
+            tags_res = requests.get("http://127.0.0.1:11434/api/tags", timeout=3.0)
             if tags_res.status_code != 200:
                 raise HTTPException(status_code=503, detail="Ollama respondió con error al listar modelos.")
             
             gen_res = requests.post(
-                "http://localhost:11434/api/generate",
+                "http://127.0.0.1:11434/api/generate",
                 json={"model": model, "prompt": "ping", "stream": False, "options": {"num_predict": 2}},
                 timeout=15.0
             )
@@ -340,7 +340,7 @@ def test_ai_connection(
                 "message": f"Ollama local en línea ({latency_ms} ms). Modelo '{model}' respondiendo correctamente."
             }
         except requests.exceptions.ConnectionError:
-            raise HTTPException(status_code=503, detail="Ollama no está en ejecución en http://localhost:11434. Inicia el servicio con 'ollama serve'.")
+            raise HTTPException(status_code=503, detail="Ollama no está en ejecución en http://127.0.0.1:11434. Inicia el servicio con 'ollama serve'.")
         except requests.exceptions.Timeout:
             raise HTTPException(status_code=504, detail="Tiempo de espera agotado (>15s) al conectar con Ollama. El modelo podría estar cargándose en RAM.")
         except Exception as e:
