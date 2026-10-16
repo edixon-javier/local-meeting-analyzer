@@ -1,7 +1,5 @@
 <!--
-NOTA PARA EL DESARROLLADOR (eliminar antes de publicar):
-Borrador de buena fe. NO constituye asesoría legal. Debe ser revisado por un abogado antes de
-cualquier uso comercial. Las secciones 1 a 3 contienen el texto EXACTO de interfaz que se implementará
+Texto orientativo redactado de buena fe; no constituye asesoría legal. Las secciones 1 a 3 contienen el texto EXACTO de interfaz que se implementará
 en la app (cada cadena tiene un id estable). La sección 4 es material informativo, no exhaustivo.
 -->
 
