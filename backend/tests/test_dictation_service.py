@@ -138,9 +138,57 @@ def test_llm_polish_transcript_groq():
 
     with patch("core.config.system_config.get") as mock_cfg_get, patch("requests.post", return_value=mock_resp):
         mock_cfg_get.side_effect = lambda k, default=None: "gsk_key" if k == "groq_api_key" else default
-        polished, model_used = service._polish_transcript(raw)
+        polished, model_used = service._polish_transcript(raw, "groq")
         assert "Vamos a enviar cuatro reportes" in polished
         assert model_used == "llama-3.1-8b-instant"
+
+
+def test_local_provider_never_uses_cloud_even_with_keys():
+    """Privacidad: con el dictado en local no se llama a ninguna nube aunque haya claves guardadas."""
+    service = DictationService()
+    with patch("core.config.system_config.get") as mock_cfg, \
+         patch.object(service, "_stt_groq") as mock_groq, \
+         patch.object(service, "_stt_openai") as mock_openai, \
+         patch.object(service, "_stt_local", return_value="hola") as mock_local, \
+         patch("requests.post") as mock_post:
+        mock_cfg.side_effect = lambda k, default=None: "key" if "key" in k else default
+        text, prov = service._transcribe_audio(b"RIFF", "local")
+        assert (text, prov) == ("hola", "local")
+        mock_groq.assert_not_called()
+        mock_openai.assert_not_called()
+        mock_local.assert_called_once()
+
+        polished, model = service._polish_transcript("hola punto", "local")
+        assert model == "rule_based_fallback"
+        mock_post.assert_not_called()
+
+
+def test_cloud_provider_without_key_falls_back_to_local_not_other_cloud():
+    """Privacidad: si se eligió Groq sin clave, se transcribe en local y nunca con OpenAI."""
+    service = DictationService()
+    with patch("core.config.system_config.get") as mock_cfg, \
+         patch.object(service, "_stt_groq") as mock_groq, \
+         patch.object(service, "_stt_openai") as mock_openai, \
+         patch.object(service, "_stt_local", return_value="hola") as mock_local:
+        mock_cfg.side_effect = lambda k, default=None: "sk-openai" if k == "openai_api_key" else default
+        text, prov = service._transcribe_audio(b"RIFF", "groq")
+        assert prov == "local"
+        mock_groq.assert_not_called()
+        mock_openai.assert_not_called()
+        mock_local.assert_called_once()
+
+
+def test_cloud_failure_falls_back_to_local_not_other_cloud():
+    """Privacidad: si Groq falla, no se reintenta con OpenAI sino en el equipo."""
+    service = DictationService()
+    with patch("core.config.system_config.get") as mock_cfg, \
+         patch.object(service, "_stt_groq", side_effect=RuntimeError("down")), \
+         patch.object(service, "_stt_openai") as mock_openai, \
+         patch.object(service, "_stt_local", return_value="hola"):
+        mock_cfg.side_effect = lambda k, default=None: "key" if "key" in k else default
+        text, prov = service._transcribe_audio(b"RIFF", "groq")
+        assert prov == "local"
+        mock_openai.assert_not_called()
 
 
 def test_dictation_audit_persistence_and_history():

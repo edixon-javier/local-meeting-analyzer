@@ -51,7 +51,7 @@ function normalizeConfig(cfg = {}) {
     diarize: Boolean(cfg.diarize),
     groq_api_key: cfg.groq_api_key || '',
     dictation_mode: cfg.dictation_mode || 'smart_polish',
-    dictation_provider: cfg.dictation_provider || 'groq',
+    dictation_provider: cfg.dictation_provider || 'local',
     dictation_shortcut: cfg.dictation_shortcut || 'CommandOrControl+Shift+D',
   }
 }
@@ -118,7 +118,7 @@ export default function SettingsScreen() {
   const [maskedGroqKey, setMaskedGroqKey] = useState('')
 
   const [dictationMode, setDictationMode] = useState('smart_polish')
-  const [dictationProvider, setDictationProvider] = useState('groq')
+  const [dictationProvider, setDictationProvider] = useState('local')
   const [dictationShortcut, setDictationShortcut] = useState('CommandOrControl+Shift+D')
   const [isCustomShortcut, setIsCustomShortcut] = useState(false)
 
@@ -1411,12 +1411,14 @@ export default function SettingsScreen() {
               className="input-select"
               style={TEXT_INPUT_STYLE}
             >
-              <option value="groq">Groq Cloud (Whisper Large v3 Turbo) · Ultra-rápido (~250ms, Recomendado)</option>
-              <option value="openai">OpenAI Cloud (Whisper-1) · ~2.5s de latencia</option>
-              <option value="local">Faster-Whisper Local (Base CPU int8) · 100% Offline</option>
+              <option value="local">En este equipo (Faster-Whisper) · privado, sin Internet</option>
+              <option value="groq">En la nube: Groq · el más rápido, envía el audio del dictado</option>
+              <option value="openai">En la nube: OpenAI (Whisper-1) · envía el audio del dictado</option>
             </select>
             <span className="form-hint">
-              Groq Cloud LPU ofrece inmediatez perceptible (&lt;300ms) para que el texto aparezca casi instantáneamente en tu cursor.
+              {dictationProvider === 'local'
+                ? 'El audio del dictado no sale de tu equipo. El modo "Ideas claras" usa un formateador local.'
+                : 'El audio del dictado (y el texto, si usas "Ideas claras") se envía a este servicio. Si no hay clave o falla, se transcribe en tu equipo: nunca se usa otro servicio en la nube.'}
             </span>
           </div>
 

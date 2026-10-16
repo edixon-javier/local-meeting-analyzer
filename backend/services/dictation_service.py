@@ -274,7 +274,7 @@ class DictationService:
 
         # Resolver modo y proveedor
         active_mode = mode or system_config.get("dictation_mode", "smart_polish")
-        active_provider = provider or system_config.get("dictation_provider", "groq")
+        active_provider = provider or system_config.get("dictation_provider", "local")
 
         # ── 1. Transcripción STT ──
         stt_start = time.perf_counter()
@@ -299,7 +299,7 @@ class DictationService:
         # ── 2. Pulido con LLM (si el modo es smart_polish) ──
         llm_start = time.perf_counter()
         if active_mode == "smart_polish":
-            polished_transcript, used_llm_model = self._polish_transcript(raw_transcript)
+            polished_transcript, used_llm_model = self._polish_transcript(raw_transcript, active_provider)
         else:
             polished_transcript = apply_voice_formatting_fallback(raw_transcript)
             used_llm_model = "literal"
@@ -376,26 +376,15 @@ class DictationService:
         groq_key = system_config.get("groq_api_key", "").strip()
         openai_key = system_config.get("openai_api_key", "").strip()
 
-        # Orden según preferencia
+        # Privacidad: el audio solo va a la nube que el usuario eligió explícitamente como proveedor
+        # de dictado. Nunca se salta de un servicio en la nube a otro (p. ej. de Groq a OpenAI) ni de
+        # "local" a la nube: si la nube elegida no está disponible, se transcribe en el equipo.
         providers_to_try = []
-        if preferred_provider == "groq":
-            if groq_key:
-                providers_to_try.append("groq")
-            if openai_key:
-                providers_to_try.append("openai")
-            providers_to_try.append("local")
-        elif preferred_provider == "openai":
-            if openai_key:
-                providers_to_try.append("openai")
-            if groq_key:
-                providers_to_try.append("groq")
-            providers_to_try.append("local")
-        else:
-            providers_to_try = ["local"]
-            if groq_key:
-                providers_to_try.append("groq")
-            if openai_key:
-                providers_to_try.append("openai")
+        if preferred_provider == "groq" and groq_key:
+            providers_to_try.append("groq")
+        elif preferred_provider == "openai" and openai_key:
+            providers_to_try.append("openai")
+        providers_to_try.append("local")
 
         for prov in providers_to_try:
             try:
@@ -462,13 +451,17 @@ class DictationService:
             texts = [seg.text.strip() for seg in segments]
             return " ".join(texts).strip()
 
-    def _polish_transcript(self, raw_text: str) -> tuple[str, str]:
+    def _polish_transcript(self, raw_text: str, provider: Optional[str] = None) -> tuple[str, str]:
         """
         Pule el texto con LLM (Groq Llama 3.1 8B Instant o OpenAI gpt-4o-mini).
         Retorna (texto_pulido, modelo_utilizado).
+
+        Privacidad: solo se usa el LLM del servicio en la nube elegido como proveedor de dictado.
+        Con el proveedor local el texto no sale del equipo y se usa el formateador por reglas.
         """
-        groq_key = system_config.get("groq_api_key", "").strip()
-        openai_key = system_config.get("openai_api_key", "").strip()
+        active = provider or system_config.get("dictation_provider", "local")
+        groq_key = system_config.get("groq_api_key", "").strip() if active == "groq" else ""
+        openai_key = system_config.get("openai_api_key", "").strip() if active == "openai" else ""
 
         # 1. Intentar Groq Llama 3.1 8B Instant (~140ms)
         if groq_key:
@@ -596,7 +589,7 @@ class DictationService:
             "duration_seconds": round(duration, 2),
             "rms_level": self._current_rms,
             "mode": system_config.get("dictation_mode", "smart_polish"),
-            "provider": system_config.get("dictation_provider", "groq"),
+            "provider": system_config.get("dictation_provider", "local"),
         }
 
     def get_history(self, limit: int = 50, search: str = "") -> List[Dict[str, Any]]:

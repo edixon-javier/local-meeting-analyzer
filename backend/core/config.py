@@ -53,7 +53,8 @@ class Config:
             "groq_api_key": "",
             "dictation_mode": "smart_polish",
             "dictation_shortcut": "CommandOrControl+Shift+D",
-            "dictation_provider": "groq",
+            # Privacidad: el dictado se transcribe en el equipo salvo que el usuario elija Groq u OpenAI
+            "dictation_provider": "local",
         }
         self.settings: Dict[str, Any] = self._load_config()
 
