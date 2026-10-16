@@ -379,8 +379,8 @@ export default function OllamaSetup({ recommendations, onSkip }) {
             Configurar después
           </button>
           <span>
-            Puedes instalar Ollama más tarde o usar un servicio en la nube (OpenAI, Claude o Gemini) con tu propia
-            clave API en Ajustes. En ese caso, el audio o el texto de tus reuniones se enviará a ese servicio.
+            Puedes instalar Ollama más tarde, usar tu clave de OpenAI (aquí abajo) o elegir Claude o Gemini en Ajustes.
+            Con un servicio en la nube, el audio o el texto de tus reuniones se envía a ese servicio.
           </span>
         </p>
       )}

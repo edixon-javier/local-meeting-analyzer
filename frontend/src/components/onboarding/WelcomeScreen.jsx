@@ -8,6 +8,7 @@ import Icon from '../Icon'
 import logoImg from '../../assets/icon.jpg'
 import RequirementsCheck from './RequirementsCheck'
 import OllamaSetup from './OllamaSetup'
+import OpenAIKeySetup from './OpenAIKeySetup'
 import WhisperDownload from './WhisperDownload'
 import ConsentBody from './ConsentBody'
 import { useFocusTrap } from './useFocusTrap'
@@ -237,12 +238,13 @@ export default function WelcomeScreen({ onClose }) {
 
           {step === 2 && (
             <>
-              <h1 className="onb-title" data-step-title tabIndex={-1}>Motor de IA local</h1>
+              <h1 className="onb-title" data-step-title tabIndex={-1}>Motor de IA</h1>
               <p className="onb-lead">
-                El análisis con IA local lo ejecuta Ollama en tu equipo. Prepáralo ahora para que tu primera reunión se
-                procese sin esperas.
+                Elige cómo procesar tus reuniones: en tu equipo con Ollama (gratis y privado) o con tu clave de OpenAI
+                (sin instalar nada). Puedes cambiarlo cuando quieras en Configuración.
               </p>
               <OllamaSetup recommendations={recommendations} onSkip={goNext} />
+              <OpenAIKeySetup />
               <WhisperDownload recommendations={recommendations} />
             </>
           )}

@@ -7,6 +7,7 @@ import { useSystem } from '../hooks/useSystem'
 import { PRIVACY_URL, isPlaceholder } from '../appInfo'
 import { canReportProblem, describeOs, loadAppInfo, openExternalUrl, reportProblem } from '../utils/support'
 import Icon from './Icon'
+import { openExternal } from './onboarding/openExternal'
 import { getEngineStatus } from '../utils/engineStatus'
 import '../styles/settings-chat.css'
 
@@ -561,18 +562,26 @@ export default function SettingsScreen() {
     onDelete,
     placeholder,
     helpText,
+    getKeyUrl,
+    keyPrefix,
   }) => {
     const isShowingSaved = hasKey && !isEditing
+    // Aviso temprano si lo pegado no parece una clave de este proveedor (p. ej. se copió incompleta)
+    const looksWrong = isEditing && typedKey.length > 0 && keyPrefix && !typedKey.startsWith(keyPrefix)
     return (
       <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <label htmlFor={id} style={LABEL_STYLE}>
             <Icon name="lock" size={16} /> {label}
           </label>
-          {hasKey && (
+          {hasKey ? (
             <span style={{ fontSize: 12, color: 'var(--green-ok)', display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
               <Icon name="check-circle" size={13} /> Activa
             </span>
+          ) : getKeyUrl && (
+            <button type="button" className="onb-link" onClick={() => openExternal(getKeyUrl)} style={{ fontSize: 12 }}>
+              <Icon name="external-link" size={12} /> Conseguir una clave
+            </button>
           )}
         </div>
 
@@ -640,9 +649,11 @@ export default function SettingsScreen() {
             value={isEditing ? typedKey : (typedKey !== '' ? typedKey : (hasKey ? maskedKey : ''))}
             onChange={(e) => {
               setIsEditing(true)
-              setTypedKey(e.target.value)
+              // Al pegar suelen colarse espacios o saltos de línea: una clave nunca los lleva
+              setTypedKey(e.target.value.replace(/\s+/g, ''))
               setAiTestResult(null)
             }}
+            spellCheck={false}
             placeholder={hasKey ? 'Escribe una nueva clave para reemplazar la guardada' : placeholder}
             style={{
               ...TEXT_INPUT_STYLE,
@@ -656,6 +667,7 @@ export default function SettingsScreen() {
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             title={showPassword ? 'Ocultar caracteres' : 'Mostrar caracteres'}
+            aria-label={showPassword ? 'Ocultar la clave' : 'Mostrar la clave'}
             style={{
               position: 'absolute',
               right: 10,
@@ -672,9 +684,13 @@ export default function SettingsScreen() {
           </button>
         </div>
 
-        {hasKey && !isEditing ? (
+        {looksWrong ? (
+          <span className="form-hint" style={{ color: 'var(--yellow-warn)' }} role="status">
+            Las claves de este servicio empiezan por «{keyPrefix}». Revisa que la hayas copiado completa.
+          </span>
+        ) : hasKey && !isEditing ? (
           <span className="form-hint" style={{ color: 'var(--green-ok)' }}>
-            ✓ Tu clave está guardada de forma segura en este equipo. El input muestra tu clave registrada.
+            ✓ Tu clave está guardada solo en este equipo (se muestra enmascarada).
           </span>
         ) : isEditing ? (
           <span className="form-hint" style={{ color: 'var(--yellow-warn)' }}>
@@ -691,6 +707,8 @@ export default function SettingsScreen() {
 
   const apiKeyField = renderApiKeyControl({
     id: 'openai-key-input',
+    getKeyUrl: 'https://platform.openai.com/api-keys',
+    keyPrefix: 'sk-',
     label: 'OpenAI API Key',
     hasKey: hasApiKey,
     maskedKey: maskedApiKey,
@@ -707,6 +725,8 @@ export default function SettingsScreen() {
 
   const claudeApiKeyField = renderApiKeyControl({
     id: 'claude-key-input',
+    getKeyUrl: 'https://console.anthropic.com/settings/keys',
+    keyPrefix: 'sk-ant-',
     label: 'Anthropic (Claude) API Key',
     hasKey: hasClaudeKey,
     maskedKey: maskedClaudeKey,
@@ -723,6 +743,8 @@ export default function SettingsScreen() {
 
   const geminiApiKeyField = renderApiKeyControl({
     id: 'gemini-key-input',
+    getKeyUrl: 'https://aistudio.google.com/apikey',
+    keyPrefix: 'AIza',
     label: 'Google Gemini API Key',
     hasKey: hasGeminiKey,
     maskedKey: maskedGeminiKey,
@@ -739,6 +761,8 @@ export default function SettingsScreen() {
 
   const groqApiKeyField = renderApiKeyControl({
     id: 'groq-key-input',
+    getKeyUrl: 'https://console.groq.com/keys',
+    keyPrefix: 'gsk_',
     label: 'Clave API de Groq Cloud (Ultra-rápida)',
     hasKey: hasGroqKey,
     maskedKey: maskedGroqKey,

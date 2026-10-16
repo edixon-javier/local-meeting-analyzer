@@ -151,8 +151,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           if ! gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
-            gh release create "$TAG" --repo "$REPO" --draft --title "$TAG" \
-              --notes "Instalador para Windows 10/11 (x64). El análisis 100% local requiere Ollama (https://ollama.com)."
+            # Notas con instrucciones de instalación para quien descarga (plantilla en .github/release-notes.md)
+            gh api "repos/$REPO/contents/.github/release-notes.md?ref=$TAG" --jq .content | base64 -d \
+              | sed -e "s/{{VERSION}}/${TAG#v}/g" -e "s#{{REPO}}#$REPO#g" > notes.md
+            gh release create "$TAG" --repo "$REPO" --draft --title "Local Meeting Analyzer ${TAG#v}" \
+              --notes-file notes.md
           fi
           gh release upload "$TAG" --repo "$REPO" --clobber \
             dist/*.exe dist/*.exe.blockmap dist/latest.yml

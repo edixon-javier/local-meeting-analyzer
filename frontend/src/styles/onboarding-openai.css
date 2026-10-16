@@ -1,0 +1,68 @@
+/* Paso «Motor de IA»: alternativa con clave de OpenAI */
+.onb-openai { margin-top: 12px; }
+.onb-openai-steps {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: onb-step;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.onb-openai-steps > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-left: 34px;
+  counter-increment: onb-step;
+}
+/* Número del paso en un círculo (display:flex anula el marcador nativo de la lista) */
+.onb-openai-steps > li::before {
+  content: counter(onb-step);
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-glow);
+  color: var(--text-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.onb-openai-steps strong { color: var(--text-primary); }
+.onb-openai-key-row { display: flex; gap: 8px; width: 100%; }
+.onb-openai-input { position: relative; flex: 1; display: flex; }
+.onb-openai-input input {
+  flex: 1;
+  padding: 9px 40px 9px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.onb-openai-input input[aria-invalid="true"] { border-color: rgba(251, 191, 36, 0.6); }
+.onb-openai-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: 5px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.onb-openai-eye:hover { color: var(--text-primary); background: var(--bg-hover); }
+.onb-openai-warn { color: var(--yellow-warn); }
